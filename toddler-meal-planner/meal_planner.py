@@ -724,6 +724,9 @@ class MealPlanner:
                 meal_data = {
                     'id': entry.id,
                     'is_complete_meal': True,
+                    # Top-level food + display_name so all UIs can read one field
+                    'food': entry.food.to_dict() if entry.food else None,
+                    'display_name': self._format_meal_summary(complete_meal),
                     'main': {
                         'food': entry.food.to_dict() if entry.food else None,
                         'food_name': complete_meal.get('main', {}).get('food_name', '')
@@ -757,6 +760,7 @@ class MealPlanner:
                     'id': entry.id,
                     'is_complete_meal': False,
                     'food': entry.food.to_dict() if entry.food else None,
+                    'display_name': entry.food.name if entry.food else None,
                     'backup': backup,
                     'reason': entry.nutrition_reason,
                     'is_generated': entry.is_generated
