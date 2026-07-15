@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Nutrition Analysis - {{ toddler.name }} | Toddler Meal Planner{% endblock %}
+
+{% block content %}
+<body data-page="nutrition" data-toddler-id="{{ toddler.id }}">
+    <div class="page-header">
+        <h1>📊 Nutrition Analysis</h1>
+        <p>Weekly nutrition summary for {{ toddler.name }} ({{ toddler.age_months }} months old)</p>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h2>📈 This Week's Nutrition</h2>
+        </div>
+        <div class="card-body">
+            <div id="weekly-nutrition">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>⚠️ Nutrition Alerts</h2>
+        </div>
+        <div class="card-body">
+            <div id="alerts-container">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>📚 Nutrition Guidelines for {{ toddler.age_months }}-Month-Olds</h2>
+        </div>
+        <div class="card-body">
+            <div class="dashboard-grid">
+                <div class="stat-card">
+                    <div class="stat-icon primary">🔥</div>
+                    <div class="stat-content">
+                        <h3>{{ rda.calories if rda else '~1000' }}</h3>
+                        <p>Calories/day</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon success">💪</div>
+                    <div class="stat-content">
+                        <h3>{{ rda.protein_g if rda else '~15' }}g</h3>
+                        <p>Protein/day</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon warning">🩸</div>
+                    <div class="stat-content">
+                        <h3>{{ rda.iron_mg if rda else '9' }}mg</h3>
+                        <p>Iron/day</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon danger">🦴</div>
+                    <div class="stat-content">
+                        <h3>{{ rda.calcium_mg if rda else '500' }}mg</h3>
+                        <p>Calcium/day</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 1.5rem;">
+                <h4 style="margin-bottom: 1rem;">🇮🇳 Key Nutrients for Indian Toddlers</h4>
+                <div class="alert info">
+                    <div class="alert-icon">🩸</div>
+                    <div class="alert-content">
+                        <h4>Iron</h4>
+                        <p>Indian vegetarian diets can be low in iron. Include ragi, spinach, dates, and pair with vitamin C foods for absorption.</p>
+                    </div>
+                </div>
+                <div class="alert info">
+                    <div class="alert-icon">☀️</div>
+                    <div class="alert-content">
+                        <h4>Vitamin D</h4>
+                        <p>Most Indian children are Vitamin D deficient. Morning sunlight (10-15 mins before 10am) is the best source.</p>
+                    </div>
+                </div>
+                <div class="alert info">
+                    <div class="alert-icon">🔴</div>
+                    <div class="alert-content">
+                        <h4>Vitamin B12</h4>
+                        <p>Found mainly in animal products. Vegetarian toddlers should have milk, curd, paneer daily or consider supplements.</p>
+                    </div>
+                </div>
+                <div class="alert info">
+                    <div class="alert-icon">💪</div>
+                    <div class="alert-content">
+                        <h4>Protein</h4>
+                        <p>Combine dal + rice for complete protein. Include paneer, curd, eggs (if non-veg) regularly.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

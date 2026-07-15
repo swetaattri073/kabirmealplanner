@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome - Toddler Meal Planner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="onboarding-container">
+        <div class="card">
+            <div class="card-body">
+                <div class="onboarding-header">
+                    <div class="onboarding-icon">🥗</div>
+                    <h1>Toddler Meal Planner</h1>
+                    <p>Let's set up a personalized meal plan for your little one!</p>
+                </div>
+                
+                <form onsubmit="createToddler(event)">
+                    <div class="form-group">
+                        <label class="form-label">Toddler's Name</label>
+                        <input type="text" name="name" class="form-input" placeholder="Enter your toddler's name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Age (in months)</label>
+                        <input type="number" name="age_months" class="form-input" min="6" max="60" placeholder="e.g., 18" required>
+                        <p class="form-hint">Enter age in months (6-60 months supported)</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Birth Date (optional)</label>
+                        <input type="date" name="birth_date" class="form-input">
+                        <p class="form-hint">We'll automatically update the age each month</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Gender</label>
+                        <div class="radio-group">
+                            <label class="radio-item">
+                                <input type="radio" name="gender" value="male">
+                                <span>👦 Boy</span>
+                            </label>
+                            <label class="radio-item">
+                                <input type="radio" name="gender" value="female">
+                                <span>👧 Girl</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Current Weight (kg) - optional</label>
+                        <input type="number" name="weight_kg" class="form-input" step="0.1" min="3" max="30" placeholder="e.g., 10.5">
+                        <p class="form-hint">Helps us identify if your toddler needs more calories</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Activity Level</label>
+                        <div class="radio-group" style="flex-wrap: wrap;">
+                            <label class="radio-item">
+                                <input type="radio" name="activity_level" value="low">
+                                <span>😴 Low</span>
+                            </label>
+                            <label class="radio-item">
+                                <input type="radio" name="activity_level" value="moderate" checked>
+                                <span>🚶 Moderate</span>
+                            </label>
+                            <label class="radio-item">
+                                <input type="radio" name="activity_level" value="high">
+                                <span>🏃 High</span>
+                            </label>
+                            <label class="radio-item">
+                                <input type="radio" name="activity_level" value="very_high">
+                                <span>⚡ Very High</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Any Health Concerns?</label>
+                        <p class="form-hint">Select all that apply - helps us customize meal plans</p>
+                        <div class="checkbox-group">
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="underweight">
+                                <span>📉 Underweight</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="overweight">
+                                <span>📈 Overweight</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="anemia">
+                                <span>🩸 Anemia/Low Iron</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="constipation">
+                                <span>😣 Constipation</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="poor_appetite">
+                                <span>😐 Poor Appetite</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="frequent_illness">
+                                <span>🤒 Frequent Illness</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="delayed_teething">
+                                <span>🦷 Delayed Teething</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="health_conditions" value="picky_eater">
+                                <span>🙅 Picky Eater</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Dietary Preference</label>
+                        <div class="radio-group">
+                            <label class="radio-item">
+                                <input type="radio" name="dietary_preference" value="vegetarian" checked>
+                                <span>🥬 Vegetarian</span>
+                            </label>
+                            <label class="radio-item">
+                                <input type="radio" name="dietary_preference" value="eggetarian">
+                                <span>🥚 Eggetarian</span>
+                            </label>
+                            <label class="radio-item">
+                                <input type="radio" name="dietary_preference" value="non-vegetarian">
+                                <span>🍗 Non-Veg</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Any Allergies?</label>
+                        <p class="form-hint">Select all that apply</p>
+                        <div class="checkbox-group">
+                            {% for allergen in allergens %}
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="allergies" value="{{ allergen }}">
+                                <span>{{ allergen | title }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg btn-block">
+                        <i class="fas fa-rocket"></i>
+                        Get Started
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast-container"></div>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ toddler.name }} | Toddler Meal Planner{% endblock %}
+
+{% block content %}
+<body data-page="dashboard" data-toddler-id="{{ toddler.id }}">
+    <div class="page-header">
+        <h1>Good {{ 'Morning' if now().hour < 12 else 'Afternoon' if now().hour < 17 else 'Evening' }}, {{ toddler.name }}! 👋</h1>
+        <p>{{ now().strftime('%A, %B %d, %Y') }} • Track meals and ensure balanced nutrition</p>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon primary">🍽️</div>
+            <div class="stat-content">
+                <h3 id="meals-eaten">0</h3>
+                <p>Meals Today</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon success">📊</div>
+            <div class="stat-content">
+                <h3 id="nutrition-score">--</h3>
+                <p>Nutrition Score</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon warning">⚡</div>
+            <div class="stat-content">
+                <h3 id="alerts-count">0</h3>
+                <p>Alerts</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon primary">📅</div>
+            <div class="stat-content">
+                <h3>{{ toddler.age_months }}</h3>
+                <p>Months Old</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Health Status Card (if weight provided) -->
+    {% if toddler.weight_kg %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-body" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">Weight Status</span>
+                <div style="font-weight: 700; font-size: 1.1rem;" id="weight-status">
+                    {% if toddler.weight_kg %}{{ toddler.weight_kg }}kg{% endif %}
+                </div>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">Activity Level</span>
+                <div style="font-weight: 700; font-size: 1.1rem;">
+                    {{ toddler.activity_level | replace('_', ' ') | title }}
+                </div>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">Calorie Target</span>
+                <div style="font-weight: 700; font-size: 1.1rem;" id="calorie-target">
+                    Calculating...
+                </div>
+            </div>
+            <a href="#" onclick="showHealthModal()" class="btn btn-secondary btn-sm">
+                <i class="fas fa-edit"></i> Update
+            </a>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="dashboard-grid">
+        <!-- Today's Meals -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🍱 Today's Meals</h2>
+                <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus"></i> Log Meal
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="meal-schedule" class="meal-schedule">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Nutrition Status -->
+        <div class="card">
+            <div class="card-header">
+                <h2>📊 Today's Nutrition</h2>
+                <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
+                    View Details
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="nutrition-grid" class="nutrition-grid">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Alerts & Recommendations -->
+        <div class="card full-width">
+            <div class="card-header">
+                <h2>💡 Nutrition Alerts & Tips</h2>
+            </div>
+            <div class="card-body">
+                <div id="alerts-container">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Daily Enhancement Tip -->
+        <div class="card">
+            <div class="card-header">
+                <h2>✨ Make It More Nutritious</h2>
+            </div>
+            <div class="card-body">
+                <div id="daily-tip-container">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="#" onclick="loadFlavorExploration({{ toddler.id }}); return false;" style="color: var(--primary); font-weight: 600;">
+                    🔍 Explore new flavors based on favorites →
+                </a>
+            </div>
+        </div>
+        
+        <!-- Flavor Exploration -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🌈 Try New Flavors</h2>
+            </div>
+            <div class="card-body">
+                <div id="flavor-exploration-container">
+                    <p style="color: var(--text-secondary);">
+                        Based on what {{ toddler.name }} already likes, here are similar foods to try...
+                    </p>
+                    <div id="flavor-suggestions" style="margin-top: 1rem;">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboard({{ toddler.id }});
+        });
+        
+        // Helper to get current time
+        function now() {
+            return new Date();
+        }
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Update stats when dashboard loads
+    function updateStats(data) {
+        document.getElementById('meals-eaten').textContent = data.meals_eaten?.length || 0;
+        document.getElementById('alerts-count').textContent = data.alerts?.length || 0;
+        
+        // Calculate average nutrition score
+        const nutrition = data.nutrition || {};
+        const scores = Object.values(nutrition).map(n => n.percentage).filter(p => p !== undefined);
+        const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : '--';
+        document.getElementById('nutrition-score').textContent = avgScore + (avgScore !== '--' ? '%' : '');
+    }
+    
+    // Override renderDashboard to also update stats
+    const originalRenderDashboard = renderDashboard;
+    renderDashboard = function(data) {
+        originalRenderDashboard(data);
+        updateStats(data);
+        
+        // Update calorie target if available
+        const calorieTarget = document.getElementById('calorie-target');
+        if (calorieTarget && data.nutrition?.calories?.rda) {
+            calorieTarget.textContent = `${data.nutrition.calories.rda} kcal/day`;
+        }
+        
+        // Update weight status display
+        const weightStatus = document.getElementById('weight-status');
+        if (weightStatus && data.toddler?.weight_status) {
+            const status = data.toddler.weight_status;
+            let statusText = data.toddler.weight_kg + 'kg';
+            let statusClass = '';
+            
+            if (status === 'normal') {
+                statusText += ' ✅ Normal';
+            } else if (status === 'underweight' || status === 'severely_underweight') {
+                statusText += ' ⚠️ ' + status.replace('_', ' ');
+                statusClass = 'color: var(--warning)';
+            } else if (status === 'overweight' || status === 'obese') {
+                statusText += ' ⚠️ ' + status;
+                statusClass = 'color: var(--warning)';
+            }
+            
+            weightStatus.textContent = statusText;
+            if (statusClass) weightStatus.style.cssText = statusClass;
+        }
+    };
+    
+    function showHealthModal() {
+        alert('Health update modal - coming soon! For now, you can update via the API.');
+    }
+    
+    // Load daily tip
+    async function loadDailyTip(toddlerId) {
+        try {
+            const data = await apiCall(`/daily-tip/${toddlerId}`);
+            renderDailyTip(data.tip);
+        } catch (error) {
+            console.error('Failed to load daily tip:', error);
+        }
+    }
+    
+    function renderDailyTip(tip) {
+        const container = document.getElementById('daily-tip-container');
+        if (!container || !tip) return;
+        
+        container.innerHTML = `
+            <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(249, 115, 22, 0.1)); padding: 1.25rem; border-radius: var(--radius-md);">
+                <h4 style="margin-bottom: 0.5rem; color: var(--primary);">
+                    ${tip.title || 'Nutrition Tip'}
+                </h4>
+                ${tip.food ? `<p style="margin-bottom: 0.5rem;"><strong>For ${tip.food}:</strong></p>` : ''}
+                <p style="font-size: 1rem; margin-bottom: 0.5rem;">
+                    <strong>${tip.method}</strong> → ${tip.benefit}
+                </p>
+                <p style="font-size: 0.9rem; color: var(--text-secondary);">
+                    💡 How: ${tip.how}
+                </p>
+            </div>
+        `;
+    }
+    
+    // Load flavor exploration
+    async function loadFlavorExploration(toddlerId) {
+        try {
+            const data = await apiCall(`/explore-flavors/${toddlerId}`);
+            renderFlavorSuggestions(data);
+        } catch (error) {
+            console.error('Failed to load flavor suggestions:', error);
+        }
+    }
+    
+    function renderFlavorSuggestions(data) {
+        const container = document.getElementById('flavor-suggestions');
+        if (!container) return;
+        
+        if (!data.suggestions || data.suggestions.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="padding: 1rem;">
+                    <p>Log more meal reactions to get personalized flavor suggestions!</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        data.suggestions.forEach(suggestion => {
+            html += `
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 0.75rem;">
+                    <div style="font-weight: 600; margin-bottom: 0.5rem;">
+                        Because ${data.toddler_name || 'toddler'} likes: 
+                        <span style="color: var(--success);">${suggestion.because_likes.slice(0, 2).join(', ')}</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                        ${suggestion.description}
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        ${suggestion.try_these.map(food => `
+                            <span class="food-chip" style="background: rgba(99, 102, 241, 0.1); border-color: var(--primary);">
+                                🆕 ${food}
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDailyTip({{ toddler.id }});
+        loadFlavorExploration({{ toddler.id }});
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}Log Meal - {{ toddler.name }} | Toddler Meal Planner{% endblock %}
+
+{% block content %}
+<body data-page="log-meal" data-toddler-id="{{ toddler.id }}">
+    <div class="page-header">
+        <h1>🍽️ Log a Meal</h1>
+        <p>Track what {{ toddler.name }} ate today</p>
+    </div>
+    
+    <div class="dashboard-grid">
+        <!-- Quick Voice/Text Input -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🎤 Quick Log (Natural Language)</h2>
+            </div>
+            <div class="card-body">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                    Just describe what {{ toddler.name }} ate in your own words!
+                </p>
+                <div class="adult-meal-input">
+                    <textarea id="natural-language-input" class="form-input form-textarea" 
+                              placeholder="E.g., He had some idli and sambar for breakfast, ate most of it and loved the idli but didn't like sambar much"></textarea>
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button class="btn btn-primary" onclick="parseAndPreview({{ toddler.id }})" style="flex: 1;">
+                        <i class="fas fa-magic"></i> Parse & Preview
+                    </button>
+                    <button class="btn btn-success" onclick="quickLog({{ toddler.id }})" style="flex: 1;">
+                        <i class="fas fa-bolt"></i> Quick Log
+                    </button>
+                </div>
+                
+                <div id="parse-preview" style="display: none; margin-top: 1rem;"></div>
+            </div>
+        </div>
+        
+        <!-- Adult Meal Adapter -->
+        <div class="card">
+            <div class="card-header">
+                <h2>👨‍👩‍👧 Eating with Family?</h2>
+            </div>
+            <div class="card-body">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                    Tell us what the adults are eating and we'll suggest how to adapt it for {{ toddler.name }}.
+                </p>
+                <div class="adult-meal-input">
+                    <textarea id="adult-meal-input" class="form-input form-textarea" 
+                              placeholder="E.g., Rajma Chawal with salad, Paneer Butter Masala with Naan..."></textarea>
+                </div>
+                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }})">
+                    <i class="fas fa-magic"></i> Get Toddler Version
+                </button>
+                
+                <div id="adaptation-results" style="display: none; margin-top: 1rem;"></div>
+            </div>
+        </div>
+        
+        <!-- Meal Logging Form -->
+        <div class="card" id="log-section">
+            <div class="card-header">
+                <h2>📝 Log Meal Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Meal Type</label>
+                    <select id="meal-type" class="form-select">
+                        <option value="">Select meal type...</option>
+                        <option value="breakfast">🌅 Breakfast</option>
+                        <option value="mid_morning_snack">🍎 Mid-Morning Snack</option>
+                        <option value="lunch">🍱 Lunch</option>
+                        <option value="evening_snack">🥛 Evening Snack</option>
+                        <option value="dinner">🌙 Dinner</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Date</label>
+                    <input type="date" id="meal-date" class="form-input" value="{{ today }}">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Search Food</label>
+                    <div class="food-search-container">
+                        <i class="fas fa-search food-search-icon"></i>
+                        <input type="text" id="food-search" class="food-search-input form-input" 
+                               placeholder="Search foods... (e.g., khichdi, idli, banana)">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Select Food</label>
+                    <div id="food-list" class="food-list">
+                        {% for food in foods %}
+                        <div class="food-item" onclick='selectFood({{ food.to_dict() | tojson }})'>
+                            <div class="food-item-info">
+                                <div class="food-item-name">{{ food.name }}</div>
+                                {% if food.name_hindi %}
+                                <div class="food-item-hindi">{{ food.name_hindi }}</div>
+                                {% endif %}
+                            </div>
+                            <span class="food-item-category">{{ food.category }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div id="selected-food-details" style="display: none; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 1rem;">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Or Enter Custom Food</label>
+                    <input type="text" id="custom-food" class="form-input" 
+                           placeholder="Food not in list? Type here...">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">How much did {{ toddler.name }} eat?</label>
+                    <div class="portion-slider-container">
+                        <input type="range" class="portion-slider" id="portion-slider" 
+                               min="0" max="100" step="25" value="100" 
+                               onchange="updatePortion(this.value)">
+                        <div class="portion-labels">
+                            <span>None (0%)</span>
+                            <span>Quarter (25%)</span>
+                            <span>Half (50%)</span>
+                            <span>Most (75%)</span>
+                            <span>All (100%)</span>
+                        </div>
+                    </div>
+                    <p style="text-align: center; margin-top: 0.5rem; font-weight: 600;">
+                        Ate: <span id="portion-label">100%</span>
+                    </p>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">How did {{ toddler.name }} react?</label>
+                    <div class="reaction-buttons">
+                        <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="selectReaction('loved')">
+                            😍 Loved it!
+                        </button>
+                        <button type="button" class="reaction-btn liked" data-reaction="liked" onclick="selectReaction('liked')">
+                            😊 Liked
+                        </button>
+                        <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="selectReaction('neutral')">
+                            😐 Okay
+                        </button>
+                        <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="selectReaction('disliked')">
+                            😕 Didn't like
+                        </button>
+                        <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="selectReaction('refused')">
+                            🙅 Refused
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <textarea id="notes" class="form-input form-textarea" 
+                              placeholder="Any observations? E.g., 'Loved it with ghee', 'Too spicy'..."></textarea>
+                </div>
+                
+                <button class="btn btn-primary btn-lg btn-block" onclick="logMeal({{ toddler.id }})">
+                    <i class="fas fa-check"></i> Save Meal
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Store foods for search
+        const allFoods = {{ foods | map(attribute='to_dict') | list | tojson }};
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initFoodSearch(allFoods);
+            
+            // Pre-select meal type from URL if provided
+            const urlParams = new URLSearchParams(window.location.search);
+            const mealType = urlParams.get('meal');
+            if (mealType) {
+                document.getElementById('meal-type').value = mealType;
+            }
+        });
+        
+        // Natural language parsing
+        async function parseAndPreview(toddlerId) {
+            const text = document.getElementById('natural-language-input').value;
+            if (!text.trim()) {
+                showToast('Please enter what the toddler ate', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiCall('/parse-meal', 'POST', { text });
+                renderParsePreview(result);
+            } catch (error) {
+                console.error('Parse error:', error);
+            }
+        }
+        
+        function renderParsePreview(result) {
+            const container = document.getElementById('parse-preview');
+            if (!container) return;
+            
+            let html = `
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md);">
+                    <h4 style="margin-bottom: 0.75rem;">📝 Parsed Result:</h4>
+            `;
+            
+            if (result.foods && result.foods.length > 0) {
+                html += `<p><strong>Foods detected:</strong></p><ul style="margin: 0.5rem 0; padding-left: 1.5rem;">`;
+                result.foods.forEach(food => {
+                    const confidence = Math.round(food.confidence * 100);
+                    html += `<li>${food.name} ${food.db_name ? '✓' : '(custom)'} <small>(${confidence}% confident)</small></li>`;
+                });
+                html += `</ul>`;
+            } else {
+                html += `<p style="color: var(--warning);">No foods detected. Try being more specific.</p>`;
+            }
+            
+            if (result.meal_type) {
+                html += `<p><strong>Meal type:</strong> ${result.meal_type.replace('_', ' ')}</p>`;
+            }
+            
+            if (result.portion) {
+                html += `<p><strong>Portion:</strong> ${result.portion.value}${result.portion.type === 'percentage' ? '%' : ''}</p>`;
+            }
+            
+            if (result.overall_reaction) {
+                const reactionEmoji = {
+                    'loved': '😍', 'liked': '😊', 'neutral': '😐', 'disliked': '😕', 'refused': '🙅'
+                };
+                html += `<p><strong>Reaction:</strong> ${reactionEmoji[result.overall_reaction] || ''} ${result.overall_reaction}</p>`;
+            }
+            
+            if (Object.keys(result.food_reactions || {}).length > 0) {
+                html += `<p><strong>Per-food reactions:</strong></p><ul style="margin: 0.5rem 0; padding-left: 1.5rem;">`;
+                for (const [food, reaction] of Object.entries(result.food_reactions)) {
+                    html += `<li>${food}: ${reaction}</li>`;
+                }
+                html += `</ul>`;
+            }
+            
+            html += `</div>`;
+            container.innerHTML = html;
+            container.style.display = 'block';
+        }
+        
+        async function quickLog(toddlerId) {
+            const text = document.getElementById('natural-language-input').value;
+            if (!text.trim()) {
+                showToast('Please enter what the toddler ate', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiCall('/smart-log', 'POST', { 
+                    toddler_id: toddlerId, 
+                    text: text 
+                });
+                
+                showToast(result.message, 'success');
+                
+                // Show what was logged
+                const preview = document.getElementById('parse-preview');
+                if (preview) {
+                    preview.innerHTML = `
+                        <div style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--success);">
+                            <h4 style="color: var(--success); margin-bottom: 0.5rem;">✅ Logged Successfully!</h4>
+                            <p>Created ${result.created_logs.length} meal log(s):</p>
+                            <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                                ${result.created_logs.map(log => `
+                                    <li>${log.food?.name || log.custom_food_name} - ${log.portion_eaten_percent}% eaten ${log.toddler_reaction ? `(${log.toddler_reaction})` : ''}</li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `;
+                    preview.style.display = 'block';
+                }
+                
+                // Clear input
+                document.getElementById('natural-language-input').value = '';
+                
+            } catch (error) {
+                console.error('Quick log error:', error);
+            }
+        }
+    </script>
+{% endblock %}
