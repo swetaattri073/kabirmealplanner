@@ -36,7 +36,17 @@ app = Flask(__name__)
 # Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'toddler-meal-planner-secret-key-change-in-production')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
+# Session cookies: only set Secure when HTTPS is actually used.
+# Docker commonly serves over HTTP (port 80) with FLASK_ENV=production —
+# Secure cookies then never stick on mobile, so onboarding appears to "reset".
+_secure_flag = os.environ.get('SESSION_COOKIE_SECURE', '').strip().lower()
+if _secure_flag in ('1', 'true', 'yes'):
+    app.config['SESSION_COOKIE_SECURE'] = True
+elif _secure_flag in ('0', 'false', 'no'):
+    app.config['SESSION_COOKIE_SECURE'] = False
+else:
+    # Default off for HTTP deploys; set SESSION_COOKIE_SECURE=true behind HTTPS
+    app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
@@ -111,6 +121,7 @@ def get_session_id():
     if 'anonymous_session_id' not in session:
         session['anonymous_session_id'] = secrets.token_hex(32)
         session.permanent = True
+        session.modified = True
     return session['anonymous_session_id']
 
 
@@ -596,6 +607,7 @@ def create_toddler():
     if current_user.is_authenticated:
         toddler.user_id = current_user.id
     else:
+        session.permanent = True
         toddler.session_id = get_session_id()
     
     if toddler.weight_kg:

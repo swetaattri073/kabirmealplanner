@@ -13,6 +13,7 @@ async function apiCall(endpoint, method = 'GET', data = null) {
         headers: {
             'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
     };
     
     if (data) {
@@ -21,7 +22,7 @@ async function apiCall(endpoint, method = 'GET', data = null) {
     
     try {
         const response = await fetch(`${API_BASE}${endpoint}`, options);
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
         
         if (!response.ok) {
             throw new Error(result.error || 'API request failed');
@@ -30,7 +31,7 @@ async function apiCall(endpoint, method = 'GET', data = null) {
         return result;
     } catch (error) {
         console.error('API Error:', error);
-        showToast(error.message, 'error');
+        showToast(error.message || 'Something went wrong', 'error');
         throw error;
     }
 }
@@ -779,50 +780,79 @@ function switchToddler(toddlerId) {
 }
 
 async function createToddler(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
     
-    const form = event.target;
+    const form = (event && event.target && event.target.tagName === 'FORM')
+        ? event.target
+        : document.getElementById('onboarding-form') || document.querySelector('.onboarding-form');
+    if (!form) {
+        showToast('Form not found. Please refresh and try again.', 'error');
+        return;
+    }
+
+    const submitBtn = form.querySelector('.submit-btn') || document.querySelector('.submit-btn');
+    if (submitBtn?.disabled) return;
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.originalHtml = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Creating profile…</span>';
+    }
+    
     const formData = new FormData(form);
     
     // Get allergies
     const allergies = [];
-    document.querySelectorAll('input[name="allergies"]:checked').forEach(el => {
+    form.querySelectorAll('input[name="allergies"]:checked').forEach(el => {
         allergies.push(el.value);
     });
     
     // Get health conditions
     const healthConditions = [];
-    document.querySelectorAll('input[name="health_conditions"]:checked').forEach(el => {
+    form.querySelectorAll('input[name="health_conditions"]:checked').forEach(el => {
         healthConditions.push(el.value);
     });
+
+    const name = (formData.get('name') || '').toString().trim();
+    const ageMonths = parseInt(formData.get('age_months'), 10);
+    if (!name || !ageMonths) {
+        showToast('Please enter name and age in months', 'error');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = submitBtn.dataset.originalHtml || 'Start Planning Meals!';
+        }
+        return;
+    }
     
     const data = {
-        name: formData.get('name'),
-        age_months: parseInt(formData.get('age_months')),
+        name,
+        age_months: ageMonths,
         birth_date: formData.get('birth_date') || null,
         gender: formData.get('gender') || 'unknown',
         weight_kg: formData.get('weight_kg') ? parseFloat(formData.get('weight_kg')) : null,
+        height_cm: formData.get('height_cm') ? parseFloat(formData.get('height_cm')) : null,
         activity_level: formData.get('activity_level') || 'moderate',
         health_conditions: healthConditions,
-        dietary_preference: formData.get('dietary_preference'),
+        dietary_preference: formData.get('dietary_preference') || 'vegetarian',
         allergies: allergies
     };
     
     try {
         const toddler = await apiCall('/toddlers', 'POST', data);
         
-        // Show weight status if available
         let message = `Welcome, ${toddler.name}!`;
         if (toddler.weight_status && toddler.weight_status !== 'normal') {
             message += ` (${toddler.weight_status.replace('_', ' ')})`;
         }
         showToast(message, 'success');
         
-        setTimeout(() => {
-            window.location.href = `/dashboard/${toddler.id}`;
-        }, 1000);
+        // Navigate immediately — don't rely on delayed redirect on mobile
+        window.location.assign(`/dashboard/${toddler.id}`);
     } catch (error) {
         console.error('Failed to create toddler:', error);
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = submitBtn.dataset.originalHtml || '<i class="fas fa-rocket"></i> <span>Start Planning Meals!</span>';
+        }
     }
 }
 
