@@ -1,26 +1,18 @@
 // Service Worker for Toddler Meal Planner PWA
-const CACHE_NAME = 'toddler-meal-planner-v1';
-const urlsToCache = [
-  '/',
+const CACHE_NAME = 'toddler-meal-planner-v3';
+const STATIC_URLS = [
   '/static/css/style.css',
   '/static/js/app.js',
   '/static/manifest.json',
-  '/onboarding',
-  'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
+  '/static/icons/icon-192.png'
 ];
 
-// Install event - cache assets
+// Install event - cache static assets only (never HTML pages)
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-      .catch(err => {
-        console.log('Cache install error:', err);
-      })
+      .then(cache => cache.addAll(STATIC_URLS))
+      .catch(err => console.log('Cache install error:', err))
   );
   self.skipWaiting();
 });
@@ -42,101 +34,76 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch: network-first for pages/API so onboarding & dashboard never stick on stale HTML
 self.addEventListener('fetch', event => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') {
+  const req = event.request;
+  if (req.method !== 'GET') {
     return;
   }
 
-  // Skip API requests - always fetch from network
-  if (event.request.url.includes('/api/')) {
+  const url = new URL(req.url);
+
+  // Always network for API
+  if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          return new Response(
-            JSON.stringify({ error: 'You are offline. Please check your connection.' }),
-            { headers: { 'Content-Type': 'application/json' } }
-          );
-        })
+      fetch(req).catch(() => new Response(
+        JSON.stringify({ error: 'You are offline. Please check your connection.' }),
+        { headers: { 'Content-Type': 'application/json' } }
+      ))
     );
     return;
   }
 
+  // Navigations / HTML: network-first, do not cache
+  const isNavigate = req.mode === 'navigate' ||
+    (req.headers.get('accept') || '').includes('text/html');
+
+  if (isNavigate) {
+    event.respondWith(
+      fetch(req).catch(() => caches.match('/') || caches.match('/static/js/app.js'))
+    );
+    return;
+  }
+
+  // Static assets: cache-first with network update
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached version or fetch from network
-        if (response) {
-          return response;
+    caches.match(req).then(cached => {
+      const network = fetch(req).then(response => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
         }
-
-        return fetch(event.request).then(response => {
-          // Don't cache non-successful responses
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-
-          // Clone the response
-          const responseToCache = response.clone();
-
-          caches.open(CACHE_NAME)
-            .then(cache => {
-              cache.put(event.request, responseToCache);
-            });
-
-          return response;
-        });
-      })
-      .catch(() => {
-        // Return offline page for navigation requests
-        if (event.request.mode === 'navigate') {
-          return caches.match('/');
-        }
-      })
+        return response;
+      }).catch(() => cached);
+      return cached || network;
+    })
   );
 });
 
-// Background sync for offline meal logging
 self.addEventListener('sync', event => {
   if (event.tag === 'sync-meals') {
-    event.waitUntil(syncMeals());
+    event.waitUntil(Promise.resolve());
   }
 });
 
-async function syncMeals() {
-  // Get pending meals from IndexedDB and sync them
-  console.log('Syncing offline meals...');
-}
-
-// Push notifications for meal reminders
 self.addEventListener('push', event => {
   const options = {
     body: event.data ? event.data.text() : 'Time to log a meal!',
     icon: '/static/icons/icon-192.png',
     badge: '/static/icons/icon-72.png',
     vibrate: [100, 50, 100],
-    data: {
-      dateOfArrival: Date.now(),
-      primaryKey: 1
-    },
+    data: { dateOfArrival: Date.now(), primaryKey: 1 },
     actions: [
       { action: 'log', title: 'Log Meal' },
       { action: 'close', title: 'Dismiss' }
     ]
   };
-
-  event.waitUntil(
-    self.registration.showNotification('Toddler Meal Planner', options)
-  );
+  event.waitUntil(self.registration.showNotification('Meal Planner', options));
 });
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-
   if (event.action === 'log') {
-    event.waitUntil(
-      clients.openWindow('/')
-    );
+    event.waitUntil(clients.openWindow('/'));
   }
 });
