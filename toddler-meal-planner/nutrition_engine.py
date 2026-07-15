@@ -212,16 +212,41 @@ class NutritionEngine:
     def __init__(self, db_session):
         self.db = db_session
     
-    def get_rda(self, age_months):
-        """Get RDA for a toddler's age"""
+    def get_rda(self, age_months, toddler=None):
+        """
+        Get RDA for a toddler's age, adjusted for health conditions.
+        If toddler object is provided, adjusts based on weight status and activity level.
+        """
         if age_months < 12:
-            return RDA_BY_AGE['6-12_months']
+            base_rda = RDA_BY_AGE['6-12_months'].copy()
         elif age_months < 24:
-            return RDA_BY_AGE['12-24_months']
+            base_rda = RDA_BY_AGE['12-24_months'].copy()
         elif age_months < 36:
-            return RDA_BY_AGE['24-36_months']
+            base_rda = RDA_BY_AGE['24-36_months'].copy()
         else:
-            return RDA_BY_AGE['36+_months']
+            base_rda = RDA_BY_AGE['36+_months'].copy()
+        
+        # Apply adjustments if toddler object provided
+        if toddler:
+            calorie_adjustment = toddler.get_calorie_adjustment()
+            
+            # Adjust calories and macronutrients
+            base_rda['calories'] = round(base_rda['calories'] * calorie_adjustment)
+            base_rda['protein_g'] = round(base_rda['protein_g'] * calorie_adjustment, 1)
+            base_rda['fat_g'] = round(base_rda['fat_g'] * calorie_adjustment, 1)
+            base_rda['carbs_g'] = round(base_rda['carbs_g'] * calorie_adjustment, 1)
+            
+            # Boost specific nutrients based on health conditions
+            conditions = toddler.health_conditions or []
+            if 'anemia' in conditions or 'low_iron' in conditions:
+                base_rda['iron_mg'] = round(base_rda['iron_mg'] * 1.2, 1)  # 20% more iron
+            if 'weak_bones' in conditions:
+                base_rda['calcium_mg'] = round(base_rda['calcium_mg'] * 1.15)
+                base_rda['vitamin_d_mcg'] = round(base_rda['vitamin_d_mcg'] * 1.2, 1)
+            if 'constipation' in conditions:
+                base_rda['fiber_g'] = round(base_rda['fiber_g'] * 1.25, 1)
+        
+        return base_rda
     
     def calculate_daily_nutrition(self, meal_logs):
         """Calculate total nutrition from a list of meal logs"""
@@ -236,7 +261,7 @@ class NutritionEngine:
         return dict(totals)
     
     def get_nutrition_status(self, toddler, target_date=None):
-        """Get nutrition status for a specific date"""
+        """Get nutrition status for a specific date, adjusted for toddler's health"""
         from models import MealLog
         
         if target_date is None:
@@ -251,8 +276,11 @@ class NutritionEngine:
         # Calculate actual intake
         actual = self.calculate_daily_nutrition(logs)
         
-        # Get RDA
-        rda = self.get_rda(toddler.age_months)
+        # Get adjusted RDA based on toddler's health status
+        rda = self.get_rda(toddler.age_months, toddler)
+        
+        # Get nutrition priorities for highlighting
+        priorities = toddler.get_nutrition_priorities()
         
         # Calculate percentages
         status = {}
@@ -265,7 +293,8 @@ class NutritionEngine:
                 'rda': rda_value,
                 'percentage': round(percentage, 1),
                 'status': self._get_status_label(percentage),
-                'info': NUTRIENT_INFO.get(nutrient, {})
+                'info': NUTRIENT_INFO.get(nutrient, {}),
+                'is_priority': nutrient in priorities
             }
         
         return status

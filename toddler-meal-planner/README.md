@@ -38,12 +38,13 @@ A personalized meal planning application for Indian toddlers (6 months - 5 years
 
 ## Installation
 
-### Prerequisites
+### Local Development
 
+#### Prerequisites
 - Python 3.8+
 - pip
 
-### Setup
+#### Setup
 
 1. Clone the repository:
 ```bash
@@ -62,6 +63,61 @@ python3 app.py
 ```
 
 4. Open your browser to `http://localhost:5000`
+
+### Deploy to Production
+
+#### Option 1: Docker
+
+```bash
+# Build and run with Docker Compose
+docker-compose up -d
+
+# Or build manually
+docker build -t toddler-meal-planner .
+docker run -p 5000:5000 toddler-meal-planner
+```
+
+#### Option 2: Heroku
+
+```bash
+# Install Heroku CLI, then:
+heroku create your-app-name
+git push heroku main
+```
+
+#### Option 3: Render.com
+
+1. Connect your GitHub repository to Render
+2. The `render.yaml` file will configure the deployment automatically
+3. Your app will be live at `https://your-app.onrender.com`
+
+#### Option 4: Fly.io
+
+```bash
+# Install flyctl, then:
+flyctl launch
+flyctl deploy
+```
+
+#### Option 5: Railway / Vercel
+
+Just connect your GitHub repo - configuration files are included.
+
+### Install as Mobile App (PWA)
+
+The app is a Progressive Web App and can be installed on phones:
+
+**On Android (Chrome):**
+1. Visit the website
+2. Tap the menu (3 dots)
+3. Select "Add to Home Screen"
+
+**On iPhone (Safari):**
+1. Visit the website
+2. Tap the Share button
+3. Select "Add to Home Screen"
+
+The app will work offline for viewing cached data!
 
 ## Usage
 

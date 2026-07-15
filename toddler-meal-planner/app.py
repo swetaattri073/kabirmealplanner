@@ -7,6 +7,10 @@ import os
 from datetime import date, datetime, timedelta
 from flask import Flask, render_template, request, jsonify, redirect, url_for, g
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 from models import db, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
@@ -15,9 +19,17 @@ from meal_planner import MealPlanner, update_preferences_from_log
 
 # Create Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'toddler-meal-planner-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///toddler_meals.db'
+
+# Configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'toddler-meal-planner-secret-key-change-in-production')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Database configuration - supports both SQLite and PostgreSQL
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///toddler_meals.db')
+# Fix for Heroku PostgreSQL URL format
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 
 # Initialize extensions
 db.init_app(app)
@@ -118,10 +130,19 @@ def create_toddler():
         name=data['name'],
         age_months=int(data['age_months']),
         birth_date=datetime.strptime(data['birth_date'], '%Y-%m-%d').date() if data.get('birth_date') else None,
+        gender=data.get('gender', 'unknown'),
+        weight_kg=data.get('weight_kg'),
+        height_cm=data.get('height_cm'),
+        activity_level=data.get('activity_level', 'moderate'),
+        health_conditions=data.get('health_conditions', []),
+        health_notes=data.get('health_notes'),
         allergies=data.get('allergies', []),
         dietary_preference=data.get('dietary_preference', 'vegetarian'),
         meal_schedule=data.get('meal_schedule')
     )
+    
+    if toddler.weight_kg:
+        toddler.weight_updated_at = date.today()
     
     db.session.add(toddler)
     db.session.commit()
@@ -146,6 +167,19 @@ def update_toddler(toddler_id):
         toddler.name = data['name']
     if 'age_months' in data:
         toddler.age_months = int(data['age_months'])
+    if 'gender' in data:
+        toddler.gender = data['gender']
+    if 'weight_kg' in data:
+        toddler.weight_kg = data['weight_kg']
+        toddler.weight_updated_at = date.today()
+    if 'height_cm' in data:
+        toddler.height_cm = data['height_cm']
+    if 'activity_level' in data:
+        toddler.activity_level = data['activity_level']
+    if 'health_conditions' in data:
+        toddler.health_conditions = data['health_conditions']
+    if 'health_notes' in data:
+        toddler.health_notes = data['health_notes']
     if 'allergies' in data:
         toddler.allergies = data['allergies']
     if 'dietary_preference' in data:
@@ -155,6 +189,39 @@ def update_toddler(toddler_id):
     
     db.session.commit()
     return jsonify(toddler.to_dict())
+
+
+@app.route('/api/toddlers/<int:toddler_id>/health', methods=['PUT'])
+def update_toddler_health(toddler_id):
+    """Update toddler's health information"""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    data = request.json
+    
+    if 'weight_kg' in data:
+        toddler.weight_kg = data['weight_kg']
+        toddler.weight_updated_at = date.today()
+    if 'height_cm' in data:
+        toddler.height_cm = data['height_cm']
+    if 'activity_level' in data:
+        toddler.activity_level = data['activity_level']
+    if 'health_conditions' in data:
+        toddler.health_conditions = data['health_conditions']
+    if 'health_notes' in data:
+        toddler.health_notes = data['health_notes']
+    
+    db.session.commit()
+    
+    # Return updated info with weight status
+    return jsonify({
+        'toddler_id': toddler.id,
+        'weight_kg': toddler.weight_kg,
+        'height_cm': toddler.height_cm,
+        'weight_status': toddler.get_weight_status(),
+        'activity_level': toddler.activity_level,
+        'health_conditions': toddler.health_conditions,
+        'calorie_adjustment': toddler.get_calorie_adjustment(),
+        'nutrition_priorities': toddler.get_nutrition_priorities()
+    })
 
 
 @app.route('/api/toddlers/<int:toddler_id>', methods=['DELETE'])

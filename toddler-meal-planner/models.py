@@ -18,9 +18,23 @@ class Toddler(db.Model):
     name = db.Column(db.String(100), nullable=False)
     age_months = db.Column(db.Integer, nullable=False)
     birth_date = db.Column(db.Date, nullable=True)
+    gender = db.Column(db.String(10), default='unknown')  # male, female, unknown
+    
+    # Physical measurements for growth tracking
+    weight_kg = db.Column(db.Float, nullable=True)  # Current weight in kg
+    height_cm = db.Column(db.Float, nullable=True)  # Current height in cm
+    weight_updated_at = db.Column(db.Date, nullable=True)  # When weight was last updated
+    
+    # Health & Activity
+    activity_level = db.Column(db.String(20), default='moderate')  # low, moderate, high, very_high
+    health_conditions = db.Column(JSON, default=list)  # List: underweight, overweight, anemia, constipation, etc.
+    health_notes = db.Column(db.String(500), nullable=True)  # Additional health notes
+    
+    # Dietary info
     allergies = db.Column(JSON, default=list)  # List of allergen strings
     dietary_preference = db.Column(db.String(50), default='vegetarian')  # vegetarian, non-vegetarian, eggetarian
     meal_schedule = db.Column(JSON, nullable=True)  # Custom schedule if provided
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -39,6 +53,122 @@ class Toddler(db.Model):
             return '24-36_months'
         else:
             return '36+_months'
+    
+    def get_weight_status(self):
+        """
+        Calculate weight-for-age status using simplified WHO standards.
+        Returns: 'severely_underweight', 'underweight', 'normal', 'overweight', 'obese', or None
+        """
+        if not self.weight_kg or not self.age_months:
+            return None
+        
+        # Simplified WHO weight-for-age median values (kg) by age in months
+        # Using average of male/female for simplicity
+        who_median_weight = {
+            6: 7.5, 7: 7.9, 8: 8.3, 9: 8.6, 10: 8.9, 11: 9.2, 12: 9.4,
+            13: 9.6, 14: 9.8, 15: 10.0, 16: 10.2, 17: 10.4, 18: 10.6,
+            19: 10.8, 20: 11.0, 21: 11.2, 22: 11.4, 23: 11.6, 24: 11.8,
+            25: 12.0, 26: 12.2, 27: 12.4, 28: 12.6, 29: 12.8, 30: 13.0,
+            31: 13.2, 32: 13.4, 33: 13.5, 34: 13.7, 35: 13.9, 36: 14.1,
+            48: 16.0, 60: 18.5
+        }
+        
+        # Get closest age reference
+        age = min(self.age_months, 60)
+        if age < 6:
+            age = 6
+        
+        # Find nearest reference age
+        ref_ages = sorted(who_median_weight.keys())
+        closest_age = min(ref_ages, key=lambda x: abs(x - age))
+        median = who_median_weight[closest_age]
+        
+        # Calculate percentage of median
+        percent_of_median = (self.weight_kg / median) * 100
+        
+        if percent_of_median < 70:
+            return 'severely_underweight'
+        elif percent_of_median < 80:
+            return 'underweight'
+        elif percent_of_median <= 120:
+            return 'normal'
+        elif percent_of_median <= 140:
+            return 'overweight'
+        else:
+            return 'obese'
+    
+    def get_calorie_adjustment(self):
+        """
+        Calculate calorie adjustment factor based on weight status and activity level.
+        Returns a multiplier (e.g., 1.0 = no change, 1.2 = 20% more calories)
+        """
+        base_multiplier = 1.0
+        
+        # Activity level adjustments
+        activity_multipliers = {
+            'low': 0.9,
+            'moderate': 1.0,
+            'high': 1.15,
+            'very_high': 1.25
+        }
+        base_multiplier *= activity_multipliers.get(self.activity_level, 1.0)
+        
+        # Weight status adjustments
+        weight_status = self.get_weight_status()
+        if weight_status == 'severely_underweight':
+            base_multiplier *= 1.3  # Need 30% more calories
+        elif weight_status == 'underweight':
+            base_multiplier *= 1.15  # Need 15% more calories
+        elif weight_status == 'overweight':
+            base_multiplier *= 0.95  # Slight reduction
+        elif weight_status == 'obese':
+            base_multiplier *= 0.9  # More reduction
+        
+        # Health condition adjustments
+        conditions = self.health_conditions or []
+        if 'recovering_from_illness' in conditions:
+            base_multiplier *= 1.1
+        if 'poor_appetite' in conditions:
+            base_multiplier *= 1.0  # Focus on calorie-dense foods instead
+        
+        return round(base_multiplier, 2)
+    
+    def get_nutrition_priorities(self):
+        """
+        Get prioritized nutrients based on health conditions.
+        Returns list of nutrients that should be emphasized.
+        """
+        priorities = []
+        conditions = self.health_conditions or []
+        weight_status = self.get_weight_status()
+        
+        # Weight-based priorities
+        if weight_status in ['severely_underweight', 'underweight']:
+            priorities.extend(['calories', 'protein_g', 'fat_g'])
+        elif weight_status in ['overweight', 'obese']:
+            priorities.extend(['fiber_g', 'protein_g'])
+        
+        # Condition-based priorities
+        if 'anemia' in conditions or 'low_iron' in conditions:
+            priorities.extend(['iron_mg', 'vitamin_c_mg'])  # Vitamin C helps iron absorption
+        if 'weak_bones' in conditions or 'delayed_teething' in conditions:
+            priorities.extend(['calcium_mg', 'vitamin_d_mcg'])
+        if 'constipation' in conditions:
+            priorities.extend(['fiber_g'])
+        if 'frequent_illness' in conditions:
+            priorities.extend(['vitamin_a_mcg', 'vitamin_c_mg', 'zinc_mg'])
+        if 'vegetarian_b12_risk' in conditions or self.dietary_preference == 'vegetarian':
+            priorities.extend(['vitamin_b12_mcg', 'iron_mg'])
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_priorities = []
+        for p in priorities:
+            if p not in seen:
+                seen.add(p)
+                unique_priorities.append(p)
+        
+        return unique_priorities
     
     def get_recommended_schedule(self):
         """Returns recommended meal schedule based on age"""
@@ -70,10 +200,19 @@ class Toddler(db.Model):
             'name': self.name,
             'age_months': self.age_months,
             'birth_date': self.birth_date.isoformat() if self.birth_date else None,
+            'gender': self.gender,
+            'weight_kg': self.weight_kg,
+            'height_cm': self.height_cm,
+            'weight_status': self.get_weight_status(),
+            'activity_level': self.activity_level,
+            'health_conditions': self.health_conditions or [],
+            'health_notes': self.health_notes,
             'allergies': self.allergies or [],
             'dietary_preference': self.dietary_preference,
             'meal_schedule': self.get_recommended_schedule(),
             'age_group': self.get_age_group(),
+            'calorie_adjustment': self.get_calorie_adjustment(),
+            'nutrition_priorities': self.get_nutrition_priorities(),
             'created_at': self.created_at.isoformat()
         }
 

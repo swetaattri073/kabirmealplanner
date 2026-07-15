@@ -186,7 +186,22 @@ class MealPlanner:
     
     def _select_food_for_meal(self, toddler, meal_type, suitable_foods, preferences, 
                               recent_foods, nutrition_gaps, day_nutrition, used_foods, day_of_week):
-        """Select the best food for a specific meal slot"""
+        """
+        Select the best food for a specific meal slot.
+        
+        ALGORITHM EXPLANATION:
+        1. Filter foods by meal type (breakfast gets grains/dairy, lunch/dinner get full meals)
+        2. Score each food based on:
+           - Preference score (30%): Foods the toddler likes get higher scores
+           - Nutrition gap filling (35%): Foods rich in lacking nutrients score higher
+           - Variety (20%): Foods not eaten recently score higher
+           - Day balance (15%): Ensures balanced nutrition throughout the day
+        3. Health adjustments: 
+           - Underweight: Prioritize calorie-dense foods
+           - Overweight: Prioritize fiber-rich, lower calorie options
+           - Specific conditions: Boost foods with needed nutrients (iron for anemia, etc.)
+        4. Return top scoring food with alternatives
+        """
         
         # Filter foods appropriate for meal type
         meal_foods = self._filter_by_meal_type(suitable_foods, meal_type)
@@ -196,7 +211,12 @@ class MealPlanner:
         
         # Score each food
         scored_foods = []
-        rda = self.nutrition_engine.get_rda(toddler.age_months)
+        rda = self.nutrition_engine.get_rda(toddler.age_months, toddler)  # Adjusted RDA
+        
+        # Get health-based priorities
+        nutrition_priorities = toddler.get_nutrition_priorities()
+        weight_status = toddler.get_weight_status()
+        calorie_adjustment = toddler.get_calorie_adjustment()
         
         for food in meal_foods:
             score = 0
@@ -222,14 +242,35 @@ class MealPlanner:
                 
                 if rda_value > 0:
                     contribution = (nutrient_value / rda_value) * 100
-                    nutrition_score += min(contribution * (gap / 100), 10)
+                    gap_score = min(contribution * (gap / 100), 10)
+                    
+                    # Boost score for priority nutrients (health-based)
+                    if nutrient in nutrition_priorities:
+                        gap_score *= 1.5
+                    
+                    nutrition_score += gap_score
                     
                     if contribution > 20:
                         from nutrition_engine import NUTRIENT_INFO
                         nutrient_name = NUTRIENT_INFO.get(nutrient, {}).get('name', nutrient)
                         reasons.append(f"Good source of {nutrient_name}")
             
-            score += min(nutrition_score, 10) * 0.35
+            score += min(nutrition_score, 15) * 0.35
+            
+            # 2b. Health-based adjustments
+            if weight_status in ['severely_underweight', 'underweight']:
+                # Prioritize calorie-dense foods
+                if food_nutrients.get('calories', 0) > 150:
+                    score += 3
+                    reasons.append("High calorie for weight gain")
+                if food_nutrients.get('fat_g', 0) > 5:
+                    score += 1
+            elif weight_status in ['overweight', 'obese']:
+                # Prioritize lower calorie, high fiber foods
+                if food_nutrients.get('fiber_g', 0) > 2:
+                    score += 2
+                if food_nutrients.get('calories', 0) < 100:
+                    score += 1
             
             # 3. Variety penalty (weight: 20%)
             variety_penalty = 0

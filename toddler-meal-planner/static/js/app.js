@@ -646,17 +646,33 @@ async function createToddler(event) {
         allergies.push(el.value);
     });
     
+    // Get health conditions
+    const healthConditions = [];
+    document.querySelectorAll('input[name="health_conditions"]:checked').forEach(el => {
+        healthConditions.push(el.value);
+    });
+    
     const data = {
         name: formData.get('name'),
         age_months: parseInt(formData.get('age_months')),
         birth_date: formData.get('birth_date') || null,
+        gender: formData.get('gender') || 'unknown',
+        weight_kg: formData.get('weight_kg') ? parseFloat(formData.get('weight_kg')) : null,
+        activity_level: formData.get('activity_level') || 'moderate',
+        health_conditions: healthConditions,
         dietary_preference: formData.get('dietary_preference'),
         allergies: allergies
     };
     
     try {
         const toddler = await apiCall('/toddlers', 'POST', data);
-        showToast(`Welcome, ${toddler.name}!`, 'success');
+        
+        // Show weight status if available
+        let message = `Welcome, ${toddler.name}!`;
+        if (toddler.weight_status && toddler.weight_status !== 'normal') {
+            message += ` (${toddler.weight_status.replace('_', ' ')})`;
+        }
+        showToast(message, 'success');
         
         setTimeout(() => {
             window.location.href = `/dashboard/${toddler.id}`;
