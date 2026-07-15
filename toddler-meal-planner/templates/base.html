@@ -31,10 +31,10 @@
             <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">
                 <i class="fas fa-bars"></i>
             </button>
-            <div class="mobile-logo">
+            <a class="mobile-logo" href="{% if toddler %}{{ url_for('dashboard', toddler_id=toddler.id) }}{% else %}{{ url_for('home') }}{% endif %}" aria-label="Go to dashboard">
                 <span class="logo-icon">🥗</span>
                 <span class="logo-text">Meal Planner</span>
-            </div>
+            </a>
             {% if toddler %}
             <div class="mobile-avatar">{{ toddler.name[0] | upper }}</div>
             {% endif %}
@@ -46,10 +46,10 @@
         <!-- Sidebar Navigation -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="logo">
+                <a class="logo" href="{% if toddler %}{{ url_for('dashboard', toddler_id=toddler.id) }}{% else %}{{ url_for('home') }}{% endif %}" aria-label="Go to dashboard">
                     <span class="logo-icon">🥗</span>
                     <span class="logo-text">Meal Planner</span>
-                </div>
+                </a>
             </div>
             
             {% if toddler %}
