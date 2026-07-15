@@ -78,35 +78,14 @@
                         </button>
                     </div>
                     {% else %}
-                    {# ---- Default: feedback on recommended meal ---- #}
+                    {# ---- Default: per-item feedback on recommended meal ---- #}
                     <div class="plan-feedback" id="feedback-{{ meal_type }}">
-                        <div class="form-group" style="margin-bottom: 0.75rem;">
-                            <label class="form-label">How much did {{ toddler.name }} eat?</label>
-                            <div class="portion-slider-container">
-                                <input type="range" class="portion-slider" id="portion-{{ meal_type }}"
-                                       min="0" max="100" step="25" value="100"
-                                       oninput="document.getElementById('portion-label-{{ meal_type }}').textContent = this.value + '%'">
-                                <div class="portion-labels">
-                                    <span>None</span><span>¼</span><span>½</span><span>Most</span><span>All</span>
-                                </div>
-                            </div>
-                            <p style="text-align:center;font-weight:700;margin-top:0.35rem;">
-                                Ate: <span id="portion-label-{{ meal_type }}">100%</span>
-                            </p>
-                        </div>
+                        <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                            Rate <strong>each item</strong> {{ toddler.name }} ate — combos are split into separate foods.
+                        </p>
+                        <div id="plan-items-{{ meal_type }}" class="meal-items-panel"></div>
                         
-                        <div class="form-group" style="margin-bottom: 0.75rem;">
-                            <label class="form-label">How did {{ toddler.name }} react?</label>
-                            <div class="reaction-buttons compact" id="reactions-{{ meal_type }}">
-                                <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="pickPlanReaction('{{ meal_type }}', 'loved')">😍 Loved</button>
-                                <button type="button" class="reaction-btn liked" data-reaction="liked" onclick="pickPlanReaction('{{ meal_type }}', 'liked')">😊 Liked</button>
-                                <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="pickPlanReaction('{{ meal_type }}', 'neutral')">😐 Okay</button>
-                                <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="pickPlanReaction('{{ meal_type }}', 'disliked')">😕 Disliked</button>
-                                <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="pickPlanReaction('{{ meal_type }}', 'refused')">🙅 Refused</button>
-                            </div>
-                        </div>
-                        
-                        <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <div class="form-group" style="margin: 0.75rem 0;">
                             <label class="form-label">Anything refused / notes? <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
                             <input type="text" class="form-input" id="notes-{{ meal_type }}"
                                    placeholder="E.g., ate roti but refused dal / spit out salad">
@@ -198,25 +177,12 @@
                             <div class="food-list alt-food-list" id="alt-photo-list-{{ meal_type }}" style="max-height:180px;margin-top:0.75rem;"></div>
                         </div>
 
-                        <div id="alt-selected-{{ meal_type }}" style="display:none;margin:0.75rem 0;padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius-md);"></div>
+                        <div id="alt-items-{{ meal_type }}" class="meal-items-panel" style="margin-top:0.75rem;"></div>
+                        <p id="alt-items-hint-{{ meal_type }}" style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;">
+                            No foods selected yet — tap items above. Combos like “Lobia with Roti” split into separate rows.
+                        </p>
                         
-                        <div class="form-group">
-                            <label class="form-label">Portion eaten</label>
-                            <input type="range" class="portion-slider" id="alt-portion-{{ meal_type }}" min="0" max="100" step="25" value="100"
-                                   oninput="document.getElementById('alt-portion-label-{{ meal_type }}').textContent = this.value + '%'">
-                            <p style="text-align:center;font-weight:700;">Ate: <span id="alt-portion-label-{{ meal_type }}">100%</span></p>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Reaction</label>
-                            <div class="reaction-buttons compact" id="alt-reactions-{{ meal_type }}">
-                                <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="pickAltReaction('{{ meal_type }}', 'loved')">😍</button>
-                                <button type="button" class="reaction-btn liked" data-reaction="liked" onclick="pickAltReaction('{{ meal_type }}', 'liked')">😊</button>
-                                <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="pickAltReaction('{{ meal_type }}', 'neutral')">😐</button>
-                                <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="pickAltReaction('{{ meal_type }}', 'disliked')">😕</button>
-                                <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="pickAltReaction('{{ meal_type }}', 'refused')">🙅</button>
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-primary" onclick="logAlternateMeal({{ toddler.id }}, '{{ meal_type }}')">
+                        <button type="button" class="btn btn-primary" style="margin-top:0.75rem;" onclick="logAlternateMeal({{ toddler.id }}, '{{ meal_type }}')">
                             <i class="fas fa-sync"></i> Log & update weekly plan
                         </button>
                     </div>
@@ -359,16 +325,35 @@
     background: rgba(99,102,241,0.06);
 }
 .add-food-item .food-item-name { color: var(--primary-dark, #4f46e5); }
+.food-item.selected { border-color: rgba(99,102,241,0.55) !important; background: rgba(99,102,241,0.08); }
+.meal-items-panel { display: flex; flex-direction: column; gap: 0.85rem; }
+.meal-item-row {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+    background: var(--bg-secondary, #f8fafc);
+}
+.meal-item-row .meal-item-name { font-weight: 700; margin-bottom: 0.5rem; }
+.meal-item-row .item-portion-label { text-align: center; font-weight: 700; font-size: 0.9rem; margin-top: 0.25rem; }
 </style>
 
 <script>
 const allFoods = {{ foods_data | tojson }};
-const planReactions = {};
-const altReactions = {};
-const altSelectedFoods = {};
-const altPhotos = {}; // mealType -> base64 data URL
+const todayPlanMeals = {{ (today_plan.meals if today_plan else {}) | tojson }};
+const planItemState = {};
+const altItemState = {};
+const altPhotos = {};
+
+const REACTIONS = [
+    { id: 'loved', label: '😍 Loved', short: '😍' },
+    { id: 'liked', label: '😊 Liked', short: '😊' },
+    { id: 'neutral', label: '😐 Okay', short: '😐' },
+    { id: 'disliked', label: '😕 Disliked', short: '😕' },
+    { id: 'refused', label: '🙅 Refused', short: '🙅' },
+];
 
 document.addEventListener('DOMContentLoaded', function() {
+    Object.keys(todayPlanMeals).forEach(initPlanItems);
     const urlParams = new URLSearchParams(window.location.search);
     const mealType = urlParams.get('meal');
     if (mealType) {
@@ -380,6 +365,205 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+function resolveFoodByName(name) {
+    const n = (name || '').toLowerCase().trim();
+    if (!n) return null;
+    let f = allFoods.find(x => x.name.toLowerCase() === n);
+    if (f) return f;
+    f = allFoods.find(x => x.name.toLowerCase().startsWith(n) || n.startsWith(x.name.toLowerCase()));
+    if (f) return f;
+    if (n.includes('roti') || n === 'chapati') {
+        return allFoods.find(x => /roti|chapati/i.test(x.name)) || null;
+    }
+    if (n.includes('lobia') || n.includes('lobhiya')) {
+        return allFoods.find(x => /lobia/i.test(x.name) && x.category !== 'combo') || null;
+    }
+    return allFoods.find(x => x.name.toLowerCase().includes(n) && x.category !== 'combo') || null;
+}
+
+function expandComboFood(food) {
+    if (!food) return [];
+    const name = food.name || '';
+    if ((food.category === 'combo' || /\s+with\s+/i.test(name)) && /\s+with\s+/i.test(name)) {
+        const parts = name.split(/\s+with\s+/i);
+        const expanded = [];
+        for (const part of parts) {
+            const m = resolveFoodByName(part.trim());
+            if (m && !expanded.some(e => e.food_id === m.id)) {
+                expanded.push({ food_id: m.id, name: m.name, portion: 100, reaction: null });
+            }
+        }
+        if (expanded.length >= 2) return expanded;
+    }
+    return [{ food_id: food.id, name: food.name, portion: 100, reaction: null }];
+}
+
+function initPlanItems(mealType) {
+    const meal = todayPlanMeals[mealType];
+    if (!meal) return;
+    let items = (meal.log_components || []).map(c => ({
+        food_id: c.food_id,
+        name: c.name,
+        portion: 100,
+        reaction: null,
+        role: c.role || null,
+    }));
+    if (!items.length && meal.food) {
+        const f = allFoods.find(x => x.id === meal.food.id) || meal.food;
+        items = expandComboFood(f);
+    }
+    planItemState[mealType] = items;
+    renderItemRows(mealType, 'plan');
+}
+
+function getItemState(mealType, mode) {
+    return mode === 'plan' ? (planItemState[mealType] || []) : (altItemState[mealType] || []);
+}
+
+function setItemState(mealType, mode, items) {
+    if (mode === 'plan') planItemState[mealType] = items;
+    else altItemState[mealType] = items;
+}
+
+function renderItemRows(mealType, mode) {
+    const containerId = mode === 'plan' ? 'plan-items-' + mealType : 'alt-items-' + mealType;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const items = getItemState(mealType, mode);
+    if (!items.length) {
+        container.innerHTML = mode === 'plan'
+            ? '<p style="color:var(--text-muted);font-size:0.9rem;">No planned items found.</p>'
+            : '';
+        const hint = document.getElementById('alt-items-hint-' + mealType);
+        if (hint) hint.style.display = mode === 'alt' ? 'block' : 'none';
+        return;
+    }
+    const hint = document.getElementById('alt-items-hint-' + mealType);
+    if (hint) hint.style.display = 'none';
+    container.innerHTML = items.map((item, idx) => {
+        const prefix = `${mode}-${mealType}-${idx}`;
+        const reactionBtns = REACTIONS.map(r => `
+            <button type="button" class="reaction-btn ${r.id} ${item.reaction === r.id ? 'selected' : ''}"
+                    data-reaction="${r.id}"
+                    onclick="pickItemReaction('${mealType}', '${mode}', ${idx}, '${r.id}')">${r.short}</button>
+        `).join('');
+        return `
+        <div class="meal-item-row" data-food-id="${item.food_id}">
+            <div class="meal-item-name">${escapeHtml(item.name)}${item.role ? ` <span class="suggestion-meta">(${escapeHtml(item.role)})</span>` : ''}</div>
+            <label class="form-label" style="font-size:0.85rem;">Portion eaten</label>
+            <input type="range" class="portion-slider item-portion" min="0" max="100" step="25" value="${item.portion}"
+                   oninput="setItemPortion('${mealType}', '${mode}', ${idx}, parseInt(this.value, 10))">
+            <p class="item-portion-label" id="portion-label-${prefix}">Ate: ${item.portion}%</p>
+            <label class="form-label" style="font-size:0.85rem;margin-top:0.35rem;">Reaction</label>
+            <div class="reaction-buttons compact">${reactionBtns}</div>
+            ${mode === 'alt' ? `<button type="button" class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="removeAltItem('${mealType}', ${idx})">Remove</button>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function pickItemReaction(mealType, mode, idx, reaction) {
+    const items = getItemState(mealType, mode);
+    if (!items[idx]) return;
+    items[idx].reaction = reaction;
+    setItemState(mealType, mode, items);
+    renderItemRows(mealType, mode);
+}
+
+function setItemPortion(mealType, mode, idx, portion) {
+    const items = getItemState(mealType, mode);
+    if (!items[idx]) return;
+    items[idx].portion = portion;
+    setItemState(mealType, mode, items);
+    const label = document.getElementById(`portion-label-${mode}-${mealType}-${idx}`);
+    if (label) label.textContent = 'Ate: ' + portion + '%';
+}
+
+function lookupReaction(reactionsMap, itemName, foodName) {
+    if (!reactionsMap) return null;
+    const tryNames = [itemName, foodName].filter(Boolean);
+    for (const n of tryNames) {
+        if (reactionsMap[n]) return reactionsMap[n];
+        const lower = n.toLowerCase();
+        for (const [k, v] of Object.entries(reactionsMap)) {
+            const kl = k.toLowerCase();
+            if (kl === lower || kl.includes(lower) || lower.includes(kl)) return v;
+        }
+    }
+    return null;
+}
+
+function addAltItems(mealType, foods, reactionsMap) {
+    if (!altItemState[mealType]) altItemState[mealType] = [];
+    for (const food of foods) {
+        const expanded = expandComboFood(food);
+        for (const item of expanded) {
+            const reaction = lookupReaction(reactionsMap, item.name, food.name);
+            const existing = altItemState[mealType].find(i => i.food_id === item.food_id);
+            if (existing) {
+                if (reaction && !existing.reaction) existing.reaction = reaction;
+                continue;
+            }
+            altItemState[mealType].push({ ...item, reaction });
+        }
+    }
+    renderItemRows(mealType, 'alt');
+}
+
+function toggleAltFood(mealType, foodId) {
+    const food = allFoods.find(f => f.id === foodId);
+    if (!food) return;
+    if (!altItemState[mealType]) altItemState[mealType] = [];
+    const expanded = expandComboFood(food);
+    const allSelected = expanded.every(e => altItemState[mealType].some(i => i.food_id === e.food_id));
+    if (allSelected) {
+        const ids = new Set(expanded.map(e => e.food_id));
+        altItemState[mealType] = altItemState[mealType].filter(i => !ids.has(i.food_id));
+    } else {
+        addAltItems(mealType, [food], null);
+    }
+    const q = document.getElementById('alt-search-' + mealType)?.value || '';
+    filterAltFoods(mealType, q);
+    renderItemRows(mealType, 'alt');
+}
+
+function removeAltItem(mealType, idx) {
+    if (!altItemState[mealType]) return;
+    altItemState[mealType].splice(idx, 1);
+    renderItemRows(mealType, 'alt');
+    const q = document.getElementById('alt-search-' + mealType)?.value || '';
+    filterAltFoods(mealType, q);
+}
+
+function collectItemsFromState(mealType, mode) {
+    const items = getItemState(mealType, mode);
+    const missing = items.filter(i => !i.reaction);
+    if (missing.length) {
+        showToast('Please set a reaction for each food (' + missing.map(m => m.name).join(', ') + ')', 'error');
+        return null;
+    }
+    return items.map(i => ({
+        food_id: i.food_id,
+        name: i.name,
+        portion_eaten_percent: i.portion,
+        toddler_reaction: i.reaction,
+    }));
+}
+
+async function submitMealLogs(toddlerId, mealType, items, options) {
+    const payload = {
+        toddler_id: toddlerId,
+        meal_type: mealType,
+        items: items,
+        date: {{ today|tojson }},
+        notes: options.notes || '',
+        update_plan: !!options.update_plan,
+        plan_food_id: options.plan_food_id || items[0]?.food_id,
+        plan_reason: options.plan_reason || '',
+    };
+    if (options.photo_data) payload.photo_data = options.photo_data;
+    return apiCall('/meal-logs', 'POST', payload);
+}
+
 function toggleSection(id) {
     const el = document.getElementById(id);
     const icon = document.getElementById(id + '-icon');
@@ -387,20 +571,6 @@ function toggleSection(id) {
     const open = el.style.display !== 'none';
     el.style.display = open ? 'none' : 'block';
     if (icon) icon.className = open ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
-}
-
-function pickPlanReaction(mealType, reaction) {
-    planReactions[mealType] = reaction;
-    document.querySelectorAll('#reactions-' + mealType + ' .reaction-btn').forEach(btn => {
-        btn.classList.toggle('selected', btn.dataset.reaction === reaction);
-    });
-}
-
-function pickAltReaction(mealType, reaction) {
-    altReactions[mealType] = reaction;
-    document.querySelectorAll('#alt-reactions-' + mealType + ' .reaction-btn').forEach(btn => {
-        btn.classList.toggle('selected', btn.dataset.reaction === reaction);
-    });
 }
 
 function showAlternateForm(mealType) {
@@ -443,16 +613,19 @@ function filterAltFoods(mealType, query) {
     ).slice(0, 40);
 
     const exact = q && allFoods.some(f => f.name.toLowerCase() === q);
-    let html = matches.map(f => `
-        <div class="food-item" data-food-id="${f.id}" onclick="selectAltFoodById('${mealType}', ${f.id})">
+    const selectedIds = new Set((altItemState[mealType] || []).map(i => i.food_id));
+    let html = matches.map(f => {
+        const isSelected = selectedIds.has(f.id);
+        return `
+        <div class="food-item ${isSelected ? 'selected' : ''}" data-food-id="${f.id}" onclick="toggleAltFood('${mealType}', ${f.id})">
             <div class="food-item-info">
-                <div class="food-item-name">${escapeHtml(f.name)}</div>
+                <div class="food-item-name">${isSelected ? '✓ ' : ''}${escapeHtml(f.name)}</div>
                 ${f.name_hindi ? `<div class="food-item-hindi">${escapeHtml(f.name_hindi)}</div>` : ''}
                 ${f.nutrition_pending ? '<div class="suggestion-meta">Nutrients updating…</div>' : ''}
             </div>
             <span class="food-item-category">${escapeHtml(f.category)}${f.is_user_added ? ' · custom' : ''}</span>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 
     if (q && !exact && looksLikeFoodName(q)) {
         html += renderAddFoodButton(mealType, query.trim());
@@ -526,7 +699,7 @@ async function addCustomFood(mealType, name, options = {}) {
         else allFoods.push(result);
         allFoods.sort((a, b) => a.name.localeCompare(b.name));
 
-        selectAltFoodById(mealType, result.id, result.nutrition_pending ? 'nutrients updating in background' : 'added');
+        addAltItems(mealType, [result], null);
         const searchInput = document.getElementById('alt-search-' + mealType);
         if (searchInput) {
             searchInput.value = result.name;
@@ -537,20 +710,6 @@ async function addCustomFood(mealType, name, options = {}) {
     } catch (e) {
         console.error(e);
         return null;
-    }
-}
-
-function selectAltFoodById(mealType, foodId, extraNote) {
-    const food = allFoods.find(f => f.id === foodId);
-    if (!food) return;
-    altSelectedFoods[mealType] = food;
-    const box = document.getElementById('alt-selected-' + mealType);
-    if (box) {
-        box.style.display = 'block';
-        const photoNote = altPhotos[mealType] ? ' · Photo attached' : '';
-        box.innerHTML = `<strong>Selected: ${escapeHtml(food.name)}</strong>${photoNote}`
-            + (food.toddler_friendly_version ? `<p style="margin:0.35rem 0 0;font-size:0.9rem;color:var(--text-secondary);">${escapeHtml(food.toddler_friendly_version)}</p>` : '')
-            + (extraNote ? `<p class="suggestion-meta">${escapeHtml(extraNote)}</p>` : '');
     }
 }
 
@@ -565,7 +724,6 @@ function matchFoodsFromText(text) {
         let score = 0;
         if (name && t.includes(name)) score = Math.max(score, 0.95);
         if (hindi && t.includes(hindi)) score = Math.max(score, 0.9);
-        // Word-level: significant tokens from food name
         const tokens = name.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
         for (const tok of tokens) {
             if (t.includes(tok)) score = Math.max(score, 0.7);
@@ -582,7 +740,6 @@ function matchFoodsFromText(text) {
         }
     }
     scored.sort((a, b) => b.confidence - a.confidence);
-    // Dedupe by id
     const seen = new Set();
     return scored.filter(s => {
         if (seen.has(s.food_id)) return false;
@@ -595,6 +752,7 @@ function renderSuggestionList(listId, mealType, suggestions, rawQuery) {
     const list = document.getElementById(listId);
     if (!list) return;
     const items = suggestions || [];
+    const selectedIds = new Set((altItemState[mealType] || []).map(i => i.food_id));
     if (!items.length) {
         const q = (rawQuery || '').trim();
         list.innerHTML = `
@@ -621,10 +779,11 @@ function renderSuggestionList(listId, mealType, suggestions, rawQuery) {
             if (!looksLikeFoodName(name)) return '';
             return renderAddFoodButton(mealType, name, 'Detected but not in database — add & enrich nutrients');
         }
+        const isSelected = selectedIds.has(fid);
         return `
-        <div class="food-item" onclick="selectAltFoodById('${mealType}', ${fid})">
+        <div class="food-item ${isSelected ? 'selected' : ''}" onclick="toggleAltFood('${mealType}', ${fid})">
             <div class="food-item-info">
-                <div class="food-item-name">${escapeHtml(name)}</div>
+                <div class="food-item-name">${isSelected ? '✓ ' : ''}${escapeHtml(name)}</div>
                 ${s.name_hindi ? `<div class="food-item-hindi">${escapeHtml(s.name_hindi)}</div>` : ''}
                 <div class="suggestion-meta">${escapeHtml((conf + src).trim())}</div>
             </div>
@@ -647,46 +806,35 @@ async function parseAltNlp(toddlerId, mealType) {
             confidence: f.confidence,
             source: 'describe'
         }));
-
-        // If parser returned nothing, fall back to matching against the food list
-        if (!suggestions.length) {
-            suggestions = matchFoodsFromText(text);
-        }
-
+        if (!suggestions.length) suggestions = matchFoodsFromText(text);
         suggestions.forEach(s => {
             if (!s.food_id) return;
             const full = allFoods.find(f => f.id === s.food_id);
             if (full) {
                 s.name_hindi = full.name_hindi;
                 s.category = full.category;
-                s.toddler_friendly_version = full.toddler_friendly_version;
                 if (!s.name) s.name = full.name;
             }
         });
-
         renderSuggestionList('alt-nlp-list-' + mealType, mealType, suggestions, text);
-        const known = suggestions.filter(s => s.food_id);
-        if (known.length === 1) {
-            selectAltFoodById(mealType, known[0].food_id, 'from description');
-        } else if (!suggestions.length) {
-            showToast('No foods detected — add a short food name below', 'error');
-        }
-        if (result.overall_reaction && !altReactions[mealType]) {
-            pickAltReaction(mealType, result.overall_reaction);
-        }
-        if (result.portion && result.portion.type === 'percentage') {
-            const slider = document.getElementById('alt-portion-' + mealType);
-            const label = document.getElementById('alt-portion-label-' + mealType);
-            if (slider) {
-                slider.value = result.portion.value;
-                if (label) label.textContent = result.portion.value + '%';
+        const foods = suggestions.filter(s => s.food_id).map(s => allFoods.find(f => f.id === s.food_id) || { id: s.food_id, name: s.name });
+        if (foods.length) {
+            addAltItems(mealType, foods, result.food_reactions || {});
+            if (result.overall_reaction && altItemState[mealType]?.length) {
+                altItemState[mealType].forEach(item => {
+                    if (!item.reaction) item.reaction = result.overall_reaction;
+                });
+                renderItemRows(mealType, 'alt');
             }
+        } else {
+            showToast('No foods detected — add a short food name below', 'error');
         }
     } catch (e) {
         console.error(e);
-        // Still try local matching if API fails
         const local = matchFoodsFromText(text);
         renderSuggestionList('alt-nlp-list-' + mealType, mealType, local, text);
+        const foods = local.map(s => allFoods.find(f => f.id === s.food_id)).filter(Boolean);
+        if (foods.length) addAltItems(mealType, foods, null);
     }
 }
 
@@ -708,10 +856,6 @@ function onAltPhotoSelected(mealType, input) {
         if (img) img.src = dataUrl;
         if (wrap) wrap.style.display = 'block';
         if (clearBtn) clearBtn.style.display = 'inline-flex';
-        // Refresh selected box photo note
-        if (altSelectedFoods[mealType]) {
-            selectAltFoodById(mealType, altSelectedFoods[mealType].id);
-        }
     };
     reader.readAsDataURL(file);
 }
@@ -726,9 +870,6 @@ function clearAltPhoto(mealType) {
     if (img) img.src = '';
     if (wrap) wrap.style.display = 'none';
     if (clearBtn) clearBtn.style.display = 'none';
-    if (altSelectedFoods[mealType]) {
-        selectAltFoodById(mealType, altSelectedFoods[mealType].id);
-    }
 }
 
 async function recognizeAltPhoto(toddlerId, mealType) {
@@ -745,11 +886,12 @@ async function recognizeAltPhoto(toddlerId, mealType) {
             image: photo || null,
             caption: caption
         });
-        renderSuggestionList('alt-photo-list-' + mealType, mealType, result.suggestions || result.detected_foods || []);
-        const top = (result.suggestions || []).find(s => s.source === 'caption' || (s.confidence || 0) >= 0.7);
-        if (top && top.food_id) {
-            selectAltFoodById(mealType, top.food_id, 'from photo');
-        }
+        const suggestions = result.suggestions || result.detected_foods || [];
+        renderSuggestionList('alt-photo-list-' + mealType, mealType, suggestions);
+        const foods = suggestions
+            .filter(s => s.food_id)
+            .map(s => allFoods.find(f => f.id === s.food_id) || { id: s.food_id, name: s.name || s.db_name });
+        if (foods.length) addAltItems(mealType, foods, null);
         if (result.message) {
             showToast(result.message, 'success');
         }
@@ -759,35 +901,20 @@ async function recognizeAltPhoto(toddlerId, mealType) {
 }
 
 async function logPlannedMeal(toddlerId, mealType) {
+    const items = collectItemsFromState(mealType, 'plan');
+    if (!items || !items.length) {
+        showToast('No recommended foods found for this meal', 'error');
+        return;
+    }
     const card = document.getElementById('plan-meal-' + mealType);
-    const foodId = card?.dataset.foodId ? parseInt(card.dataset.foodId, 10) : null;
-    const portion = parseInt(document.getElementById('portion-' + mealType)?.value || '100', 10);
-    const reaction = planReactions[mealType] || null;
     const notes = document.getElementById('notes-' + mealType)?.value || '';
-    
-    if (!foodId) {
-        showToast('No recommended food found for this meal', 'error');
-        return;
-    }
-    if (!reaction) {
-        showToast('Please select how ' + {{ toddler.name|tojson }} + ' reacted', 'error');
-        return;
-    }
-    
-    const planName = card.querySelector('.plan-meal-name')?.textContent || '';
-    const payload = {
-        toddler_id: toddlerId,
-        meal_type: mealType,
-        food_id: foodId,
-        portion_eaten_percent: portion,
-        toddler_reaction: reaction,
-        notes: notes || `Logged planned meal: ${planName}`,
-        date: {{ today|tojson }},
-        update_plan: false
-    };
-    
+    const planName = card?.querySelector('.plan-meal-name')?.textContent || '';
+
     try {
-        await apiCall('/meal-logs', 'POST', payload);
+        await submitMealLogs(toddlerId, mealType, items, {
+            notes: notes || `Logged planned meal: ${planName}`,
+            update_plan: false,
+        });
         showToast('Saved feedback for recommended meal!', 'success');
         setTimeout(() => location.reload(), 700);
     } catch (e) {
@@ -796,46 +923,33 @@ async function logPlannedMeal(toddlerId, mealType) {
 }
 
 async function logAlternateMeal(toddlerId, mealType) {
-    const food = altSelectedFoods[mealType];
-    if (!food) {
-        showToast('Please select the food they actually ate', 'error');
-        return;
-    }
-    const portion = parseInt(document.getElementById('alt-portion-' + mealType)?.value || '100', 10);
-    const reaction = altReactions[mealType] || null;
-    if (!reaction) {
-        showToast('Please select a reaction', 'error');
+    const items = collectItemsFromState(mealType, 'alt');
+    if (!items || !items.length) {
+        showToast('Please select at least one food they ate', 'error');
         return;
     }
 
     const nlpNote = document.getElementById('alt-nlp-' + mealType)?.value || '';
     const caption = document.getElementById('alt-photo-caption-' + mealType)?.value || '';
     const extra = [nlpNote, caption].filter(Boolean).join(' · ');
-    
-    const payload = {
-        toddler_id: toddlerId,
-        meal_type: mealType,
-        food_id: food.id,
-        portion_eaten_percent: portion,
-        toddler_reaction: reaction,
-        notes: `Different from plan; weekly plan updated to ${food.name}` + (extra ? ` · ${extra}` : ''),
-        date: {{ today|tojson }},
-        update_plan: true,
-        plan_reason: `Logged different meal: ${food.name}`
-    };
-    if (altPhotos[mealType]) {
-        payload.photo_data = altPhotos[mealType];
-    }
-    
+    const names = items.map(i => i.name).join(', ');
+
     try {
-        const result = await apiCall('/meal-logs', 'POST', payload);
-        
+        const result = await submitMealLogs(toddlerId, mealType, items, {
+            notes: `Different from plan; weekly plan updated to ${names}` + (extra ? ` · ${extra}` : ''),
+            update_plan: true,
+            plan_food_id: items[0].food_id,
+            plan_reason: `Logged different meal: ${names}`,
+            photo_data: altPhotos[mealType] || null,
+        });
+
         const swaps = result.plan_updated?.future_plans_adjusted || 0;
         const photoMsg = result.photo_path ? ' Photo saved.' : '';
+        const count = result.count || items.length;
         showToast(
             swaps > 0
-                ? `Logged ${food.name}. Weekly plan updated (${swaps} future meal(s) adjusted).${photoMsg}`
-                : `Logged ${food.name} and updated today's plan.${photoMsg}`,
+                ? `Logged ${count} item(s). Weekly plan updated (${swaps} future meal(s) adjusted).${photoMsg}`
+                : `Logged ${count} item(s) and updated today's plan.${photoMsg}`,
             'success'
         );
         setTimeout(() => location.reload(), 900);
