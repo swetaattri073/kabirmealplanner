@@ -3,305 +3,506 @@
 {% block title %}Log Meal - {{ toddler.name }} | Toddler Meal Planner{% endblock %}
 
 {% block content %}
-<body data-page="log-meal" data-toddler-id="{{ toddler.id }}">
-    <div class="page-header">
-        <h1>🍽️ Log a Meal</h1>
-        <p>Track what {{ toddler.name }} ate today</p>
+<div class="page-header">
+    <h1>🍽️ Log Today's Meals</h1>
+    <p>Start with what we recommended for {{ toddler.name }}, then tell us how it went</p>
+</div>
+
+{# ==================== TODAY'S RECOMMENDED PLAN ==================== #}
+<div class="card full-width" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <h2>📋 Today's Recommended Plan</h2>
+        <a href="{{ url_for('weekly_plan_page', toddler_id=toddler.id) }}" class="btn btn-sm btn-outline">
+            View full week
+        </a>
     </div>
-    
-    <div class="dashboard-grid">
-        <!-- Quick Voice/Text Input -->
-        <div class="card">
-            <div class="card-header">
-                <h2>🎤 Quick Log (Natural Language)</h2>
-            </div>
-            <div class="card-body">
-                <p style="margin-bottom: 1rem; color: var(--text-secondary);">
-                    Just describe what {{ toddler.name }} ate in your own words!
-                </p>
-                <div class="adult-meal-input">
-                    <textarea id="natural-language-input" class="form-input form-textarea" 
-                              placeholder="E.g., He had some idli and sambar for breakfast, ate most of it and loved the idli but didn't like sambar much"></textarea>
-                </div>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                    <button class="btn btn-primary" onclick="parseAndPreview({{ toddler.id }})" style="flex: 1;">
-                        <i class="fas fa-magic"></i> Parse & Preview
-                    </button>
-                    <button class="btn btn-success" onclick="quickLog({{ toddler.id }})" style="flex: 1;">
-                        <i class="fas fa-bolt"></i> Quick Log
-                    </button>
-                </div>
+    <div class="card-body">
+        {% if today_plan and today_plan.meals %}
+            <p style="color: var(--text-secondary); margin-bottom: 1.25rem;">
+                Confirm how much {{ toddler.name }} ate from each planned meal. 
+                Only switch to a different food if they ate something else.
+            </p>
+            
+            <div class="today-plan-list">
+            {% for meal_type in meal_order %}
+                {% if meal_type in today_plan.meals %}
+                {% set meal = today_plan.meals[meal_type] %}
+                {% set already_logged = meal_type in logged_by_meal %}
+                {% set food = meal.food if meal.food else (meal.main.food if meal.main else none) %}
+                {% set display_name = meal.summary if meal.is_complete_meal and meal.summary else (food.name if food else 'Planned meal') %}
+                {% set food_id = food.id if food else none %}
                 
-                <div id="parse-preview" style="display: none; margin-top: 1rem;"></div>
-            </div>
-        </div>
-        
-        <!-- Adult Meal Adapter -->
-        <div class="card full-width">
-            <div class="card-header">
-                <h2>👨‍👩‍👧 Eating with Family Today?</h2>
-            </div>
-            <div class="card-body">
-                <p style="margin-bottom: 1rem; color: var(--text-secondary);">
-                    Tell us what the adults are eating and we'll create a toddler-friendly version. 
-                    You can then add it directly to today's meal plan!
-                </p>
-                
-                <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;">
-                    <div class="adult-meal-input" style="margin-bottom: 0;">
-                        <textarea id="adult-meal-input" class="form-input form-textarea" 
-                                  placeholder="E.g., Rajma Chawal with salad, Paneer Butter Masala with Naan, Dal Makhani with Jeera Rice..."></textarea>
-                    </div>
-                    <div>
-                        <label class="form-label" style="margin-bottom: 0.5rem;">For which meal?</label>
-                        <select id="adult-meal-type" class="form-select" style="width: 150px;">
-                            <option value="lunch">🍱 Lunch</option>
-                            <option value="dinner">🌙 Dinner</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
-                    <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }}, false)">
-                        <i class="fas fa-magic"></i> Show Adaptations
-                    </button>
-                    <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.id }}, true)">
-                        <i class="fas fa-plus-circle"></i> Adapt & Add to Today's Plan
-                    </button>
-                </div>
-                
-                <div id="adaptation-results" style="display: none; margin-top: 1.5rem;"></div>
-            </div>
-        </div>
-        
-        <!-- Meal Logging Form -->
-        <div class="card" id="log-section">
-            <div class="card-header">
-                <h2>📝 Log Meal Details</h2>
-            </div>
-            <div class="card-body">
-                <div class="form-group">
-                    <label class="form-label">Meal Type</label>
-                    <select id="meal-type" class="form-select">
-                        <option value="">Select meal type...</option>
-                        <option value="breakfast">🌅 Breakfast</option>
-                        <option value="mid_morning_snack">🍎 Mid-Morning Snack</option>
-                        <option value="lunch">🍱 Lunch</option>
-                        <option value="evening_snack">🥛 Evening Snack</option>
-                        <option value="dinner">🌙 Dinner</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Date</label>
-                    <input type="date" id="meal-date" class="form-input" value="{{ today }}">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Search Food</label>
-                    <div class="food-search-container">
-                        <i class="fas fa-search food-search-icon"></i>
-                        <input type="text" id="food-search" class="food-search-input form-input" 
-                               placeholder="Search foods... (e.g., khichdi, idli, banana)">
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Select Food</label>
-                    <div id="food-list" class="food-list">
-                        {% for food in foods_data %}
-                        <div class="food-item" onclick='selectFood({{ food | tojson }})'>
-                            <div class="food-item-info">
-                                <div class="food-item-name">{{ food.name }}</div>
-                                {% if food.name_hindi %}
-                                <div class="food-item-hindi">{{ food.name_hindi }}</div>
-                                {% endif %}
-                            </div>
-                            <span class="food-item-category">{{ food.category }}</span>
+                <div class="plan-meal-card {% if already_logged %}logged{% endif %}" 
+                     id="plan-meal-{{ meal_type }}"
+                     data-meal-type="{{ meal_type }}"
+                     data-plan-id="{{ meal.id }}"
+                     data-food-id="{{ food_id or '' }}">
+                    
+                    <div class="plan-meal-header">
+                        <div>
+                            <span class="plan-meal-type">{{ meal_labels.get(meal_type, meal_type) }}</span>
+                            {% if already_logged %}
+                            <span class="badge badge-success">✓ Logged</span>
+                            {% else %}
+                            <span class="badge badge-primary">Recommended</span>
+                            {% endif %}
                         </div>
+                        {% if meal.backup and meal.backup.food_name %}
+                        <span class="plan-backup">Backup: {{ meal.backup.food_name }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <h3 class="plan-meal-name">{{ display_name }}</h3>
+                    
+                    {% if food and food.toddler_friendly_version %}
+                    <p class="plan-meal-tip">{{ food.toddler_friendly_version }}</p>
+                    {% elif meal.is_complete_meal and meal.main %}
+                    <p class="plan-meal-tip">Complete thali-style meal — main + carb + side</p>
+                    {% endif %}
+                    
+                    {% if meal.reason %}
+                    <p class="plan-meal-reason"><i class="fas fa-lightbulb"></i> {{ meal.reason }}</p>
+                    {% endif %}
+                    
+                    {% if already_logged %}
+                    <div class="logged-summary">
+                        {% for log in logged_by_meal[meal_type] %}
+                        <p>
+                            Ate {{ log.portion_eaten_percent }}%
+                            {% if log.toddler_reaction %} · {{ log.toddler_reaction }}{% endif %}
+                            {% if log.food %} · {{ log.food.name }}{% elif log.custom_food_name %} · {{ log.custom_food_name }}{% endif %}
+                        </p>
                         {% endfor %}
+                        <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                            Log a different meal instead
+                        </button>
                     </div>
-                </div>
-                
-                <div id="selected-food-details" style="display: none; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 1rem;">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Or Enter Custom Food</label>
-                    <input type="text" id="custom-food" class="form-input" 
-                           placeholder="Food not in list? Type here...">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">How much did {{ toddler.name }} eat?</label>
-                    <div class="portion-slider-container">
-                        <input type="range" class="portion-slider" id="portion-slider" 
-                               min="0" max="100" step="25" value="100" 
-                               onchange="updatePortion(this.value)">
-                        <div class="portion-labels">
-                            <span>None (0%)</span>
-                            <span>Quarter (25%)</span>
-                            <span>Half (50%)</span>
-                            <span>Most (75%)</span>
-                            <span>All (100%)</span>
+                    {% else %}
+                    {# ---- Default: feedback on recommended meal ---- #}
+                    <div class="plan-feedback" id="feedback-{{ meal_type }}">
+                        <div class="form-group" style="margin-bottom: 0.75rem;">
+                            <label class="form-label">How much did {{ toddler.name }} eat?</label>
+                            <div class="portion-slider-container">
+                                <input type="range" class="portion-slider" id="portion-{{ meal_type }}"
+                                       min="0" max="100" step="25" value="100"
+                                       oninput="document.getElementById('portion-label-{{ meal_type }}').textContent = this.value + '%'">
+                                <div class="portion-labels">
+                                    <span>None</span><span>¼</span><span>½</span><span>Most</span><span>All</span>
+                                </div>
+                            </div>
+                            <p style="text-align:center;font-weight:700;margin-top:0.35rem;">
+                                Ate: <span id="portion-label-{{ meal_type }}">100%</span>
+                            </p>
+                        </div>
+                        
+                        <div class="form-group" style="margin-bottom: 0.75rem;">
+                            <label class="form-label">How did {{ toddler.name }} react?</label>
+                            <div class="reaction-buttons compact" id="reactions-{{ meal_type }}">
+                                <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="pickPlanReaction('{{ meal_type }}', 'loved')">😍 Loved</button>
+                                <button type="button" class="reaction-btn liked" data-reaction="liked" onclick="pickPlanReaction('{{ meal_type }}', 'liked')">😊 Liked</button>
+                                <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="pickPlanReaction('{{ meal_type }}', 'neutral')">😐 Okay</button>
+                                <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="pickPlanReaction('{{ meal_type }}', 'disliked')">😕 Disliked</button>
+                                <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="pickPlanReaction('{{ meal_type }}', 'refused')">🙅 Refused</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group" style="margin-bottom: 0.75rem;">
+                            <label class="form-label">Anything refused / notes? <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+                            <input type="text" class="form-input" id="notes-{{ meal_type }}"
+                                   placeholder="E.g., ate roti but refused dal / spit out salad">
+                        </div>
+                        
+                        <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
+                            <button type="button" class="btn btn-primary" onclick="logPlannedMeal({{ toddler.id }}, '{{ meal_type }}')">
+                                <i class="fas fa-check"></i> Save feedback
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                                Ate something else instead
+                            </button>
                         </div>
                     </div>
-                    <p style="text-align: center; margin-top: 0.5rem; font-weight: 600;">
-                        Ate: <span id="portion-label">100%</span>
-                    </p>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">How did {{ toddler.name }} react?</label>
-                    <div class="reaction-buttons">
-                        <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="selectReaction('loved')">
-                            😍 Loved it!
-                        </button>
-                        <button type="button" class="reaction-btn liked" data-reaction="liked" onclick="selectReaction('liked')">
-                            😊 Liked
-                        </button>
-                        <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="selectReaction('neutral')">
-                            😐 Okay
-                        </button>
-                        <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="selectReaction('disliked')">
-                            😕 Didn't like
-                        </button>
-                        <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="selectReaction('refused')">
-                            🙅 Refused
+                    {% endif %}
+                    
+                    {# ---- Alternate meal form (hidden by default) ---- #}
+                    <div class="alternate-meal-form" id="alternate-{{ meal_type }}" style="display:none;">
+                        <div class="alternate-header">
+                            <strong>Log a different meal</strong>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="hideAlternateForm('{{ meal_type }}')">Cancel</button>
+                        </div>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                            This will replace today's plan for {{ meal_labels.get(meal_type, meal_type) }} and adjust upcoming repeats.
+                        </p>
+                        <div class="form-group">
+                            <input type="text" class="form-input alt-food-search" id="alt-search-{{ meal_type }}"
+                                   placeholder="Search food…" data-meal="{{ meal_type }}"
+                                   oninput="filterAltFoods('{{ meal_type }}', this.value)">
+                        </div>
+                        <div class="food-list alt-food-list" id="alt-list-{{ meal_type }}" style="max-height:180px;"></div>
+                        <div id="alt-selected-{{ meal_type }}" style="display:none;margin:0.5rem 0;padding:0.75rem;background:var(--bg-tertiary);border-radius:var(--radius-md);"></div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Portion eaten</label>
+                            <input type="range" class="portion-slider" id="alt-portion-{{ meal_type }}" min="0" max="100" step="25" value="100"
+                                   oninput="document.getElementById('alt-portion-label-{{ meal_type }}').textContent = this.value + '%'">
+                            <p style="text-align:center;font-weight:700;">Ate: <span id="alt-portion-label-{{ meal_type }}">100%</span></p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Reaction</label>
+                            <div class="reaction-buttons compact" id="alt-reactions-{{ meal_type }}">
+                                <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="pickAltReaction('{{ meal_type }}', 'loved')">😍</button>
+                                <button type="button" class="reaction-btn liked" data-reaction="liked" onclick="pickAltReaction('{{ meal_type }}', 'liked')">😊</button>
+                                <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="pickAltReaction('{{ meal_type }}', 'neutral')">😐</button>
+                                <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="pickAltReaction('{{ meal_type }}', 'disliked')">😕</button>
+                                <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="pickAltReaction('{{ meal_type }}', 'refused')">🙅</button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="logAlternateMeal({{ toddler.id }}, '{{ meal_type }}')">
+                            <i class="fas fa-sync"></i> Log & update weekly plan
                         </button>
                     </div>
                 </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Notes (optional)</label>
-                    <textarea id="notes" class="form-input form-textarea" 
-                              placeholder="Any observations? E.g., 'Loved it with ghee', 'Too spicy'..."></textarea>
-                </div>
-                
-                <button class="btn btn-primary btn-lg btn-block" onclick="logMeal({{ toddler.id }})">
-                    <i class="fas fa-check"></i> Save Meal
+                {% endif %}
+            {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state" style="padding:2rem;text-align:center;">
+                <p>No plan for today yet.</p>
+                <a href="{{ url_for('weekly_plan_page', toddler_id=toddler.id) }}" class="btn btn-primary">Generate weekly plan</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ==================== SECONDARY: Family + freeform ==================== #}
+<div class="dashboard-grid">
+    <div class="card full-width">
+        <div class="card-header" style="cursor:pointer;" onclick="toggleSection('family-section')">
+            <h2>👨‍👩‍👧 Eating with Family Instead?</h2>
+            <i class="fas fa-chevron-down" id="family-section-icon"></i>
+        </div>
+        <div class="card-body" id="family-section" style="display:none;">
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                Describe the adult meal — we'll adapt it for {{ toddler.name }} and can replace today's plan.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;">
+                <textarea id="adult-meal-input" class="form-input form-textarea"
+                          placeholder="E.g., Lobia with roti, Rajma Chawal…"></textarea>
+                <select id="adult-meal-type" class="form-select" style="width: 150px;">
+                    <option value="lunch">🍱 Lunch</option>
+                    <option value="dinner">🌙 Dinner</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }}, false)">
+                    <i class="fas fa-magic"></i> Show Adaptations
+                </button>
+                <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.id }}, true)">
+                    <i class="fas fa-plus-circle"></i> Adapt & Replace Today's Plan
                 </button>
             </div>
+            <div id="adaptation-results" style="display: none; margin-top: 1.5rem;"></div>
         </div>
     </div>
     
-    <script>
-        // Store foods for search
-        const allFoods = {{ foods_data | tojson }};
-        
-        document.addEventListener('DOMContentLoaded', function() {
-            initFoodSearch(allFoods);
-            
-            // Pre-select meal type from URL if provided
-            const urlParams = new URLSearchParams(window.location.search);
-            const mealType = urlParams.get('meal');
-            if (mealType) {
-                document.getElementById('meal-type').value = mealType;
-            }
+    <div class="card full-width">
+        <div class="card-header" style="cursor:pointer;" onclick="toggleSection('nl-section')">
+            <h2>🎤 Freeform / Extra Log</h2>
+            <i class="fas fa-chevron-down" id="nl-section-icon"></i>
+        </div>
+        <div class="card-body" id="nl-section" style="display:none;">
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                Use this for snacks or meals outside the plan. Prefer the recommended cards above when possible.
+            </p>
+            <textarea id="natural-language-input" class="form-input form-textarea"
+                      placeholder="E.g., He had banana and dahi for evening snack, loved the banana"></textarea>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                <button class="btn btn-secondary" onclick="parseAndPreview({{ toddler.id }})" style="flex:1;">
+                    <i class="fas fa-magic"></i> Parse & Preview
+                </button>
+                <button class="btn btn-primary" onclick="quickLog({{ toddler.id }})" style="flex:1;">
+                    <i class="fas fa-bolt"></i> Quick Log
+                </button>
+            </div>
+            <div id="parse-preview" style="display: none; margin-top: 1rem;"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.today-plan-list { display: flex; flex-direction: column; gap: 1.25rem; }
+.plan-meal-card {
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    background: var(--card-bg, white);
+    transition: border-color 0.2s;
+}
+.plan-meal-card:not(.logged) { border-color: rgba(99,102,241,0.35); }
+.plan-meal-card.logged { opacity: 0.92; background: var(--bg-secondary); }
+.plan-meal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;
+}
+.plan-meal-type { font-weight: 700; font-size: 0.95rem; }
+.plan-backup { font-size: 0.8rem; color: var(--text-muted); }
+.plan-meal-name { margin: 0.25rem 0 0.5rem; font-size: 1.25rem; }
+.plan-meal-tip { color: var(--text-secondary); margin: 0 0 0.5rem; font-size: 0.95rem; }
+.plan-meal-reason { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; }
+.badge {
+    display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700; margin-left: 0.5rem;
+}
+.badge-primary { background: rgba(99,102,241,0.15); color: var(--primary-dark, #4f46e5); }
+.badge-success { background: #dcfce7; color: #15803d; }
+.reaction-buttons.compact { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.reaction-buttons.compact .reaction-btn { padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+.alternate-meal-form {
+    margin-top: 1rem; padding-top: 1rem;
+    border-top: 1px dashed var(--border-color);
+}
+.alternate-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem;
+}
+.logged-summary p { margin: 0.25rem 0 0.75rem; color: var(--text-secondary); }
+</style>
+
+<script>
+const allFoods = {{ foods_data | tojson }};
+const planReactions = {};
+const altReactions = {};
+const altSelectedFoods = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const mealType = urlParams.get('meal');
+    if (mealType) {
+        const el = document.getElementById('plan-meal-' + mealType);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.35)';
+        }
+    }
+});
+
+function toggleSection(id) {
+    const el = document.getElementById(id);
+    const icon = document.getElementById(id + '-icon');
+    if (!el) return;
+    const open = el.style.display !== 'none';
+    el.style.display = open ? 'none' : 'block';
+    if (icon) icon.className = open ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
+}
+
+function pickPlanReaction(mealType, reaction) {
+    planReactions[mealType] = reaction;
+    document.querySelectorAll('#reactions-' + mealType + ' .reaction-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.reaction === reaction);
+    });
+}
+
+function pickAltReaction(mealType, reaction) {
+    altReactions[mealType] = reaction;
+    document.querySelectorAll('#alt-reactions-' + mealType + ' .reaction-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.reaction === reaction);
+    });
+}
+
+function showAlternateForm(mealType) {
+    const feedback = document.getElementById('feedback-' + mealType);
+    const alt = document.getElementById('alternate-' + mealType);
+    if (feedback) feedback.style.display = 'none';
+    if (alt) {
+        alt.style.display = 'block';
+        filterAltFoods(mealType, '');
+    }
+}
+
+function hideAlternateForm(mealType) {
+    const feedback = document.getElementById('feedback-' + mealType);
+    const alt = document.getElementById('alternate-' + mealType);
+    if (alt) alt.style.display = 'none';
+    if (feedback) feedback.style.display = 'block';
+}
+
+function filterAltFoods(mealType, query) {
+    const list = document.getElementById('alt-list-' + mealType);
+    if (!list) return;
+    const q = (query || '').toLowerCase().trim();
+    const matches = allFoods.filter(f =>
+        !q || f.name.toLowerCase().includes(q) || (f.name_hindi || '').toLowerCase().includes(q)
+    ).slice(0, 40);
+    
+    list.innerHTML = matches.map(f => `
+        <div class="food-item" data-food-id="${f.id}" onclick="selectAltFoodById('${mealType}', ${f.id})">
+            <div class="food-item-info">
+                <div class="food-item-name">${escapeHtml(f.name)}</div>
+                ${f.name_hindi ? `<div class="food-item-hindi">${escapeHtml(f.name_hindi)}</div>` : ''}
+            </div>
+            <span class="food-item-category">${escapeHtml(f.category)}</span>
+        </div>
+    `).join('') || '<p style="padding:0.75rem;color:var(--text-muted);">No foods found</p>';
+}
+
+function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+function selectAltFoodById(mealType, foodId) {
+    const food = allFoods.find(f => f.id === foodId);
+    if (!food) return;
+    altSelectedFoods[mealType] = food;
+    const box = document.getElementById('alt-selected-' + mealType);
+    if (box) {
+        box.style.display = 'block';
+        box.innerHTML = `<strong>${escapeHtml(food.name)}</strong>${food.toddler_friendly_version ? `<p style="margin:0.35rem 0 0;font-size:0.9rem;color:var(--text-secondary);">${escapeHtml(food.toddler_friendly_version)}</p>` : ''}`;
+    }
+}
+
+async function logPlannedMeal(toddlerId, mealType) {
+    const card = document.getElementById('plan-meal-' + mealType);
+    const foodId = card?.dataset.foodId ? parseInt(card.dataset.foodId, 10) : null;
+    const portion = parseInt(document.getElementById('portion-' + mealType)?.value || '100', 10);
+    const reaction = planReactions[mealType] || null;
+    const notes = document.getElementById('notes-' + mealType)?.value || '';
+    
+    if (!foodId) {
+        showToast('No recommended food found for this meal', 'error');
+        return;
+    }
+    if (!reaction) {
+        showToast('Please select how ' + {{ toddler.name|tojson }} + ' reacted', 'error');
+        return;
+    }
+    
+    const planName = card.querySelector('.plan-meal-name')?.textContent || '';
+    const payload = {
+        toddler_id: toddlerId,
+        meal_type: mealType,
+        food_id: foodId,
+        portion_eaten_percent: portion,
+        toddler_reaction: reaction,
+        notes: notes || `Logged planned meal: ${planName}`,
+        date: {{ today|tojson }},
+        update_plan: false
+    };
+    
+    try {
+        await apiCall('/meal-logs', 'POST', payload);
+        showToast('Saved feedback for recommended meal!', 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function logAlternateMeal(toddlerId, mealType) {
+    const food = altSelectedFoods[mealType];
+    if (!food) {
+        showToast('Please select the food they actually ate', 'error');
+        return;
+    }
+    const portion = parseInt(document.getElementById('alt-portion-' + mealType)?.value || '100', 10);
+    const reaction = altReactions[mealType] || null;
+    if (!reaction) {
+        showToast('Please select a reaction', 'error');
+        return;
+    }
+    
+    try {
+        const result = await apiCall('/meal-logs', 'POST', {
+            toddler_id: toddlerId,
+            meal_type: mealType,
+            food_id: food.id,
+            portion_eaten_percent: portion,
+            toddler_reaction: reaction,
+            notes: `Different from plan; weekly plan updated to ${food.name}`,
+            date: {{ today|tojson }},
+            update_plan: true,
+            plan_reason: `Logged different meal: ${food.name}`
         });
         
-        // Natural language parsing
-        async function parseAndPreview(toddlerId) {
-            const text = document.getElementById('natural-language-input').value;
-            if (!text.trim()) {
-                showToast('Please enter what the toddler ate', 'error');
-                return;
-            }
-            
-            try {
-                const result = await apiCall('/parse-meal', 'POST', { text });
-                renderParsePreview(result);
-            } catch (error) {
-                console.error('Parse error:', error);
-            }
+        const swaps = result.plan_updated?.future_plans_adjusted || 0;
+        showToast(
+            swaps > 0
+                ? `Logged ${food.name}. Weekly plan updated (${swaps} future meal(s) adjusted).`
+                : `Logged ${food.name} and updated today's plan.`,
+            'success'
+        );
+        setTimeout(() => location.reload(), 900);
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function parseAndPreview(toddlerId) {
+    const text = document.getElementById('natural-language-input').value;
+    if (!text.trim()) {
+        showToast('Please enter what the toddler ate', 'error');
+        return;
+    }
+    try {
+        const result = await apiCall('/parse-meal', 'POST', { text });
+        renderParsePreview(result);
+    } catch (error) {
+        console.error('Parse error:', error);
+    }
+}
+
+function renderParsePreview(result) {
+    const container = document.getElementById('parse-preview');
+    if (!container) return;
+    let html = `<div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md);"><h4 style="margin-bottom: 0.75rem;">📝 Parsed Result:</h4>`;
+    if (result.foods?.length) {
+        html += `<p><strong>Foods detected:</strong></p><ul style="margin: 0.5rem 0; padding-left: 1.5rem;">`;
+        result.foods.forEach(food => {
+            html += `<li>${food.name} ${food.db_name ? '✓' : ''} <small>(${Math.round(food.confidence * 100)}%)</small></li>`;
+        });
+        html += `</ul>`;
+    } else {
+        html += `<p style="color: var(--warning);">No foods detected.</p>`;
+    }
+    if (result.meal_type) html += `<p><strong>Meal type:</strong> ${result.meal_type.replace('_', ' ')}</p>`;
+    if (result.portion) html += `<p><strong>Portion:</strong> ${result.portion.value}${result.portion.type === 'percentage' ? '%' : ''}</p>`;
+    if (result.overall_reaction) html += `<p><strong>Reaction:</strong> ${result.overall_reaction}</p>`;
+    if (Object.keys(result.food_reactions || {}).length) {
+        html += `<p><strong>Per-food:</strong></p><ul style="padding-left:1.5rem;">`;
+        for (const [food, reaction] of Object.entries(result.food_reactions)) {
+            html += `<li>${food}: ${reaction}</li>`;
         }
-        
-        function renderParsePreview(result) {
-            const container = document.getElementById('parse-preview');
-            if (!container) return;
-            
-            let html = `
-                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md);">
-                    <h4 style="margin-bottom: 0.75rem;">📝 Parsed Result:</h4>
-            `;
-            
-            if (result.foods && result.foods.length > 0) {
-                html += `<p><strong>Foods detected:</strong></p><ul style="margin: 0.5rem 0; padding-left: 1.5rem;">`;
-                result.foods.forEach(food => {
-                    const confidence = Math.round(food.confidence * 100);
-                    html += `<li>${food.name} ${food.db_name ? '✓' : '(custom)'} <small>(${confidence}% confident)</small></li>`;
-                });
-                html += `</ul>`;
-            } else {
-                html += `<p style="color: var(--warning);">No foods detected. Try being more specific.</p>`;
-            }
-            
-            if (result.meal_type) {
-                html += `<p><strong>Meal type:</strong> ${result.meal_type.replace('_', ' ')}</p>`;
-            }
-            
-            if (result.portion) {
-                html += `<p><strong>Portion:</strong> ${result.portion.value}${result.portion.type === 'percentage' ? '%' : ''}</p>`;
-            }
-            
-            if (result.overall_reaction) {
-                const reactionEmoji = {
-                    'loved': '😍', 'liked': '😊', 'neutral': '😐', 'disliked': '😕', 'refused': '🙅'
-                };
-                html += `<p><strong>Reaction:</strong> ${reactionEmoji[result.overall_reaction] || ''} ${result.overall_reaction}</p>`;
-            }
-            
-            if (Object.keys(result.food_reactions || {}).length > 0) {
-                html += `<p><strong>Per-food reactions:</strong></p><ul style="margin: 0.5rem 0; padding-left: 1.5rem;">`;
-                for (const [food, reaction] of Object.entries(result.food_reactions)) {
-                    html += `<li>${food}: ${reaction}</li>`;
-                }
-                html += `</ul>`;
-            }
-            
-            html += `</div>`;
-            container.innerHTML = html;
-            container.style.display = 'block';
+        html += `</ul>`;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+    container.style.display = 'block';
+}
+
+async function quickLog(toddlerId) {
+    const text = document.getElementById('natural-language-input').value;
+    if (!text.trim()) {
+        showToast('Please enter what the toddler ate', 'error');
+        return;
+    }
+    try {
+        const result = await apiCall('/smart-log', 'POST', { toddler_id: toddlerId, text });
+        showToast(result.message, 'success');
+        const preview = document.getElementById('parse-preview');
+        if (preview) {
+            preview.innerHTML = `
+                <div style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--success);">
+                    <h4 style="color: var(--success);">✅ Logged!</h4>
+                    <ul>${(result.created_logs || []).map(log =>
+                        `<li>${log.food?.name || log.custom_food_name} — ${log.portion_eaten_percent}% ${log.toddler_reaction || ''}</li>`
+                    ).join('')}</ul>
+                </div>`;
+            preview.style.display = 'block';
         }
-        
-        async function quickLog(toddlerId) {
-            const text = document.getElementById('natural-language-input').value;
-            if (!text.trim()) {
-                showToast('Please enter what the toddler ate', 'error');
-                return;
-            }
-            
-            try {
-                const result = await apiCall('/smart-log', 'POST', { 
-                    toddler_id: toddlerId, 
-                    text: text 
-                });
-                
-                showToast(result.message, 'success');
-                
-                // Show what was logged
-                const preview = document.getElementById('parse-preview');
-                if (preview) {
-                    preview.innerHTML = `
-                        <div style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--success);">
-                            <h4 style="color: var(--success); margin-bottom: 0.5rem;">✅ Logged Successfully!</h4>
-                            <p>Created ${result.created_logs.length} meal log(s):</p>
-                            <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
-                                ${result.created_logs.map(log => `
-                                    <li>${log.food?.name || log.custom_food_name} - ${log.portion_eaten_percent}% eaten ${log.toddler_reaction ? `(${log.toddler_reaction})` : ''}</li>
-                                `).join('')}
-                            </ul>
-                        </div>
-                    `;
-                    preview.style.display = 'block';
-                }
-                
-                // Clear input
-                document.getElementById('natural-language-input').value = '';
-                
-            } catch (error) {
-                console.error('Quick log error:', error);
-            }
-        }
-    </script>
+        document.getElementById('natural-language-input').value = '';
+    } catch (error) {
+        console.error('Quick log error:', error);
+    }
+}
+</script>
 {% endblock %}
