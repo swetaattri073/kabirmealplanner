@@ -690,58 +690,82 @@ def adapt_adult_meal_for_toddler(adult_meal_description, db_session, toddler):
         hindi_name_lower = (food.name_hindi or '').lower()
         
         # Significant words from food name (ignore 'with', 'and', etc.)
+        # Strip punctuation so "Rajma (Kidney Beans)" → rajma, kidney, beans
+        cleaned_name = re.sub(r'[()\[\]{},.]', ' ', food_name_lower)
+        cleaned_hindi = re.sub(r'[()\[\]{},.]', ' ', hindi_name_lower)
         name_tokens = [
-            t for t in re.split(r'[\s/+\-]+', food_name_lower)
+            t for t in re.split(r'[\s/+\-]+', cleaned_name)
             if len(t) >= 3 and t not in NLP_STOP_WORDS
         ]
         hindi_tokens = [
-            t for t in re.split(r'[\s/+\-]+', hindi_name_lower)
+            t for t in re.split(r'[\s/+\-]+', cleaned_hindi)
             if len(t) >= 3 and t not in NLP_STOP_WORDS
         ]
+        all_tokens = set(name_tokens + hindi_tokens)
         
-        score = 0
+        # Map each keyword to a canonical concept once (avoid alias multi-counting)
+        matched_concepts = set()
         matched_keywords = []
         
         for kw in keywords:
-            # Exact food name / hindi name contains keyword as whole token
-            if kw in name_tokens or kw in hindi_tokens:
-                score += 10
+            # Direct token / name match
+            if kw in all_tokens or cleaned_name.startswith(kw) or cleaned_hindi.startswith(kw):
+                matched_concepts.add(kw)
                 matched_keywords.append(kw)
-            elif kw == food_name_lower or kw == hindi_name_lower:
-                score += 15
-                matched_keywords.append(kw)
-            elif len(kw) >= 4 and (kw in food_name_lower or kw in hindi_name_lower):
-                # Contained match only for longer keywords (e.g. lobia in Lobia Curry)
-                # But require word-ish boundary to avoid 'with' style issues
-                if re.search(rf'\b{re.escape(kw)}\b', food_name_lower) or \
-                   re.search(rf'\b{re.escape(kw)}\b', hindi_name_lower):
-                    score += 8
-                    matched_keywords.append(kw)
-            
-            # Alias expansion: if food name matches alias of keyword
-            for food_key, aliases in FOOD_ALIASES.items():
-                all_names = [food_key] + aliases
-                if kw in all_names:
-                    for an in all_names:
-                        if an in name_tokens or an in hindi_tokens or an == food_name_lower:
-                            score += 12
-                            matched_keywords.append(an)
-        
-        # Prefer lunch/dinner style foods when adapting adult meals
-        # (meals like "lobia with roti" are typically lunch/dinner)
-        if food.category in ['dal', 'vegetable', 'protein', 'combo']:
-            score += 1
-        if food.category == 'grain' and any(g in food_name_lower for g in ['roti', 'rice', 'chawal']):
-            score += 2
-        
-        # Penalize breakfast combo names that coincidentally shared stop words before
-        if 'breakfast' in (getattr(food, 'meal_type', None) or ''):
-            # only keep if they actually matched a real keyword
-            if not matched_keywords:
                 continue
+            if len(kw) >= 4 and (
+                re.search(rf'\b{re.escape(kw)}\b', cleaned_name) or
+                re.search(rf'\b{re.escape(kw)}\b', cleaned_hindi)
+            ):
+                matched_concepts.add(kw)
+                matched_keywords.append(kw)
+                continue
+            
+            # Alias → canonical concept (count once per food_key)
+            for food_key, aliases in FOOD_ALIASES.items():
+                all_names = [food_key] + list(aliases)
+                if kw not in all_names:
+                    continue
+                if any(an in all_tokens for an in all_names) or \
+                   any(cleaned_name.startswith(an) for an in all_names):
+                    matched_concepts.add(food_key)
+                    matched_keywords.append(food_key)
+                    break
         
-        if score >= 8:  # Must have a real keyword match
-            scored.append((score, food, matched_keywords))
+        if not matched_concepts:
+            continue
+        
+        # Base score: unique concepts matched (not every alias variant)
+        score = len(matched_concepts) * 12
+        
+        # Strong boost when the food's primary name is what the parent mentioned
+        # e.g. keyword "rajma" → "Rajma (Kidney Beans)" beats generic rice sides
+        primary_token = name_tokens[0] if name_tokens else ''
+        if primary_token and (primary_token in keywords or primary_token in matched_concepts):
+            score += 30
+        
+        # Dish specificity: multi-word named dishes that match (Lobia with Roti)
+        if len(name_tokens) >= 2 and sum(1 for t in name_tokens if t in keywords or t in matched_concepts) >= 2:
+            score += 15
+        
+        # Prefer protein/dal/veg mains over staple carbs when both present
+        if food.category in ['dal', 'vegetable', 'protein']:
+            score += 8
+        elif food.category == 'combo':
+            score += 6
+        elif food.category == 'grain' and any(g in primary_token for g in ['rice', 'chawal']):
+            score += 2  # rice is a side unless it's the only match
+        elif food.category == 'grain':
+            score += 4  # roti etc.
+        
+        # Penalize breakfast-only combos unless keywords clearly match them
+        meal_type_attr = getattr(food, 'meal_type', None) or ''
+        if meal_type_attr == 'breakfast' and not any(
+            t in matched_concepts or t in keywords for t in name_tokens[:2]
+        ):
+            continue
+        
+        scored.append((score, food, matched_keywords))
     
     # Sort by score descending, take top matches
     scored.sort(key=lambda x: x[0], reverse=True)

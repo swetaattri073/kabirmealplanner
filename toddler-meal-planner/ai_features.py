@@ -120,7 +120,7 @@ QUANTITY_PATTERNS = [
     (r'full|complete|pura|saara', '100%'),
     (r'most|zyada tar', '75%'),
     (r'hardly|barely|mushkil se', '25%'),
-    (r'nothing|kuch nahi|refused', '0%'),
+    (r'nothing|kuch nahi|ate nothing', '0%'),
 ]
 
 # Reaction patterns
@@ -283,28 +283,39 @@ def extract_eaten_vs_served(text):
     """
     Detect foods that were only served vs actually eaten.
     E.g. "gave him X, Y, Z. He ate only Y and Z" → eaten={Y,Z}, refused={X}
+    Also: "refused the dal but finished the rice" → refused={dal}, eaten={rice}
     """
     normalized = normalize_text(text)
     eaten = set()
     refused = set()
     
-    # Patterns for "ate only X"
+    # "ate only X" OR "only ate X"
     only_match = re.search(
-        r'(?:ate|eaten|finished|had)\s+only\s+(.+?)(?:\.|$)',
+        r'(?:(?:ate|eaten|finished|had)\s+only|only\s+(?:ate|eaten|had))\s+(.+?)(?:\.|,|spit|refused|didn|$)',
         normalized
     )
     if only_match:
         only_foods = find_foods_in_text(only_match.group(1))
         eaten = {f['name'].lower() for f in only_foods}
     
-    # Patterns for refused / didn't eat
+    # Patterns for refused / didn't eat (specific foods)
+    # Note: normalize_text turns "didn't" → "didn t"
     refuse_match = re.search(
-        r"(?:didn'?t eat|did not eat|refused|skipped)\s+(.+?)(?:\.|$)",
+        r"(?:didn\s*t\s+eat|did\s+not\s+eat|refused(?:\s+the)?|skipped|spit(?:\s+out)?(?:\s+the)?)\s+(.+?)(?:\.|,|but|$)",
         normalized
     )
     if refuse_match:
         refused_foods = find_foods_in_text(refuse_match.group(1))
         refused = {f['name'].lower() for f in refused_foods}
+    
+    # Contrast: "but finished/ate the rice" after a refuse clause
+    finish_match = re.search(
+        r'but\s+(?:finished|ate(?:\s+all)?|loved)\s+(?:the\s+)?(.+?)(?:\.|$)',
+        normalized
+    )
+    if finish_match:
+        finished_foods = find_foods_in_text(finish_match.group(1))
+        eaten |= {f['name'].lower() for f in finished_foods}
     
     return eaten, refused
 
@@ -368,18 +379,18 @@ def parse_meal_input(text, food_database=None):
     foods = find_foods_in_text(text, food_database)
     eaten, refused = extract_eaten_vs_served(text)
     
-    # Annotate foods with ate/refused based on "ate only" clauses
+    # Annotate foods with ate/refused based on "ate only" / "refused X" clauses
     food_reactions = {}
     for food in foods:
         name_lower = food['name'].lower()
-        if eaten:
-            if name_lower in eaten:
-                food['eaten'] = True
-                food_reactions[food['name']] = 'liked'
-            else:
-                food['eaten'] = False
-                food_reactions[food['name']] = 'refused'
-        elif name_lower in refused:
+        if eaten and name_lower in eaten:
+            food['eaten'] = True
+            food_reactions[food['name']] = 'liked'
+        elif refused and name_lower in refused:
+            food['eaten'] = False
+            food_reactions[food['name']] = 'refused'
+        elif eaten and name_lower not in eaten:
+            # "ate only X" implies other mentioned foods were refused
             food['eaten'] = False
             food_reactions[food['name']] = 'refused'
     
