@@ -63,11 +63,17 @@ def inject_globals():
 
 @app.route('/')
 def index():
-    """Home page - show dashboard or onboarding"""
+    """Landing page - marketing page for new visitors"""
+    return render_template('landing.html')
+
+
+@app.route('/home')
+def home():
+    """Home page - show dashboard if toddlers exist"""
     toddlers = Toddler.query.all()
     if not toddlers:
         return redirect(url_for('onboarding'))
-    return render_template('dashboard.html', toddlers=toddlers)
+    return redirect(url_for('dashboard', toddler_id=toddlers[0].id))
 
 
 @app.route('/onboarding')

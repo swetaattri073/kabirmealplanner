@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="End mealtime battles! AI-powered meal planner for Indian toddlers. Personalized, nutritious meals your picky eater will love.">
+    <title>Toddler Meal Planner - End Mealtime Battles Forever</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #f97316;
+            --accent: #ec4899;
+            --success: #22c55e;
+            --text-dark: #1e1b4b;
+            --text-light: #6b7280;
+            --bg-light: #faf5ff;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: var(--bg-light);
+            color: var(--text-dark);
+            overflow-x: hidden;
+        }
+        
+        /* ===== HERO SECTION ===== */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 30%, #ec4899 70%, #f97316 100%);
+            background-size: 400% 400%;
+            animation: gradientFlow 15s ease infinite;
+        }
+        
+        @keyframes gradientFlow {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .hero-bg::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+        
+        /* Nav */
+        .nav {
+            position: relative;
+            z-index: 10;
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: white;
+            font-weight: 800;
+            font-size: 1.5rem;
+        }
+        
+        .nav-logo span {
+            font-size: 2rem;
+        }
+        
+        .nav-cta {
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: var(--primary);
+            border-radius: 50px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .nav-cta:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        /* Hero Content */
+        .hero-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            position: relative;
+            z-index: 5;
+        }
+        
+        .hero-inner {
+            max-width: 1200px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+        
+        @media (max-width: 900px) {
+            .hero-inner {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+        }
+        
+        .hero-text {
+            color: white;
+        }
+        
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        .hero-badge i {
+            color: #fbbf24;
+        }
+        
+        .hero-title {
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        
+        .hero-title .highlight {
+            background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        @media (max-width: 600px) {
+            .hero-title {
+                font-size: 2.25rem;
+            }
+        }
+        
+        .hero-subtitle {
+            font-size: 1.25rem;
+            opacity: 0.95;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        .hero-cta-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        @media (max-width: 900px) {
+            .hero-cta-group {
+                justify-content: center;
+            }
+        }
+        
+        .hero-cta {
+            padding: 1.25rem 2.5rem;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.3s;
+        }
+        
+        .hero-cta-primary {
+            background: white;
+            color: var(--primary);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        .hero-cta-primary:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+        
+        .hero-cta-secondary {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .hero-cta-secondary:hover {
+            background: rgba(255,255,255,0.25);
+        }
+        
+        /* Animated Scene */
+        .hero-scene {
+            position: relative;
+            height: 450px;
+        }
+        
+        @media (max-width: 900px) {
+            .hero-scene {
+                height: 350px;
+                order: -1;
+            }
+        }
+        
+        .scene-plate {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 280px;
+            height: 280px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.3), inset 0 -10px 30px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: plateFloat 4s ease-in-out infinite;
+        }
+        
+        @keyframes plateFloat {
+            0%, 100% { transform: translate(-50%, -50%) rotate(-2deg); }
+            50% { transform: translate(-50%, calc(-50% - 15px)) rotate(2deg); }
+        }
+        
+        .scene-plate::before {
+            content: '';
+            position: absolute;
+            inset: 15px;
+            border: 4px dashed #e9d5ff;
+            border-radius: 50%;
+        }
+        
+        .plate-food {
+            font-size: 5rem;
+            animation: foodBounce 2s ease-in-out infinite;
+        }
+        
+        @keyframes foodBounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        /* Flying foods */
+        .flying-food {
+            position: absolute;
+            font-size: 3rem;
+            animation: flyAround 8s linear infinite;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.2));
+        }
+        
+        .flying-food:nth-child(1) { animation-delay: 0s; }
+        .flying-food:nth-child(2) { animation-delay: -2s; }
+        .flying-food:nth-child(3) { animation-delay: -4s; }
+        .flying-food:nth-child(4) { animation-delay: -6s; }
+        
+        @keyframes flyAround {
+            0% { transform: rotate(0deg) translateX(180px) rotate(0deg); opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { transform: rotate(360deg) translateX(180px) rotate(-360deg); opacity: 1; }
+        }
+        
+        /* Toddler character */
+        .toddler-character {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            text-align: center;
+            animation: toddlerWave 3s ease-in-out infinite;
+        }
+        
+        @keyframes toddlerWave {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
+        
+        .toddler-emoji {
+            font-size: 5rem;
+            display: block;
+        }
+        
+        .toddler-speech {
+            position: absolute;
+            top: -60px;
+            right: 60px;
+            background: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: var(--text-dark);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            white-space: nowrap;
+            animation: speechPop 4s ease-in-out infinite;
+        }
+        
+        .toddler-speech::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            right: 20px;
+            border: 8px solid transparent;
+            border-top-color: white;
+        }
+        
+        @keyframes speechPop {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            10% { transform: scale(1.1); }
+            50% { opacity: 0.8; }
+        }
+        
+        /* Spoon animation */
+        .flying-spoon {
+            position: absolute;
+            font-size: 2.5rem;
+            top: 30%;
+            left: 10%;
+            animation: spoonFly 3s ease-in-out infinite;
+        }
+        
+        @keyframes spoonFly {
+            0%, 100% { transform: translate(0, 0) rotate(-30deg); }
+            50% { transform: translate(100px, 50px) rotate(30deg); }
+        }
+        
+        /* ===== PAIN POINTS SECTION ===== */
+        .pain-points {
+            padding: 6rem 2rem;
+            background: white;
+            position: relative;
+        }
+        
+        .section-container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+        
+        .section-tag {
+            display: inline-block;
+            padding: 0.5rem 1.25rem;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%);
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 900;
+            margin-bottom: 1rem;
+            color: var(--text-dark);
+        }
+        
+        .section-subtitle {
+            font-size: 1.15rem;
+            color: var(--text-light);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .pain-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        
+        .pain-card {
+            padding: 2rem;
+            background: var(--bg-light);
+            border-radius: 24px;
+            border: 2px solid transparent;
+            transition: all 0.4s;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .pain-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transform: scaleX(0);
+            transition: transform 0.4s;
+        }
+        
+        .pain-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.15);
+            border-color: rgba(99, 102, 241, 0.2);
+        }
+        
+        .pain-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .pain-icon {
+            width: 70px;
+            height: 70px;
+            background: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+        }
+        
+        .pain-card h3 {
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin-bottom: 0.75rem;
+            color: var(--text-dark);
+        }
+        
+        .pain-card p {
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+        
+        .pain-card .solution {
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 1px dashed rgba(99, 102, 241, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--success);
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+        
+        /* ===== FEATURES SECTION ===== */
+        .features {
+            padding: 6rem 2rem;
+            background: linear-gradient(180deg, var(--bg-light) 0%, white 100%);
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .feature-card {
+            padding: 2rem;
+            background: white;
+            border-radius: 20px;
+            border: 1px solid rgba(99, 102, 241, 0.1);
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(99, 102, 241, 0.1);
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+        
+        .feature-card h3 {
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+        
+        .feature-card p {
+            font-size: 0.95rem;
+            color: var(--text-light);
+        }
+        
+        /* ===== TESTIMONIAL/SOCIAL PROOF ===== */
+        .social-proof {
+            padding: 4rem 2rem;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            text-align: center;
+            color: white;
+        }
+        
+        .proof-stats {
+            display: flex;
+            justify-content: center;
+            gap: 4rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+        
+        .proof-stat h3 {
+            font-size: 3rem;
+            font-weight: 900;
+        }
+        
+        .proof-stat p {
+            opacity: 0.9;
+            font-weight: 600;
+        }
+        
+        .proof-quote {
+            max-width: 700px;
+            margin: 0 auto;
+            font-size: 1.35rem;
+            font-style: italic;
+            opacity: 0.95;
+            line-height: 1.7;
+        }
+        
+        .proof-author {
+            margin-top: 1.5rem;
+            font-weight: 700;
+        }
+        
+        /* ===== FINAL CTA ===== */
+        .final-cta {
+            padding: 6rem 2rem;
+            text-align: center;
+            background: white;
+        }
+        
+        .cta-box {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 4rem;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(236, 72, 153, 0.05) 100%);
+            border-radius: 32px;
+            border: 2px solid rgba(99, 102, 241, 0.1);
+        }
+        
+        .cta-emoji {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            display: block;
+            animation: bounce 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        .cta-box h2 {
+            font-size: 2.25rem;
+            font-weight: 900;
+            margin-bottom: 1rem;
+        }
+        
+        .cta-box p {
+            font-size: 1.15rem;
+            color: var(--text-light);
+            margin-bottom: 2rem;
+        }
+        
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1.25rem 3rem;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            color: white;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.2rem;
+            text-decoration: none;
+            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.4);
+            transition: all 0.3s;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 50px rgba(99, 102, 241, 0.5);
+        }
+        
+        .cta-note {
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+        
+        .cta-note i {
+            color: var(--success);
+        }
+        
+        /* ===== FOOTER ===== */
+        footer {
+            padding: 2rem;
+            text-align: center;
+            background: var(--bg-light);
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+        
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        /* ===== SCROLL ANIMATIONS ===== */
+        .animate-on-scroll {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.6s ease-out;
+        }
+        
+        .animate-on-scroll.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <!-- HERO SECTION -->
+    <section class="hero">
+        <div class="hero-bg"></div>
+        
+        <nav class="nav">
+            <div class="nav-logo">
+                <span>🥗</span>
+                <span>Meal Planner</span>
+            </div>
+            <a href="{{ url_for('onboarding') }}" class="nav-cta">Get Started Free</a>
+        </nav>
+        
+        <div class="hero-content">
+            <div class="hero-inner">
+                <div class="hero-text">
+                    <div class="hero-badge">
+                        <i class="fas fa-star"></i>
+                        Made for Indian Families
+                    </div>
+                    <h1 class="hero-title">
+                        Mealtime Battles<br>
+                        <span class="highlight">End Here.</span>
+                    </h1>
+                    <p class="hero-subtitle">
+                        Tired of "I don't want this!" at every meal? Our AI creates personalized, 
+                        nutritious Indian meal plans your toddler will actually eat. No more daily 
+                        menu struggles. No more nutrition worries.
+                    </p>
+                    <div class="hero-cta-group">
+                        <a href="{{ url_for('onboarding') }}" class="hero-cta hero-cta-primary">
+                            <i class="fas fa-rocket"></i>
+                            Start Free Now
+                        </a>
+                        <a href="#pain-points" class="hero-cta hero-cta-secondary">
+                            <i class="fas fa-play-circle"></i>
+                            See How It Works
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="hero-scene">
+                    <div class="scene-plate">
+                        <span class="plate-food">🍛</span>
+                    </div>
+                    
+                    <div class="flying-food" style="top: 50%; left: 50%;">🥕</div>
+                    <div class="flying-food" style="top: 50%; left: 50%;">🍎</div>
+                    <div class="flying-food" style="top: 50%; left: 50%;">🥦</div>
+                    <div class="flying-food" style="top: 50%; left: 50%;">🍌</div>
+                    
+                    <div class="flying-spoon">🥄</div>
+                    
+                    <div class="toddler-character">
+                        <div class="toddler-speech">Yummy! 😋</div>
+                        <span class="toddler-emoji">👶</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- PAIN POINTS SECTION -->
+    <section class="pain-points" id="pain-points">
+        <div class="section-container">
+            <div class="section-header animate-on-scroll">
+                <span class="section-tag">We Get It</span>
+                <h2 class="section-title">Sound Familiar?</h2>
+                <p class="section-subtitle">
+                    Every parent faces these challenges. You're not alone — and there's a better way.
+                </p>
+            </div>
+            
+            <div class="pain-grid">
+                <div class="pain-card animate-on-scroll">
+                    <div class="pain-icon">😫</div>
+                    <h3>"Not This Again!"</h3>
+                    <p>
+                        Your toddler pushes away the plate before even trying. You've cooked 3 different things 
+                        already and it's only breakfast. The frustration is real.
+                    </p>
+                    <div class="solution">
+                        <i class="fas fa-check-circle"></i>
+                        Learns preferences & suggests accepted foods
+                    </div>
+                </div>
+                
+                <div class="pain-card animate-on-scroll">
+                    <div class="pain-icon">🤯</div>
+                    <h3>"What Do I Make Today?"</h3>
+                    <p>
+                        Every single day, the same question haunts you. Coming up with new, nutritious meals 
+                        that your little one will eat feels impossible.
+                    </p>
+                    <div class="solution">
+                        <i class="fas fa-check-circle"></i>
+                        Auto-generates weekly meal plans
+                    </div>
+                </div>
+                
+                <div class="pain-card animate-on-scroll">
+                    <div class="pain-icon">😰</div>
+                    <h3>"Is My Child Getting Enough?"</h3>
+                    <p>
+                        Iron, calcium, protein, vitamins... The worry about nutritional gaps keeps you up at night. 
+                        Is picky eating affecting their growth?
+                    </p>
+                    <div class="solution">
+                        <i class="fas fa-check-circle"></i>
+                        Tracks nutrition & alerts deficiencies
+                    </div>
+                </div>
+                
+                <div class="pain-card animate-on-scroll">
+                    <div class="pain-icon">🙅</div>
+                    <h3>"They Only Eat 3 Things!"</h3>
+                    <p>
+                        Dal-chawal. Paratha. Maggi. That's the entire menu your toddler approves. 
+                        Introducing new foods feels like a war you keep losing.
+                    </p>
+                    <div class="solution">
+                        <i class="fas fa-check-circle"></i>
+                        Gentle re-exposure strategy that works
+                    </div>
+                </div>
+                
+                <div class="pain-card animate-on-scroll">
+                    <div class="pain-icon">👨‍👩‍👧</div>
+                    <h3>"We Eat Different Meals"</h3>
+                    <p>
+                        Adults eat one thing, toddler eats another. Cooking multiple meals daily is exhausting. 
+                        You wish everyone could eat together.
+                    </p>
+                    <div class="solution">
+                        <i class="fas fa-check-circle"></i>
+                        Adapts adult meals for toddlers
+                    </div>
+                </div>
+                
+                <div class="pain-card animate-on-scroll">
+                    <div class="pain-icon">📉</div>
+                    <h3>"Doctor Says Underweight"</h3>
+                    <p>
+                        The growth chart is a constant source of stress. Your child needs more calories 
+                        but refuses to eat. What do you do?
+                    </p>
+                    <div class="solution">
+                        <i class="fas fa-check-circle"></i>
+                        Health-aware calorie-optimized meals
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- FEATURES SECTION -->
+    <section class="features">
+        <div class="section-container">
+            <div class="section-header animate-on-scroll">
+                <span class="section-tag">How It Works</span>
+                <h2 class="section-title">Your Personal Meal Assistant</h2>
+                <p class="section-subtitle">
+                    Powered by nutrition science, designed for Indian families
+                </p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card animate-on-scroll">
+                    <span class="feature-icon">📝</span>
+                    <h3>Log Meals Easily</h3>
+                    <p>Track what your toddler eats with reactions (loved, liked, refused)</p>
+                </div>
+                
+                <div class="feature-card animate-on-scroll">
+                    <span class="feature-icon">🧠</span>
+                    <h3>AI Learns Preferences</h3>
+                    <p>Gets smarter about what your child likes over time</p>
+                </div>
+                
+                <div class="feature-card animate-on-scroll">
+                    <span class="feature-icon">📅</span>
+                    <h3>Weekly Plans Generated</h3>
+                    <p>Personalized 7-day meal plans based on preferences & gaps</p>
+                </div>
+                
+                <div class="feature-card animate-on-scroll">
+                    <span class="feature-icon">⚠️</span>
+                    <h3>Nutrition Alerts</h3>
+                    <p>Get notified if iron, calcium or other nutrients are low</p>
+                </div>
+                
+                <div class="feature-card animate-on-scroll">
+                    <span class="feature-icon">🍛</span>
+                    <h3>100+ Indian Foods</h3>
+                    <p>Khichdi, idli, paratha, roti sabzi — all included</p>
+                </div>
+                
+                <div class="feature-card animate-on-scroll">
+                    <span class="feature-icon">📱</span>
+                    <h3>Works Offline</h3>
+                    <p>Install as app, use without internet after first load</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- SOCIAL PROOF -->
+    <section class="social-proof">
+        <div class="section-container">
+            <div class="proof-stats">
+                <div class="proof-stat">
+                    <h3>100+</h3>
+                    <p>Indian Recipes</p>
+                </div>
+                <div class="proof-stat">
+                    <h3>6-60</h3>
+                    <p>Months Age Range</p>
+                </div>
+                <div class="proof-stat">
+                    <h3>100%</h3>
+                    <p>Private & Free</p>
+                </div>
+            </div>
+            
+            <blockquote class="proof-quote">
+                "Finally, an app that understands Indian food and my picky toddler! 
+                The meal suggestions are actually things my child will eat."
+            </blockquote>
+            <p class="proof-author">— Parent of an 18-month-old</p>
+        </div>
+    </section>
+    
+    <!-- FINAL CTA -->
+    <section class="final-cta">
+        <div class="cta-box animate-on-scroll">
+            <span class="cta-emoji">🎉</span>
+            <h2>Ready to End Mealtime Stress?</h2>
+            <p>
+                Join parents who've transformed their toddler's eating habits. 
+                It takes just 2 minutes to get started.
+            </p>
+            <a href="{{ url_for('onboarding') }}" class="cta-button">
+                <i class="fas fa-rocket"></i>
+                Create Free Meal Plan
+            </a>
+            <p class="cta-note">
+                <i class="fas fa-lock"></i> No signup required. Your data stays private.
+            </p>
+        </div>
+    </section>
+    
+    <footer>
+        <p>
+            Made with ❤️ for Indian families<br>
+            <a href="{{ url_for('onboarding') }}">Start Planning</a>
+        </p>
+    </footer>
+    
+    <script>
+        // Scroll animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+        
+        document.querySelectorAll('.animate-on-scroll').forEach(el => {
+            observer.observe(el);
+        });
+        
+        // Change toddler speech bubble text
+        const speeches = [
+            "Yummy! 😋",
+            "More please! 🤤",
+            "I love it! ❤️",
+            "Tasty! 😊",
+            "Nom nom! 🍽️"
+        ];
+        
+        let speechIndex = 0;
+        const speechBubble = document.querySelector('.toddler-speech');
+        
+        setInterval(() => {
+            speechIndex = (speechIndex + 1) % speeches.length;
+            speechBubble.style.opacity = '0';
+            setTimeout(() => {
+                speechBubble.textContent = speeches[speechIndex];
+                speechBubble.style.opacity = '1';
+            }, 300);
+        }, 3000);
+        
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
