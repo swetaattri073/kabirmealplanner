@@ -28,6 +28,7 @@ from ai_features import (
     parse_meal_input, find_similar_foods, find_foods_by_features,
     smart_meal_parser, recognize_food_from_image
 )
+from nutrient_lookup import lookup_nutrients, guess_category
 
 # Create Flask app
 app = Flask(__name__)
@@ -198,6 +199,19 @@ with app.app_context():
             if 'photo_path' not in cols:
                 db.session.execute(text('ALTER TABLE meal_logs ADD COLUMN photo_path VARCHAR(500)'))
                 db.session.commit()
+        if 'foods' in insp.get_table_names():
+            food_cols = {c['name'] for c in insp.get_columns('foods')}
+            patches = [
+                ('is_user_added', 'BOOLEAN DEFAULT 0'),
+                ('nutrition_pending', 'BOOLEAN DEFAULT 0'),
+                ('nutrition_source', 'VARCHAR(50)'),
+                ('nutrition_enriched_at', 'DATETIME'),
+                ('nutrition_match_name', 'VARCHAR(200)'),
+            ]
+            for col_name, col_type in patches:
+                if col_name not in food_cols:
+                    db.session.execute(text(f'ALTER TABLE foods ADD COLUMN {col_name} {col_type}'))
+            db.session.commit()
     except Exception as e:
         app.logger.warning('Schema patch skipped: %s', e)
     init_food_database(db.session, Food)
@@ -690,6 +704,119 @@ def get_food(food_id):
     """Get a specific food"""
     food = Food.query.get_or_404(food_id)
     return jsonify(food.to_dict())
+
+
+@app.route('/api/foods', methods=['POST'])
+def create_food():
+    """
+    Add a custom food when it's missing from the database.
+    Nutrients start at 0 / pending; enrichment runs in the background.
+    """
+    data = request.json or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Food name is required'}), 400
+    if len(name) > 200:
+        return jsonify({'error': 'Food name is too long'}), 400
+
+    # Prefer existing match (case-insensitive exact)
+    existing = Food.query.filter(db.func.lower(Food.name) == name.lower()).first()
+    if existing:
+        return jsonify({
+            **existing.to_dict(),
+            'already_existed': True,
+            'message': f'"{existing.name}" is already in the database'
+        }), 200
+
+    category = (data.get('category') or guess_category(name)).lower().strip()
+    if category not in FOOD_CATEGORIES:
+        category = guess_category(name)
+
+    food = Food(
+        name=name,
+        name_hindi=data.get('name_hindi'),
+        category=category,
+        spice_level=int(data.get('spice_level', 0) or 0),
+        texture=data.get('texture') or 'soft',
+        allergens=data.get('allergens') or [],
+        suitable_from_months=int(data.get('suitable_from_months', 12) or 12),
+        toddler_friendly_version=data.get('toddler_friendly_version') or f'User-added: serve age-appropriate soft portions of {name}',
+        preparation_tips=data.get('preparation_tips'),
+        is_user_added=True,
+        nutrition_pending=True,
+        nutrition_source=None,
+    )
+    db.session.add(food)
+    db.session.commit()
+
+    enrich_async = data.get('enrich', True)
+    if enrich_async:
+        _enqueue_food_enrichment(food.id)
+
+    result = food.to_dict()
+    result['already_existed'] = False
+    result['enrichment_started'] = bool(enrich_async)
+    result['message'] = (
+        f'Added "{food.name}". Looking up nutrients in the background…'
+        if enrich_async else
+        f'Added "{food.name}".'
+    )
+    return jsonify(result), 201
+
+
+@app.route('/api/foods/<int:food_id>/enrich', methods=['POST'])
+def enrich_food(food_id):
+    """Re-run nutrient enrichment for a food (sync)."""
+    food = Food.query.get_or_404(food_id)
+    result = _enrich_food_record(food.id)
+    if not result:
+        return jsonify({'error': 'Enrichment failed'}), 500
+    return jsonify(result)
+
+
+def _enqueue_food_enrichment(food_id):
+    """Run nutrient lookup in a daemon thread with app context."""
+    import threading
+
+    def _worker():
+        with app.app_context():
+            try:
+                _enrich_food_record(food_id)
+            except Exception as exc:
+                app.logger.warning('Background enrichment failed for food %s: %s', food_id, exc)
+
+    thread = threading.Thread(target=_worker, daemon=True, name=f'enrich-food-{food_id}')
+    thread.start()
+
+
+def _enrich_food_record(food_id):
+    """Lookup nutrients and update Food row. Returns food dict or None."""
+    food = Food.query.get(food_id)
+    if not food:
+        return None
+
+    nutrients = lookup_nutrients(food.name, food.category)
+    food.calories = nutrients.get('calories', 0) or 0
+    food.protein_g = nutrients.get('protein_g', 0) or 0
+    food.carbs_g = nutrients.get('carbs_g', 0) or 0
+    food.fat_g = nutrients.get('fat_g', 0) or 0
+    food.fiber_g = nutrients.get('fiber_g', 0) or 0
+    food.calcium_mg = nutrients.get('calcium_mg', 0) or 0
+    food.iron_mg = nutrients.get('iron_mg', 0) or 0
+    food.zinc_mg = nutrients.get('zinc_mg', 0) or 0
+    food.vitamin_a_mcg = nutrients.get('vitamin_a_mcg', 0) or 0
+    food.vitamin_c_mg = nutrients.get('vitamin_c_mg', 0) or 0
+    food.vitamin_d_mcg = nutrients.get('vitamin_d_mcg', 0) or 0
+    food.vitamin_b12_mcg = nutrients.get('vitamin_b12_mcg', 0) or 0
+    food.folate_mcg = nutrients.get('folate_mcg', 0) or 0
+    food.nutrition_source = nutrients.get('source')
+    food.nutrition_match_name = nutrients.get('matched_name')
+    food.nutrition_pending = False
+    food.nutrition_enriched_at = datetime.utcnow()
+    if nutrients.get('category_used') and food.is_user_added and not food.category:
+        food.category = nutrients['category_used']
+    db.session.commit()
+    return food.to_dict()
 
 
 @app.route('/api/foods/categories', methods=['GET'])

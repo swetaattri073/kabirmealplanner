@@ -149,7 +149,7 @@
                         <div class="alt-panel" id="alt-panel-search-{{ meal_type }}">
                             <div class="form-group">
                                 <input type="text" class="form-input alt-food-search" id="alt-search-{{ meal_type }}"
-                                       placeholder="Search food…" data-meal="{{ meal_type }}"
+                                       placeholder="Search or type a new food to add…" data-meal="{{ meal_type }}"
                                        oninput="filterAltFoods('{{ meal_type }}', this.value)">
                             </div>
                             <div class="food-list alt-food-list" id="alt-list-{{ meal_type }}" style="max-height:180px;"></div>
@@ -354,6 +354,11 @@
 }
 .photo-preview { display: block; width: 100%; height: auto; max-height: 200px; object-fit: cover; }
 .suggestion-meta { font-size: 0.75rem; color: var(--text-muted); }
+.add-food-item {
+    border: 1px dashed rgba(99,102,241,0.45) !important;
+    background: rgba(99,102,241,0.06);
+}
+.add-food-item .food-item-name { color: var(--primary-dark, #4f46e5); }
 </style>
 
 <script>
@@ -436,22 +441,64 @@ function filterAltFoods(mealType, query) {
     const matches = allFoods.filter(f =>
         !q || f.name.toLowerCase().includes(q) || (f.name_hindi || '').toLowerCase().includes(q)
     ).slice(0, 40);
-    
-    list.innerHTML = matches.map(f => `
+
+    const exact = q && allFoods.some(f => f.name.toLowerCase() === q);
+    let html = matches.map(f => `
         <div class="food-item" data-food-id="${f.id}" onclick="selectAltFoodById('${mealType}', ${f.id})">
             <div class="food-item-info">
                 <div class="food-item-name">${escapeHtml(f.name)}</div>
                 ${f.name_hindi ? `<div class="food-item-hindi">${escapeHtml(f.name_hindi)}</div>` : ''}
+                ${f.nutrition_pending ? '<div class="suggestion-meta">Nutrients updating…</div>' : ''}
             </div>
-            <span class="food-item-category">${escapeHtml(f.category)}</span>
+            <span class="food-item-category">${escapeHtml(f.category)}${f.is_user_added ? ' · custom' : ''}</span>
         </div>
-    `).join('') || '<p style="padding:0.75rem;color:var(--text-muted);">No foods found</p>';
+    `).join('');
+
+    if (q && !exact) {
+        html += `
+        <div class="food-item add-food-item" onclick="addCustomFood('${mealType}', ${JSON.stringify(query.trim())})">
+            <div class="food-item-info">
+                <div class="food-item-name"><i class="fas fa-plus-circle"></i> Add “${escapeHtml(query.trim())}” to database</div>
+                <div class="suggestion-meta">We'll look up nutrients in the background for nutrition stats</div>
+            </div>
+        </div>`;
+    }
+
+    list.innerHTML = html || '<p style="padding:0.75rem;color:var(--text-muted);">Type a food name to search or add</p>';
 }
 
 function escapeHtml(str) {
     return String(str || '').replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
+}
+
+async function addCustomFood(mealType, name, options = {}) {
+    const foodName = (name || '').trim();
+    if (!foodName) {
+        showToast('Enter a food name to add', 'error');
+        return null;
+    }
+    try {
+        const result = await apiCall('/foods', 'POST', {
+            name: foodName,
+            category: options.category || null,
+            enrich: true
+        });
+        // Keep client list in sync
+        const existingIdx = allFoods.findIndex(f => f.id === result.id);
+        if (existingIdx >= 0) allFoods[existingIdx] = result;
+        else allFoods.push(result);
+        allFoods.sort((a, b) => a.name.localeCompare(b.name));
+
+        selectAltFoodById(mealType, result.id, result.nutrition_pending ? 'nutrients updating in background' : 'added');
+        filterAltFoods(mealType, foodName);
+        showToast(result.message || `Added ${result.name}`, 'success');
+        return result;
+    } catch (e) {
+        console.error(e);
+        return null;
+    }
 }
 
 function selectAltFoodById(mealType, foodId, extraNote) {
@@ -468,18 +515,36 @@ function selectAltFoodById(mealType, foodId, extraNote) {
     }
 }
 
-function renderSuggestionList(listId, mealType, suggestions) {
+function renderSuggestionList(listId, mealType, suggestions, rawQuery) {
     const list = document.getElementById(listId);
     if (!list) return;
-    if (!suggestions || !suggestions.length) {
-        list.innerHTML = '<p style="padding:0.75rem;color:var(--text-muted);">No matches — try different words or pick from Search.</p>';
+    const items = suggestions || [];
+    if (!items.length) {
+        const q = (rawQuery || '').trim();
+        list.innerHTML = q
+            ? `<div class="food-item add-food-item" onclick="addCustomFood('${mealType}', ${JSON.stringify(q)})">
+                <div class="food-item-info">
+                    <div class="food-item-name"><i class="fas fa-plus-circle"></i> Add “${escapeHtml(q)}” to database</div>
+                    <div class="suggestion-meta">Not in the database yet — add it and we'll look up nutrients</div>
+                </div>
+               </div>`
+            : '<p style="padding:0.75rem;color:var(--text-muted);">No matches — try different words or Pick food.</p>';
         return;
     }
-    list.innerHTML = suggestions.map(s => {
+    list.innerHTML = items.map(s => {
         const fid = s.food_id || s.id;
         const name = s.name || s.db_name || s.label;
         const conf = s.confidence != null ? Math.round(s.confidence * 100) + '%' : '';
         const src = s.source ? ` · ${s.source}` : '';
+        if (!fid) {
+            return `
+            <div class="food-item add-food-item" onclick="addCustomFood('${mealType}', ${JSON.stringify(name)})">
+                <div class="food-item-info">
+                    <div class="food-item-name"><i class="fas fa-plus-circle"></i> Add “${escapeHtml(name)}”</div>
+                    <div class="suggestion-meta">Detected but not in database — add & enrich nutrients</div>
+                </div>
+            </div>`;
+        }
         return `
         <div class="food-item" onclick="selectAltFoodById('${mealType}', ${fid})">
             <div class="food-item-info">
@@ -500,16 +565,15 @@ async function parseAltNlp(toddlerId, mealType) {
     }
     try {
         const result = await apiCall('/parse-meal', 'POST', { text });
-        const suggestions = (result.foods || [])
-            .filter(f => f.food_id || f.id)
-            .map(f => ({
-                food_id: f.food_id || f.id,
-                name: f.db_name || f.name,
-                confidence: f.confidence,
-                source: 'describe'
-            }));
-        // Enrich from allFoods for hindi/category
+        const suggestions = (result.foods || []).map(f => ({
+            food_id: f.food_id || f.id || null,
+            name: f.db_name || f.name,
+            confidence: f.confidence,
+            source: 'describe'
+        }));
+        // Enrich known foods from allFoods for hindi/category
         suggestions.forEach(s => {
+            if (!s.food_id) return;
             const full = allFoods.find(f => f.id === s.food_id);
             if (full) {
                 s.name_hindi = full.name_hindi;
@@ -517,12 +581,14 @@ async function parseAltNlp(toddlerId, mealType) {
                 s.toddler_friendly_version = full.toddler_friendly_version;
             }
         });
-        renderSuggestionList('alt-nlp-list-' + mealType, mealType, suggestions);
-        if (suggestions.length === 1) {
-            selectAltFoodById(mealType, suggestions[0].food_id, 'from description');
+        renderSuggestionList('alt-nlp-list-' + mealType, mealType, suggestions, text);
+        const known = suggestions.filter(s => s.food_id);
+        if (known.length === 1) {
+            selectAltFoodById(mealType, known[0].food_id, 'from description');
         } else if (!suggestions.length) {
-            showToast('No foods matched — try pick food or a clearer description', 'error');
-        } else if (result.overall_reaction && !altReactions[mealType]) {
+            showToast('No foods detected — try Pick food or add a custom food', 'error');
+        }
+        if (result.overall_reaction && !altReactions[mealType]) {
             pickAltReaction(mealType, result.overall_reaction);
         }
         if (result.portion && result.portion.type === 'percentage') {
