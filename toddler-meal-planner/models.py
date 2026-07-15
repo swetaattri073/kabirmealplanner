@@ -333,6 +333,13 @@ class Food(db.Model):
     serving_size_12_24 = db.Column(db.Float, default=50)
     serving_size_24_36 = db.Column(db.Float, default=75)
     
+    # User-added / enrichment metadata
+    is_user_added = db.Column(db.Boolean, default=False)
+    nutrition_pending = db.Column(db.Boolean, default=False)
+    nutrition_source = db.Column(db.String(50), nullable=True)  # openfoodfacts, category_estimate, seeded
+    nutrition_enriched_at = db.Column(db.DateTime, nullable=True)
+    nutrition_match_name = db.Column(db.String(200), nullable=True)  # matched external product name
+    
     def get_serving_for_age(self, age_months):
         """Returns appropriate serving size in grams"""
         if age_months < 12:
@@ -383,7 +390,12 @@ class Food(db.Model):
             'allergens': self.allergens or [],
             'suitable_from_months': self.suitable_from_months,
             'toddler_friendly_version': self.toddler_friendly_version,
-            'preparation_tips': self.preparation_tips
+            'preparation_tips': self.preparation_tips,
+            'is_user_added': bool(self.is_user_added),
+            'nutrition_pending': bool(self.nutrition_pending),
+            'nutrition_source': self.nutrition_source,
+            'nutrition_enriched_at': self.nutrition_enriched_at.isoformat() if self.nutrition_enriched_at else None,
+            'nutrition_match_name': self.nutrition_match_name,
         }
 
 
