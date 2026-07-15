@@ -31,3 +31,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Meal photos (keep directory)
+static/uploads/meals/*
+!static/uploads/meals/.gitkeep
