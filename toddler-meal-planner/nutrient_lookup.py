@@ -77,7 +77,9 @@ CATEGORY_ESTIMATES: Dict[str, Dict[str, float]] = {
 
 CATEGORY_KEYWORDS = {
     "dal": ["dal", "daal", "sambar", "rasam", "chole", "rajma", "lobia", "lentil", "pulse"],
-    "fruit": ["banana", "apple", "mango", "orange", "papaya", "guava", "grape", "berry", "fruit"],
+    "fruit": ["banana", "apple", "mango", "orange", "papaya", "guava", "grape", "berry", "fruit",
+              "pear", "melon", "watermelon", "muskmelon", "pineapple", "litchi", "lychee", "jamun",
+              "strawberry", "kiwi", "sitaphal", "mosambi", "khajoor", "anjeer", "khubani"],
     "dairy": ["milk", "curd", "yogurt", "dahi", "paneer", "cheese", "butter", "ghee", "lassi"],
     "vegetable": ["sabzi", "vegetable", "aloo", "gobi", "palak", "spinach", "carrot", "beans", "cucumber", "tomato", "bhindi"],
     "grain": ["rice", "roti", "chapati", "paratha", "thepla", "bread", "poha", "upma", "idli", "dosa", "oats", "dalia", "khichdi", "puri", "naan"],

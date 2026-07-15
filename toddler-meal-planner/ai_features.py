@@ -66,6 +66,24 @@ FOOD_ALIASES = {
     'pomegranate': ['anar', 'anaar'],
     'watermelon': ['tarbooz', 'tarbuj'],
     'chikoo': ['sapota', 'chiku', 'sapodilla'],
+    'guava': ['amrud', 'amrood', 'peru'],
+    'pear': ['nashpati', 'nashpat'],
+    'muskmelon': ['kharbuja', 'cantaloupe', 'melon'],
+    'sweet lime': ['mosambi', 'mosumbi', 'mausambi'],
+    'pineapple': ['ananas'],
+    'custard apple': ['sitaphal', 'sharifa', 'shareefa', 'cherimoya'],
+    'litchi': ['lychee', 'lichee'],
+    'jamun': ['java plum', 'black plum'],
+    'peach': ['aadu', 'aadoo'],
+    'plum': ['aloo bukhara', 'alu bukhara'],
+    'ber': ['indian jujube', 'jujube', 'bor'],
+    'kiwi': ['kiwi fruit'],
+    'strawberry': ['strawberries'],
+    'dates': ['khajoor', 'khajur', 'date'],
+    'fig': ['anjeer', 'figs'],
+    'apricot': ['khubani', 'khumani', 'dried apricot'],
+    'fresh coconut': ['nariyal', 'coconut', 'narial'],
+    'dragon fruit': ['pitaya', 'pitahaya'],
     
     # Dairy
     'milk': ['doodh', 'dudh'],
@@ -90,7 +108,6 @@ FOOD_ALIASES = {
     
     # Snacks
     'biscuit': ['biscuits', 'cookies', 'cookie'],
-    'dates': ['khajoor', 'khajur'],
     'dry fruits': ['meva', 'nuts', 'almonds', 'cashews'],
     'ragi': ['nachni', 'finger millet', 'ragi porridge'],
 }
