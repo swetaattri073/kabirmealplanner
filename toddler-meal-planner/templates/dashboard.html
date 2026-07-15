@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ toddler.name }} | Toddler Meal Planner{% endblock %}
+
+{% block content %}
+<body data-page="dashboard" data-toddler-id="{{ toddler.id }}">
+    <div class="page-header">
+        <h1>Good {{ 'Morning' if now().hour < 12 else 'Afternoon' if now().hour < 17 else 'Evening' }}, {{ toddler.name }}! 👋</h1>
+        <p>{{ now().strftime('%A, %B %d, %Y') }} • Track meals and ensure balanced nutrition</p>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon primary">🍽️</div>
+            <div class="stat-content">
+                <h3 id="meals-eaten">0</h3>
+                <p>Meals Today</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon success">📊</div>
+            <div class="stat-content">
+                <h3 id="nutrition-score">--</h3>
+                <p>Nutrition Score</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon warning">⚡</div>
+            <div class="stat-content">
+                <h3 id="alerts-count">0</h3>
+                <p>Alerts</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon primary">📅</div>
+            <div class="stat-content">
+                <h3>{{ toddler.age_months }}</h3>
+                <p>Months Old</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="dashboard-grid">
+        <!-- Today's Meals -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🍱 Today's Meals</h2>
+                <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus"></i> Log Meal
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="meal-schedule" class="meal-schedule">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Nutrition Status -->
+        <div class="card">
+            <div class="card-header">
+                <h2>📊 Today's Nutrition</h2>
+                <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
+                    View Details
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="nutrition-grid" class="nutrition-grid">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Alerts & Recommendations -->
+        <div class="card full-width">
+            <div class="card-header">
+                <h2>💡 Nutrition Alerts & Tips</h2>
+            </div>
+            <div class="card-body">
+                <div id="alerts-container">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboard({{ toddler.id }});
+        });
+        
+        // Helper to get current time
+        function now() {
+            return new Date();
+        }
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Update stats when dashboard loads
+    function updateStats(data) {
+        document.getElementById('meals-eaten').textContent = data.meals_eaten?.length || 0;
+        document.getElementById('alerts-count').textContent = data.alerts?.length || 0;
+        
+        // Calculate average nutrition score
+        const nutrition = data.nutrition || {};
+        const scores = Object.values(nutrition).map(n => n.percentage).filter(p => p !== undefined);
+        const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : '--';
+        document.getElementById('nutrition-score').textContent = avgScore + (avgScore !== '--' ? '%' : '');
+    }
+    
+    // Override renderDashboard to also update stats
+    const originalRenderDashboard = renderDashboard;
+    renderDashboard = function(data) {
+        originalRenderDashboard(data);
+        updateStats(data);
+    };
+</script>
+{% endblock %}

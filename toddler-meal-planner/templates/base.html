@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Toddler Meal Planner{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">🥗</span>
+                    <span class="logo-text">Meal Planner</span>
+                </div>
+            </div>
+            
+            {% if toddler %}
+            <div class="toddler-info">
+                <div class="toddler-avatar">
+                    {{ toddler.name[0] | upper }}
+                </div>
+                <div class="toddler-details">
+                    <span class="toddler-name">{{ toddler.name }}</span>
+                    <span class="toddler-age">{{ toddler.age_months }} months</span>
+                </div>
+                {% if toddlers and toddlers|length > 1 %}
+                <select class="toddler-switch" onchange="switchToddler(this.value)">
+                    {% for t in toddlers %}
+                    <option value="{{ t.id }}" {% if t.id == toddler.id %}selected{% endif %}>
+                        {{ t.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('dashboard', toddler_id=toddler.id) }}">
+                        <i class="fas fa-home"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li class="nav-item {% if request.endpoint == 'log_meal_page' %}active{% endif %}">
+                    <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}">
+                        <i class="fas fa-utensils"></i>
+                        <span>Log Meal</span>
+                    </a>
+                </li>
+                <li class="nav-item {% if request.endpoint == 'weekly_plan_page' %}active{% endif %}">
+                    <a href="{{ url_for('weekly_plan_page', toddler_id=toddler.id) }}">
+                        <i class="fas fa-calendar-week"></i>
+                        <span>Weekly Plan</span>
+                    </a>
+                </li>
+                <li class="nav-item {% if request.endpoint == 'nutrition_page' %}active{% endif %}">
+                    <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}">
+                        <i class="fas fa-chart-pie"></i>
+                        <span>Nutrition</span>
+                    </a>
+                </li>
+                <li class="nav-item {% if request.endpoint == 'preferences_page' %}active{% endif %}">
+                    <a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}">
+                        <i class="fas fa-heart"></i>
+                        <span>Preferences</span>
+                    </a>
+                </li>
+            </ul>
+            {% endif %}
+            
+            <div class="sidebar-footer">
+                <a href="{{ url_for('onboarding') }}" class="add-toddler-btn">
+                    <i class="fas fa-plus"></i>
+                    <span>Add Toddler</span>
+                </a>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+    
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

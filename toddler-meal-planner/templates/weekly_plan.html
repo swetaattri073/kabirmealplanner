@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly Plan - {{ toddler.name }} | Toddler Meal Planner{% endblock %}
+
+{% block content %}
+<body data-page="weekly-plan" data-toddler-id="{{ toddler.id }}">
+    <div class="page-header">
+        <h1>📅 Weekly Meal Plan</h1>
+        <p>Personalized meal suggestions for {{ toddler.name }} based on nutrition needs and preferences</p>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <div class="week-navigation">
+                <button class="week-nav-btn" onclick="navigateWeek(-1)">
+                    <i class="fas fa-chevron-left"></i> Previous Week
+                </button>
+                <span id="week-title" class="week-title">Loading...</span>
+                <button class="week-nav-btn" onclick="navigateWeek(1)">
+                    Next Week <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="regenerateWeeklyPlan({{ toddler.id }})">
+                <i class="fas fa-sync-alt"></i> Regenerate Plan
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="week-grid" class="week-grid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer">
+            <p style="font-size: 0.9rem; color: var(--text-secondary);">
+                💡 <strong>Tip:</strong> The meal plan adapts based on {{ toddler.name }}'s preferences and nutritional needs. 
+                Foods that are liked appear more often, and meals are balanced to fill any nutrition gaps.
+            </p>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>📖 How the Meal Plan Works</h2>
+        </div>
+        <div class="card-body">
+            <div class="dashboard-grid">
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">🧠 Smart Selection</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Foods are chosen based on {{ toddler.name }}'s age ({{ toddler.age_months }} months), 
+                        dietary preference, and any allergies.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">❤️ Preference Learning</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        When you log meals and record reactions, the planner learns what {{ toddler.name }} 
+                        likes and suggests those foods more often.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">⚖️ Nutrition Balance</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        The plan automatically includes foods rich in nutrients that might be lacking 
+                        (like iron, calcium, or protein).
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">🔄 Variety</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        We avoid repetition by tracking what was eaten recently and suggesting 
+                        different foods throughout the week.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

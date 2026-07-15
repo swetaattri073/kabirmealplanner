@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Log Meal - {{ toddler.name }} | Toddler Meal Planner{% endblock %}
+
+{% block content %}
+<body data-page="log-meal" data-toddler-id="{{ toddler.id }}">
+    <div class="page-header">
+        <h1>🍽️ Log a Meal</h1>
+        <p>Track what {{ toddler.name }} ate today</p>
+    </div>
+    
+    <div class="dashboard-grid">
+        <!-- Adult Meal Adapter -->
+        <div class="card">
+            <div class="card-header">
+                <h2>👨‍👩‍👧 Eating with Family?</h2>
+            </div>
+            <div class="card-body">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                    Tell us what the adults are eating and we'll suggest how to adapt it for {{ toddler.name }}.
+                </p>
+                <div class="adult-meal-input">
+                    <textarea id="adult-meal-input" class="form-input form-textarea" 
+                              placeholder="E.g., Rajma Chawal with salad, Paneer Butter Masala with Naan..."></textarea>
+                </div>
+                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }})">
+                    <i class="fas fa-magic"></i> Get Toddler Version
+                </button>
+                
+                <div id="adaptation-results" style="display: none; margin-top: 1rem;"></div>
+            </div>
+        </div>
+        
+        <!-- Meal Logging Form -->
+        <div class="card" id="log-section">
+            <div class="card-header">
+                <h2>📝 Log Meal Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Meal Type</label>
+                    <select id="meal-type" class="form-select">
+                        <option value="">Select meal type...</option>
+                        <option value="breakfast">🌅 Breakfast</option>
+                        <option value="mid_morning_snack">🍎 Mid-Morning Snack</option>
+                        <option value="lunch">🍱 Lunch</option>
+                        <option value="evening_snack">🥛 Evening Snack</option>
+                        <option value="dinner">🌙 Dinner</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Date</label>
+                    <input type="date" id="meal-date" class="form-input" value="{{ today }}">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Search Food</label>
+                    <div class="food-search-container">
+                        <i class="fas fa-search food-search-icon"></i>
+                        <input type="text" id="food-search" class="food-search-input form-input" 
+                               placeholder="Search foods... (e.g., khichdi, idli, banana)">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Select Food</label>
+                    <div id="food-list" class="food-list">
+                        {% for food in foods %}
+                        <div class="food-item" onclick='selectFood({{ food.to_dict() | tojson }})'>
+                            <div class="food-item-info">
+                                <div class="food-item-name">{{ food.name }}</div>
+                                {% if food.name_hindi %}
+                                <div class="food-item-hindi">{{ food.name_hindi }}</div>
+                                {% endif %}
+                            </div>
+                            <span class="food-item-category">{{ food.category }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div id="selected-food-details" style="display: none; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 1rem;">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Or Enter Custom Food</label>
+                    <input type="text" id="custom-food" class="form-input" 
+                           placeholder="Food not in list? Type here...">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">How much did {{ toddler.name }} eat?</label>
+                    <div class="portion-slider-container">
+                        <input type="range" class="portion-slider" id="portion-slider" 
+                               min="0" max="100" step="25" value="100" 
+                               onchange="updatePortion(this.value)">
+                        <div class="portion-labels">
+                            <span>None (0%)</span>
+                            <span>Quarter (25%)</span>
+                            <span>Half (50%)</span>
+                            <span>Most (75%)</span>
+                            <span>All (100%)</span>
+                        </div>
+                    </div>
+                    <p style="text-align: center; margin-top: 0.5rem; font-weight: 600;">
+                        Ate: <span id="portion-label">100%</span>
+                    </p>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">How did {{ toddler.name }} react?</label>
+                    <div class="reaction-buttons">
+                        <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="selectReaction('loved')">
+                            😍 Loved it!
+                        </button>
+                        <button type="button" class="reaction-btn liked" data-reaction="liked" onclick="selectReaction('liked')">
+                            😊 Liked
+                        </button>
+                        <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="selectReaction('neutral')">
+                            😐 Okay
+                        </button>
+                        <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="selectReaction('disliked')">
+                            😕 Didn't like
+                        </button>
+                        <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="selectReaction('refused')">
+                            🙅 Refused
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <textarea id="notes" class="form-input form-textarea" 
+                              placeholder="Any observations? E.g., 'Loved it with ghee', 'Too spicy'..."></textarea>
+                </div>
+                
+                <button class="btn btn-primary btn-lg btn-block" onclick="logMeal({{ toddler.id }})">
+                    <i class="fas fa-check"></i> Save Meal
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Store foods for search
+        const allFoods = {{ foods | map(attribute='to_dict') | list | tojson }};
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initFoodSearch(allFoods);
+            
+            // Pre-select meal type from URL if provided
+            const urlParams = new URLSearchParams(window.location.search);
+            const mealType = urlParams.get('meal');
+            if (mealType) {
+                document.getElementById('meal-type').value = mealType;
+            }
+        });
+    </script>
+{% endblock %}
