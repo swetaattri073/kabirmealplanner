@@ -571,20 +571,143 @@ def update_plan_item(plan_id):
 
 @app.route('/api/adapt-meal/<int:toddler_id>', methods=['POST'])
 def adapt_meal(toddler_id):
-    """Adapt an adult meal for toddler"""
+    """
+    Adapt an adult meal for toddler.
+    
+    Parameters:
+    - adult_meal: Description of what adults are eating (required)
+    - meal_type: 'lunch' or 'dinner' (optional, default: 'lunch')
+    - add_to_plan: If true, add the adapted meal to today's plan (optional)
+    - selected_food_id: Specific food ID to use (optional, used with add_to_plan)
+    
+    Returns adaptation suggestions and optionally adds to plan.
+    """
     toddler = Toddler.query.get_or_404(toddler_id)
     data = request.json
     
     if not data.get('adult_meal'):
         return jsonify({'error': 'Adult meal description is required'}), 400
     
+    # Get adaptation suggestions
     adaptation = adapt_adult_meal_for_toddler(
         data['adult_meal'],
         db.session,
         toddler
     )
     
+    # If user wants to add to today's plan
+    if data.get('add_to_plan') and adaptation.get('matched_foods'):
+        meal_type = data.get('meal_type', 'lunch')
+        selected_food_id = data.get('selected_food_id')
+        
+        # Use selected food or first matched food
+        if selected_food_id:
+            selected_food = Food.query.get(selected_food_id)
+        else:
+            selected_food = Food.query.get(adaptation['matched_foods'][0]['food_id'])
+        
+        if selected_food:
+            result = _add_adult_meal_to_plan(
+                toddler, 
+                selected_food, 
+                meal_type, 
+                data['adult_meal'],
+                adaptation
+            )
+            adaptation['added_to_plan'] = result
+    
     return jsonify(adaptation)
+
+
+def _add_adult_meal_to_plan(toddler, food, meal_type, adult_meal_description, adaptation):
+    """
+    Add an adapted adult meal to today's plan and log.
+    Also updates weekly plan to avoid repetition.
+    """
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    
+    # 1. Log the meal for today
+    log = MealLog(
+        toddler_id=toddler.id,
+        food_id=food.id,
+        date=today,
+        meal_type=meal_type,
+        is_adult_meal_adapted=True,
+        adult_meal_description=adult_meal_description,
+        notes=f"Adapted from adult meal. Tips: {'; '.join(adaptation.get('general_tips', [])[:2])}"
+    )
+    db.session.add(log)
+    
+    # 2. Update or create today's weekly plan entry
+    existing_plan = WeeklyPlan.query.filter(
+        WeeklyPlan.toddler_id == toddler.id,
+        WeeklyPlan.week_start == week_start,
+        WeeklyPlan.day_of_week == today.weekday(),
+        WeeklyPlan.meal_type == meal_type
+    ).first()
+    
+    if existing_plan:
+        # Update existing plan
+        existing_plan.food_id = food.id
+        existing_plan.is_generated = False
+        existing_plan.nutrition_reason = f"Adapted from: {adult_meal_description[:50]}"
+    else:
+        # Create new plan entry
+        new_plan = WeeklyPlan(
+            toddler_id=toddler.id,
+            week_start=week_start,
+            day_of_week=today.weekday(),
+            meal_type=meal_type,
+            food_id=food.id,
+            is_generated=False,
+            nutrition_reason=f"Adapted from: {adult_meal_description[:50]}"
+        )
+        db.session.add(new_plan)
+    
+    # 3. Check future plans this week and avoid same food too soon
+    future_plans = WeeklyPlan.query.filter(
+        WeeklyPlan.toddler_id == toddler.id,
+        WeeklyPlan.week_start == week_start,
+        WeeklyPlan.day_of_week > today.weekday(),
+        WeeklyPlan.food_id == food.id
+    ).all()
+    
+    # If same food appears in next 2 days, regenerate those entries
+    foods_to_swap = []
+    for plan in future_plans:
+        if plan.day_of_week <= today.weekday() + 2:
+            foods_to_swap.append(plan)
+    
+    # Get alternative foods for swapping
+    if foods_to_swap:
+        planner = MealPlanner(db.session)
+        suitable_foods = planner._get_suitable_foods(toddler)
+        
+        for plan in foods_to_swap:
+            # Find an alternative food from same category
+            current_food = Food.query.get(plan.food_id)
+            alternatives = [f for f in suitable_foods 
+                          if f.category == current_food.category 
+                          and f.id != food.id 
+                          and f.id != current_food.id]
+            
+            if alternatives:
+                import random
+                new_food = random.choice(alternatives)
+                plan.food_id = new_food.id
+                plan.nutrition_reason = f"Swapped to avoid repetition (was: {current_food.name})"
+    
+    db.session.commit()
+    
+    return {
+        'logged': True,
+        'food_name': food.name,
+        'meal_type': meal_type,
+        'date': today.isoformat(),
+        'plans_adjusted': len(foods_to_swap),
+        'tips': adaptation.get('general_tips', [])[:2]
+    }
 
 
 # --- Food Preferences ---

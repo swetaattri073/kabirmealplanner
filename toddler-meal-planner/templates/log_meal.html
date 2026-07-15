@@ -37,23 +37,40 @@
         </div>
         
         <!-- Adult Meal Adapter -->
-        <div class="card">
+        <div class="card full-width">
             <div class="card-header">
-                <h2>👨‍👩‍👧 Eating with Family?</h2>
+                <h2>👨‍👩‍👧 Eating with Family Today?</h2>
             </div>
             <div class="card-body">
                 <p style="margin-bottom: 1rem; color: var(--text-secondary);">
-                    Tell us what the adults are eating and we'll suggest how to adapt it for {{ toddler.name }}.
+                    Tell us what the adults are eating and we'll create a toddler-friendly version. 
+                    You can then add it directly to today's meal plan!
                 </p>
-                <div class="adult-meal-input">
-                    <textarea id="adult-meal-input" class="form-input form-textarea" 
-                              placeholder="E.g., Rajma Chawal with salad, Paneer Butter Masala with Naan..."></textarea>
-                </div>
-                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }})">
-                    <i class="fas fa-magic"></i> Get Toddler Version
-                </button>
                 
-                <div id="adaptation-results" style="display: none; margin-top: 1rem;"></div>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;">
+                    <div class="adult-meal-input" style="margin-bottom: 0;">
+                        <textarea id="adult-meal-input" class="form-input form-textarea" 
+                                  placeholder="E.g., Rajma Chawal with salad, Paneer Butter Masala with Naan, Dal Makhani with Jeera Rice..."></textarea>
+                    </div>
+                    <div>
+                        <label class="form-label" style="margin-bottom: 0.5rem;">For which meal?</label>
+                        <select id="adult-meal-type" class="form-select" style="width: 150px;">
+                            <option value="lunch">🍱 Lunch</option>
+                            <option value="dinner">🌙 Dinner</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+                    <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }}, false)">
+                        <i class="fas fa-magic"></i> Show Adaptations
+                    </button>
+                    <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.id }}, true)">
+                        <i class="fas fa-plus-circle"></i> Adapt & Add to Today's Plan
+                    </button>
+                </div>
+                
+                <div id="adaptation-results" style="display: none; margin-top: 1.5rem;"></div>
             </div>
         </div>
         

@@ -343,8 +343,9 @@ async function logMeal(toddlerId) {
 
 // ==================== Adult Meal Adaptation ====================
 
-async function adaptAdultMeal(toddlerId) {
+async function adaptAdultMeal(toddlerId, addToPlan = false) {
     const adultMeal = document.getElementById('adult-meal-input')?.value;
+    const mealType = document.getElementById('adult-meal-type')?.value || 'lunch';
     
     if (!adultMeal) {
         showToast('Please enter the adult meal', 'error');
@@ -352,36 +353,87 @@ async function adaptAdultMeal(toddlerId) {
     }
     
     try {
-        const result = await apiCall(`/adapt-meal/${toddlerId}`, 'POST', {
-            adult_meal: adultMeal
-        });
+        const payload = {
+            adult_meal: adultMeal,
+            meal_type: mealType,
+            add_to_plan: addToPlan
+        };
         
-        renderAdaptationResults(result);
+        const result = await apiCall(`/adapt-meal/${toddlerId}`, 'POST', payload);
+        
+        renderAdaptationResults(result, toddlerId, addToPlan);
+        
+        if (addToPlan && result.added_to_plan) {
+            showToast(`Added to today's ${mealType}! Future plans adjusted to avoid repetition.`, 'success');
+        }
     } catch (error) {
         console.error('Failed to adapt meal:', error);
     }
 }
 
-function renderAdaptationResults(result) {
+function renderAdaptationResults(result, toddlerId, wasAddedToPlan = false) {
     const container = document.getElementById('adaptation-results');
     if (!container) return;
     
-    let html = `<h3>Toddler-Friendly Adaptations for "${result.adult_meal}"</h3>`;
+    let html = '';
+    
+    // If added to plan, show success message
+    if (wasAddedToPlan && result.added_to_plan) {
+        html += `
+            <div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(74, 222, 128, 0.05)); 
+                        padding: 1.5rem; border-radius: var(--radius-md); border: 2px solid var(--success); margin-bottom: 1.5rem;">
+                <h3 style="color: var(--success); margin-bottom: 0.75rem;">
+                    ✅ Added to Today's ${result.added_to_plan.meal_type.charAt(0).toUpperCase() + result.added_to_plan.meal_type.slice(1)}!
+                </h3>
+                <p style="margin-bottom: 0.5rem;">
+                    <strong>${result.added_to_plan.food_name}</strong> has been logged for ${result.added_to_plan.date}
+                </p>
+                ${result.added_to_plan.plans_adjusted > 0 ? `
+                    <p style="font-size: 0.9rem; color: var(--text-secondary);">
+                        📅 ${result.added_to_plan.plans_adjusted} future meal(s) adjusted to avoid repetition
+                    </p>
+                ` : ''}
+                ${result.added_to_plan.tips?.length > 0 ? `
+                    <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color);">
+                        <p style="font-weight: 600; margin-bottom: 0.25rem;">💡 Preparation Tips:</p>
+                        <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.9rem; color: var(--text-secondary);">
+                            ${result.added_to_plan.tips.map(tip => `<li>${tip}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+    
+    html += `<h3 style="margin-bottom: 1rem;">🍽️ Toddler Adaptations for "${result.adult_meal}"</h3>`;
     
     if (result.matched_foods?.length > 0) {
-        html += `<div class="adaptation-results">`;
+        html += `<div class="adaptation-results" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">`;
         
-        result.matched_foods.forEach(item => {
+        result.matched_foods.forEach((item, index) => {
+            const isFirst = index === 0;
             html += `
-                <div class="adaptation-card">
-                    <h4>🍽️ ${item.original_food}</h4>
-                    <p><strong>For ${result.toddler_name}:</strong> ${item.toddler_version}</p>
-                    ${item.preparation_tips ? `<p><em>${item.preparation_tips}</em></p>` : ''}
-                    <p><strong>Serving size:</strong> ~${item.serving_size}g</p>
-                    ${item.spice_warning ? '<p>⚠️ <strong>Note:</strong> Reduce spice level significantly</p>' : ''}
-                    <button class="btn btn-primary btn-sm" onclick='selectAdaptedFood(${JSON.stringify(item)})'>
-                        Use This
-                    </button>
+                <div class="adaptation-card" style="background: ${isFirst && !wasAddedToPlan ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(236, 72, 153, 0.05))' : 'var(--bg-tertiary)'}; 
+                     border: ${isFirst && !wasAddedToPlan ? '2px solid var(--primary)' : '1px solid var(--border-color)'};">
+                    ${isFirst && !wasAddedToPlan ? '<span style="font-size: 0.75rem; background: var(--primary); color: white; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); display: inline-block; margin-bottom: 0.5rem;">Recommended</span>' : ''}
+                    <h4 style="display: flex; align-items: center; gap: 0.5rem;">
+                        🍽️ ${item.original_food}
+                    </h4>
+                    <p style="margin: 0.5rem 0;"><strong>For ${result.toddler_name}:</strong></p>
+                    <p style="color: var(--text-secondary);">${item.toddler_version}</p>
+                    ${item.preparation_tips ? `<p style="font-size: 0.9rem; font-style: italic; color: var(--text-muted); margin-top: 0.5rem;">${item.preparation_tips}</p>` : ''}
+                    <p style="margin-top: 0.75rem;"><strong>Serving:</strong> ~${item.serving_size}g</p>
+                    ${item.spice_warning ? '<p style="color: var(--warning); font-size: 0.9rem;">⚠️ Reduce spice level significantly</p>' : ''}
+                    ${!wasAddedToPlan ? `
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                            <button class="btn btn-primary btn-sm" onclick='addAdaptedFoodToPlan(${toddlerId}, ${item.food_id}, "${result.adult_meal.replace(/"/g, '\\"')}")'>
+                                <i class="fas fa-plus"></i> Add to Plan
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick='selectAdaptedFood(${JSON.stringify(item)})'>
+                                Log Manually
+                            </button>
+                        </div>
+                    ` : ''}
                 </div>
             `;
         });
@@ -391,9 +443,9 @@ function renderAdaptationResults(result) {
     
     if (result.general_tips?.length > 0) {
         html += `
-            <div class="adaptation-card" style="margin-top: 1rem;">
-                <h4>💡 General Tips</h4>
-                <ul class="adaptation-tips">
+            <div class="adaptation-card" style="margin-top: 1.5rem; background: linear-gradient(135deg, rgba(234, 179, 8, 0.1), rgba(251, 191, 36, 0.05)); border: 1px solid rgba(234, 179, 8, 0.3);">
+                <h4 style="display: flex; align-items: center; gap: 0.5rem;">💡 Adaptation Tips</h4>
+                <ul class="adaptation-tips" style="margin-top: 0.75rem;">
                     ${result.general_tips.map(tip => `<li>${tip}</li>`).join('')}
                 </ul>
             </div>
@@ -402,14 +454,35 @@ function renderAdaptationResults(result) {
     
     if (!result.matched_foods?.length && !result.general_tips?.length) {
         html += `
-            <div class="empty-state">
-                <p>No specific adaptations found. Try describing individual dishes.</p>
+            <div class="empty-state" style="padding: 2rem; text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🤔</div>
+                <p>No specific adaptations found for this meal.</p>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">Try describing individual dishes (e.g., "dal, rice, aloo sabzi")</p>
             </div>
         `;
     }
     
     container.innerHTML = html;
     container.style.display = 'block';
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function addAdaptedFoodToPlan(toddlerId, foodId, adultMeal) {
+    const mealType = document.getElementById('adult-meal-type')?.value || 'lunch';
+    
+    try {
+        const result = await apiCall(`/adapt-meal/${toddlerId}`, 'POST', {
+            adult_meal: adultMeal,
+            meal_type: mealType,
+            add_to_plan: true,
+            selected_food_id: foodId
+        });
+        
+        renderAdaptationResults(result, toddlerId, true);
+        showToast(`Added to today's ${mealType}!`, 'success');
+    } catch (error) {
+        console.error('Failed to add to plan:', error);
+    }
 }
 
 function selectAdaptedFood(item) {
