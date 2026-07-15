@@ -340,9 +340,25 @@ class MealPlanner:
         if not scored_foods:
             return None
         
-        # Get top choice and alternatives
+        # Get top choice and alternatives (ensure variety in alternatives)
         top_choice = scored_foods[0]
-        alternatives = [f['food'].id for f in scored_foods[1:4]]
+        
+        # Get alternatives from different categories for variety
+        alternatives = []
+        used_categories = {top_choice['food'].category}
+        
+        for item in scored_foods[1:]:
+            if len(alternatives) >= 3:
+                break
+            # Prefer alternatives from different categories
+            if item['food'].category not in used_categories or len(alternatives) < 2:
+                alternatives.append({
+                    'food_id': item['food'].id,
+                    'food_name': item['food'].name,
+                    'category': item['food'].category,
+                    'reason': item['reason']
+                })
+                used_categories.add(item['food'].category)
         
         return {
             'food': top_choice['food'],
@@ -352,19 +368,71 @@ class MealPlanner:
         }
     
     def _filter_by_meal_type(self, foods, meal_type):
-        """Filter foods appropriate for the meal type"""
+        """Filter foods appropriate for the meal type with strict separation"""
         
-        meal_categories = {
-            'breakfast': ['grain', 'dairy', 'fruit', 'combo'],
-            'lunch': ['grain', 'dal', 'vegetable', 'protein', 'combo'],
-            'dinner': ['grain', 'dal', 'vegetable', 'protein', 'combo'],
-            'mid_morning_snack': ['fruit', 'dairy', 'snack'],
-            'evening_snack': ['fruit', 'dairy', 'snack', 'grain']
-        }
+        # Define breakfast-specific foods (should NOT include dal-based items)
+        breakfast_keywords = ['idli', 'dosa', 'upma', 'poha', 'paratha', 'roti', 'toast', 
+                             'cereal', 'oats', 'porridge', 'cheela', 'uttapam', 'sandwich']
         
-        allowed_categories = meal_categories.get(meal_type, list(meal_categories['lunch']))
+        # Foods that are strictly lunch/dinner (should NEVER appear in breakfast)
+        lunch_dinner_keywords = ['dal', 'rice', 'sabzi', 'curry', 'rajma', 'chole', 
+                                 'sambar', 'rasam', 'pulao', 'biryani', 'khichdi']
         
-        return [f for f in foods if f.category in allowed_categories]
+        # Accompaniments that need to be paired (not standalone meals)
+        accompaniment_foods = ['cheese', 'ghee', 'butter', 'curd', 'yogurt', 'chutney', 'pickle']
+        
+        if meal_type == 'breakfast':
+            filtered = []
+            for f in foods:
+                name_lower = f.name.lower()
+                
+                # Skip lunch/dinner items
+                if any(kw in name_lower for kw in lunch_dinner_keywords):
+                    continue
+                
+                # Skip standalone accompaniments for main meal slot
+                if any(kw in name_lower for kw in accompaniment_foods):
+                    continue
+                
+                # Include breakfast grains and combos
+                if f.category in ['grain', 'combo']:
+                    # Prefer breakfast-appropriate items
+                    if any(kw in name_lower for kw in breakfast_keywords):
+                        filtered.append(f)
+                    elif f.category == 'grain':
+                        filtered.append(f)
+                
+                # Include fruits for breakfast
+                elif f.category == 'fruit':
+                    filtered.append(f)
+                
+                # Include eggs for breakfast
+                elif f.category == 'protein' and 'egg' in name_lower:
+                    filtered.append(f)
+            
+            return filtered
+        
+        elif meal_type in ['lunch', 'dinner']:
+            filtered = []
+            for f in foods:
+                name_lower = f.name.lower()
+                
+                # Skip standalone accompaniments
+                if any(kw in name_lower for kw in accompaniment_foods):
+                    continue
+                
+                # Include main meal categories
+                if f.category in ['grain', 'dal', 'vegetable', 'protein', 'combo']:
+                    filtered.append(f)
+            
+            return filtered
+        
+        elif 'snack' in meal_type:
+            # Snacks can include fruits, dairy (including cheese), and snack items
+            return [f for f in foods if f.category in ['fruit', 'dairy', 'snack']]
+        
+        # Default
+        return foods
     
     def _format_weekly_plan(self, plan_entries, week_start):
         """Format weekly plan for API response"""
@@ -384,10 +452,26 @@ class MealPlanner:
             if 'meals' not in days[day_key]:
                 days[day_key]['meals'] = {}
             
+            # Get alternative foods with full details
+            alt_foods = []
+            if entry.alternatives:
+                from models import Food
+                for alt in entry.alternatives[:3]:
+                    if isinstance(alt, dict):
+                        alt_foods.append(alt)
+                    elif isinstance(alt, int):
+                        alt_food = Food.query.get(alt)
+                        if alt_food:
+                            alt_foods.append({
+                                'food_id': alt_food.id,
+                                'food_name': alt_food.name,
+                                'category': alt_food.category
+                            })
+            
             days[day_key]['meals'][entry.meal_type] = {
                 'id': entry.id,
                 'food': entry.food.to_dict() if entry.food else None,
-                'alternatives': entry.alternatives,
+                'alternatives': alt_foods,
                 'reason': entry.nutrition_reason,
                 'is_generated': entry.is_generated
             }
