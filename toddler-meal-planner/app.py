@@ -454,9 +454,30 @@ def dashboard(toddler_id):
     return render_template('dashboard.html', toddler=toddler, toddlers=toddlers)
 
 
+def _meal_log_components(meal):
+    """Build {food_id, name, role} list for multi-item meal logging UI."""
+    components = []
+    if not meal:
+        return components
+    if meal.get('is_complete_meal'):
+        for role in ('main', 'carb', 'side'):
+            comp = meal.get(role) or {}
+            fid = comp.get('food_id')
+            if not fid and isinstance(comp.get('food'), dict):
+                fid = comp['food'].get('id')
+            name = comp.get('food_name') or (comp.get('food') or {}).get('name')
+            if fid and name:
+                components.append({'food_id': fid, 'name': name, 'role': role})
+    elif meal.get('food'):
+        f = meal['food']
+        components.append({'food_id': f['id'], 'name': f['name'], 'role': 'main'})
+    return components
+
+
 @app.route('/log-meal/<int:toddler_id>')
 def log_meal_page(toddler_id):
     """Page to log a meal — defaults to today's recommended plan"""
+
     toddler = Toddler.query.get_or_404(toddler_id)
     if not owns_toddler(toddler):
         flash('You do not have access to this profile.', 'error')
@@ -477,6 +498,10 @@ def log_meal_page(toddler_id):
     logged_by_meal = {}
     for log in today_logs:
         logged_by_meal.setdefault(log.meal_type, []).append(log.to_dict())
+    
+    if today_plan and today_plan.get('meals'):
+        for _mt, _meal in today_plan['meals'].items():
+            _meal['log_components'] = _meal_log_components(_meal)
     
     return render_template(
         'log_meal.html',
@@ -909,7 +934,10 @@ def get_meal_logs():
 @app.route('/api/meal-logs', methods=['POST'])
 def create_meal_log():
     """
-    Log a meal.
+    Log a meal (single food or multiple items).
+    
+    Single: food_id, portion_eaten_percent, toddler_reaction
+    Multi: items = [{food_id, portion_eaten_percent, toddler_reaction, notes?}, ...]
     
     Optional:
     - update_plan: if True and food differs from plan, update today's weekly plan
@@ -927,52 +955,91 @@ def create_meal_log():
     
     log_date = datetime.strptime(data.get('date', date.today().isoformat()), '%Y-%m-%d').date()
     meal_type = data['meal_type']
+    items = data.get('items') or []
     
-    log = MealLog(
-        toddler_id=toddler.id,
-        food_id=data.get('food_id'),
-        date=log_date,
-        meal_type=meal_type,
-        custom_food_name=data.get('custom_food_name'),
-        portion_offered_g=data.get('portion_offered_g'),
-        portion_eaten_percent=data.get('portion_eaten_percent', 100),
-        is_adult_meal_adapted=data.get('is_adult_meal_adapted', False),
-        adult_meal_description=data.get('adult_meal_description'),
-        toddler_reaction=data.get('toddler_reaction'),
-        notes=data.get('notes'),
-        photo_path=data.get('photo_path')
-    )
+    # Backwards-compatible single-item payload
+    if not items and data.get('food_id'):
+        items = [{
+            'food_id': data.get('food_id'),
+            'custom_food_name': data.get('custom_food_name'),
+            'portion_eaten_percent': data.get('portion_eaten_percent', 100),
+            'toddler_reaction': data.get('toddler_reaction'),
+            'notes': data.get('notes'),
+        }]
     
-    # Save uploaded photo (base64) if provided
-    if data.get('photo_data') and not log.photo_path:
-        saved = _save_meal_photo(toddler.id, data['photo_data'])
-        if saved:
-            log.photo_path = saved
+    if not items:
+        return jsonify({'error': 'At least one food item is required'}), 400
     
-    db.session.add(log)
+    created_logs = []
+    shared_notes = data.get('notes') or ''
+    photo_saved = None
+    
+    for idx, item in enumerate(items):
+        if not item.get('food_id') and not item.get('custom_food_name'):
+            continue
+        reaction = item.get('toddler_reaction')
+        if not reaction:
+            return jsonify({'error': f'Reaction required for {item.get("name") or "each food"}'}), 400
+        
+        log = MealLog(
+            toddler_id=toddler.id,
+            food_id=item.get('food_id'),
+            date=log_date,
+            meal_type=meal_type,
+            custom_food_name=item.get('custom_food_name'),
+            portion_offered_g=item.get('portion_offered_g'),
+            portion_eaten_percent=item.get('portion_eaten_percent', 100),
+            is_adult_meal_adapted=data.get('is_adult_meal_adapted', False),
+            adult_meal_description=data.get('adult_meal_description'),
+            toddler_reaction=reaction,
+            notes=item.get('notes') or shared_notes,
+            photo_path=data.get('photo_path') if idx == 0 else None,
+        )
+        
+        if idx == 0 and data.get('photo_data') and not log.photo_path:
+            saved = _save_meal_photo(toddler.id, data['photo_data'])
+            if saved:
+                log.photo_path = saved
+                photo_saved = saved
+        
+        db.session.add(log)
+        created_logs.append(log)
+    
+    if not created_logs:
+        return jsonify({'error': 'No valid food items to log'}), 400
     
     plan_updated = None
     should_update_plan = data.get('update_plan') or data.get('replace_plan')
+    primary_food_id = data.get('plan_food_id') or created_logs[0].food_id
     
-    if should_update_plan and data.get('food_id'):
+    if should_update_plan and primary_food_id:
         plan_updated = _update_today_plan_with_food(
             toddler,
             meal_type,
-            data['food_id'],
+            primary_food_id,
             log_date,
             reason=data.get('plan_reason') or 'Logged different meal than planned'
         )
     
     db.session.commit()
     
-    # Update preferences if reaction provided
-    if log.toddler_reaction and log.food_id:
-        update_preferences_from_log(db.session, log)
+    for log in created_logs:
+        if log.toddler_reaction and log.food_id:
+            update_preferences_from_log(db.session, log)
     
-    result = log.to_dict()
-    if plan_updated is not None:
-        result['plan_updated'] = plan_updated
-    return jsonify(result), 201
+    if len(created_logs) == 1:
+        result = created_logs[0].to_dict()
+        if plan_updated is not None:
+            result['plan_updated'] = plan_updated
+        return jsonify(result), 201
+    
+    return jsonify({
+        'created_logs': [l.to_dict() for l in created_logs],
+        'count': len(created_logs),
+        'photo_path': photo_saved,
+        'plan_updated': plan_updated,
+        'message': f'Logged {len(created_logs)} items for {meal_type}',
+    }), 201
 
 
 def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason=''):
