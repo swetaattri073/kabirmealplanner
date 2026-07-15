@@ -446,23 +446,88 @@ class NutritionEngine:
             }
             alerts.append(alert)
         
-        # Check for variety
-        from models import MealLog
+        # Check for variety - IMPORTANT for preventing picky eating
+        from models import MealLog, FoodPreference
+        
         unique_foods = self.db.query(MealLog.food_id).filter(
             MealLog.toddler_id == toddler.id,
             MealLog.date >= date.today() - timedelta(days=7),
             MealLog.food_id.isnot(None)
         ).distinct().count()
         
-        if unique_foods < 10 and days_tracked >= 3:
+        # Get food preferences to check for selectivity
+        prefs = FoodPreference.query.filter_by(toddler_id=toddler.id).all()
+        refused_foods = [p for p in prefs if p.preference_score < 0]
+        challenging_foods = [p for p in prefs if p.preference_score < 0 and p.times_offered >= 10]
+        needs_exposure = [p for p in prefs if p.needs_reexposure()]
+        
+        # Variety alerts
+        if unique_foods < 8 and days_tracked >= 3:
+            alerts.append({
+                'type': 'variety',
+                'severity': 'warning',
+                'nutrient': None,
+                'message': f'⚠️ Only {unique_foods} different foods this week - toddler may be becoming selective!',
+                'recommendation': 'Food selectivity can lead to nutrient gaps. Try introducing 1-2 new foods alongside favorites.',
+                'recommended_foods': [],
+                'tips': [
+                    'Pair new foods with accepted favorites on the same plate',
+                    'Let toddler see you eating and enjoying the same foods',
+                    'Offer new foods when toddler is hungry but not starving',
+                    'Don\'t force - just keep offering with no pressure'
+                ]
+            })
+        elif unique_foods < 12 and days_tracked >= 3:
             alerts.append({
                 'type': 'variety',
                 'severity': 'info',
                 'nutrient': None,
-                'message': f'Only {unique_foods} different foods this week. Try to include more variety.',
-                'recommendation': 'Aim for 15-20 different foods per week for balanced nutrition.',
+                'message': f'Only {unique_foods} different foods this week. Aim for 15-20 for better nutrition.',
+                'recommendation': 'More variety ensures broader nutrient intake and prevents picky eating.',
                 'recommended_foods': []
             })
+        
+        # Selectivity/Picky eating alert
+        if len(refused_foods) > 5 and len(prefs) > 0:
+            refusal_rate = len(refused_foods) / len(prefs) * 100
+            if refusal_rate > 30:
+                alerts.append({
+                    'type': 'selectivity',
+                    'severity': 'warning',
+                    'nutrient': None,
+                    'message': f'🍽️ Toddler has refused {len(refused_foods)} foods ({refusal_rate:.0f}% of tried foods). This is normal but needs attention.',
+                    'recommendation': 'Research shows it takes 10-15 exposures for a child to accept new food. Keep offering!',
+                    'recommended_foods': [],
+                    'tips': [
+                        f'{len(needs_exposure)} foods are ready for re-exposure this week',
+                        'Serve tiny portions of refused foods alongside favorites',
+                        'Make mealtimes stress-free - no bribing or forcing',
+                        'Involve toddler in food prep when safe',
+                        'Model eating the same foods yourself'
+                    ]
+                })
+        
+        # Re-exposure reminder
+        if len(needs_exposure) > 0 and days_tracked >= 3:
+            food_names = []
+            for pref in needs_exposure[:3]:
+                if pref.food:
+                    food_names.append(pref.food.name)
+            
+            if food_names:
+                alerts.append({
+                    'type': 'reexposure',
+                    'severity': 'info',
+                    'nutrient': None,
+                    'message': f'💪 Time to retry: {", ".join(food_names)} (and {len(needs_exposure) - 3} more)' if len(needs_exposure) > 3 else f'💪 Time to retry: {", ".join(food_names)}',
+                    'recommendation': 'These foods were refused before but haven\'t been offered in 3+ days. Try again!',
+                    'recommended_foods': [{'id': p.food_id, 'name': p.food.name if p.food else 'Unknown'} for p in needs_exposure[:5]],
+                    'tips': [
+                        'Offer a tiny taste alongside a favorite food',
+                        'Stay neutral - don\'t show disappointment if refused',
+                        'Praise any interaction (touching, smelling, licking counts!)'
+                    ]
+                })
         
         return alerts
     

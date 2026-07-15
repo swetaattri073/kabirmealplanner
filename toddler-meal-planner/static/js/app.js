@@ -587,8 +587,13 @@ function renderPreferences(data) {
     // Render neutral foods
     renderPreferenceSection('neutral-foods', data.neutral, '😐 Neutral', 'neutral');
     
-    // Render disliked foods
-    renderPreferenceSection('disliked-foods', data.disliked, '❌ Refused', 'disliked');
+    // Render foods needing re-exposure (refused but < 15 exposures)
+    const needsExposure = data.disliked?.filter(p => p.exposures_remaining > 0) || [];
+    renderExposureSection('needs-exposure-foods', needsExposure);
+    
+    // Render challenging foods (refused after 15+ tries)
+    const challenging = data.disliked?.filter(p => p.exposures_remaining === 0) || [];
+    renderPreferenceSection('disliked-foods', challenging, '🙅 Challenging', 'disliked');
 }
 
 function renderPreferenceSection(containerId, foods, title, type) {
@@ -618,6 +623,45 @@ function renderPreferenceSection(containerId, foods, title, type) {
                     <div class="preference-food">${pref.food?.name || 'Unknown'}</div>
                     <div class="preference-stats">
                         Offered ${pref.times_offered}x ${acceptRate ? `• ${acceptRate}` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderExposureSection(containerId, foods) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    if (!foods || foods.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 1rem;">
+                <p>Great! No foods currently need re-exposure.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `<div class="preference-grid">`;
+    
+    foods.forEach(pref => {
+        const exposuresLeft = pref.exposures_remaining || 0;
+        const needsRetry = pref.needs_reexposure;
+        
+        html += `
+            <div class="preference-item" style="${needsRetry ? 'border: 2px solid var(--warning);' : ''}">
+                <div class="preference-score" style="background: ${needsRetry ? 'rgba(234, 179, 8, 0.2)' : 'rgba(99, 102, 241, 0.1)'}; color: ${needsRetry ? 'var(--warning)' : 'var(--primary)'};">
+                    ${needsRetry ? '🔄' : '📊'}
+                </div>
+                <div class="preference-info">
+                    <div class="preference-food">${pref.food?.name || 'Unknown'}</div>
+                    <div class="preference-stats">
+                        ${pref.times_offered} of 15 exposures • ${exposuresLeft} more to go
+                        ${needsRetry ? '<br><strong style="color: var(--warning);">Ready to retry!</strong>' : ''}
                     </div>
                 </div>
             </div>

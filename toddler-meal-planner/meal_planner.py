@@ -185,22 +185,27 @@ class MealPlanner:
         return gaps
     
     def _select_food_for_meal(self, toddler, meal_type, suitable_foods, preferences, 
-                              recent_foods, nutrition_gaps, day_nutrition, used_foods, day_of_week):
+                              recent_foods, nutrition_gaps, day_nutrition, used_foods, day_of_week,
+                              include_reexposure=True):
         """
         Select the best food for a specific meal slot.
         
         ALGORITHM EXPLANATION:
         1. Filter foods by meal type (breakfast gets grains/dairy, lunch/dinner get full meals)
         2. Score each food based on:
-           - Preference score (30%): Foods the toddler likes get higher scores
+           - Preference score (25%): Foods the toddler likes get higher scores
            - Nutrition gap filling (35%): Foods rich in lacking nutrients score higher
            - Variety (20%): Foods not eaten recently score higher
-           - Day balance (15%): Ensures balanced nutrition throughout the day
+           - Day balance (10%): Ensures balanced nutrition throughout the day
+           - Re-exposure bonus (10%): Occasionally include previously refused foods
         3. Health adjustments: 
            - Underweight: Prioritize calorie-dense foods
            - Overweight: Prioritize fiber-rich, lower calorie options
            - Specific conditions: Boost foods with needed nutrients (iron for anemia, etc.)
-        4. Return top scoring food with alternatives
+        4. IMPORTANT: We DON'T remove refused foods - research shows 10-15 exposures 
+           are needed for acceptance. Instead, we schedule them occasionally alongside 
+           accepted foods to encourage gradual acceptance.
+        5. Return top scoring food with alternatives
         """
         
         # Filter foods appropriate for meal type
@@ -218,18 +223,37 @@ class MealPlanner:
         weight_status = toddler.get_weight_status()
         calorie_adjustment = toddler.get_calorie_adjustment()
         
+        # Get foods that need re-exposure (previously refused but not offered recently)
+        from models import FoodPreference
+        reexposure_foods = set()
+        if include_reexposure:
+            prefs = FoodPreference.query.filter_by(toddler_id=toddler.id).all()
+            for pref in prefs:
+                if pref.needs_reexposure():
+                    reexposure_foods.add(pref.food_id)
+        
         for food in meal_foods:
             score = 0
             reasons = []
             
-            # 1. Preference score (weight: 30%)
+            # 1. Preference score (weight: 25%)
             pref_score = preferences.get(food.id, 0)
-            # Normalize to 0-10
-            pref_normalized = (pref_score + 2) * 2.5
-            score += pref_normalized * 0.3
+            # Normalize to 0-10, but don't heavily penalize negative scores
+            # This ensures refused foods still appear occasionally
+            pref_normalized = (max(pref_score, -0.5) + 2) * 2.5
+            score += pref_normalized * 0.25
             
             if pref_score >= 1:
                 reasons.append("Liked by toddler")
+            
+            # 1b. Re-exposure bonus (weight: 10%)
+            # Give bonus to foods that need more exposure attempts
+            if food.id in reexposure_foods:
+                # Add to 1-2 meals per week for re-exposure
+                # Only add if this is the right day (spread across week)
+                if day_of_week % 3 == 0:  # Every 3rd day
+                    score += 5 * 0.10
+                    reasons.append("Re-exposure (building acceptance)")
             
             # 2. Nutrition gap filling (weight: 35%)
             nutrition_score = 0

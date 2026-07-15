@@ -392,13 +392,20 @@ class FoodPreference(db.Model):
     food = db.relationship('Food', backref='preferences')
     
     def update_from_reaction(self, reaction):
-        """Update preference based on meal reaction"""
+        """
+        Update preference based on meal reaction.
+        
+        IMPORTANT: We don't heavily penalize refused foods because:
+        - Research shows 10-15 exposures needed for acceptance
+        - Removing refused foods reinforces picky eating
+        - We want to encourage continued exposure with accepted foods
+        """
         reaction_scores = {
             'loved': 2,
             'liked': 1,
             'neutral': 0,
-            'disliked': -1,
-            'refused': -2
+            'disliked': -0.3,  # Mild penalty - still offer occasionally
+            'refused': -0.5    # Mild penalty - need more exposure, not less
         }
         
         score = reaction_scores.get(reaction, 0)
@@ -406,10 +413,45 @@ class FoodPreference(db.Model):
         if score > 0:
             self.times_accepted += 1
         
-        # Weighted average favoring recent reactions
+        # Weighted average - but floor the score at -1 to ensure food still appears
         weight = 0.3  # New reaction weight
-        self.preference_score = (1 - weight) * self.preference_score + weight * score
+        new_score = (1 - weight) * self.preference_score + weight * score
+        
+        # Don't let score go below -1 (ensures food still gets offered occasionally)
+        self.preference_score = max(new_score, -1.0)
         self.last_offered = date.today()
+    
+    def needs_reexposure(self):
+        """
+        Check if this food should be re-offered for exposure.
+        Foods that were refused but haven't been offered in 3+ days should be tried again.
+        """
+        if self.preference_score >= 0:
+            return False  # Already accepted
+        
+        if not self.last_offered:
+            return True
+        
+        days_since_offered = (date.today() - self.last_offered).days
+        
+        # Re-offer refused foods every 3-5 days
+        if self.preference_score < 0 and days_since_offered >= 3:
+            return True
+        
+        return False
+    
+    def get_exposure_status(self):
+        """Get exposure status for display"""
+        if self.times_offered < 5:
+            return 'new'  # Still introducing
+        elif self.times_offered < 15 and self.preference_score < 0:
+            return 'needs_exposure'  # Needs more tries (research: 10-15 exposures)
+        elif self.preference_score >= 1:
+            return 'accepted'
+        elif self.preference_score >= 0:
+            return 'neutral'
+        else:
+            return 'challenging'  # Offered 15+ times, still refused
     
     def to_dict(self):
         return {
@@ -417,11 +459,14 @@ class FoodPreference(db.Model):
             'toddler_id': self.toddler_id,
             'food_id': self.food_id,
             'food': self.food.to_dict() if self.food else None,
-            'preference_score': self.preference_score,
+            'preference_score': round(self.preference_score, 2),
             'times_offered': self.times_offered,
             'times_accepted': self.times_accepted,
-            'acceptance_rate': (self.times_accepted / self.times_offered * 100) if self.times_offered > 0 else None,
-            'last_offered': self.last_offered.isoformat() if self.last_offered else None
+            'acceptance_rate': round(self.times_accepted / self.times_offered * 100, 1) if self.times_offered > 0 else None,
+            'last_offered': self.last_offered.isoformat() if self.last_offered else None,
+            'needs_reexposure': self.needs_reexposure(),
+            'exposure_status': self.get_exposure_status(),
+            'exposures_remaining': max(0, 15 - self.times_offered) if self.preference_score < 0 else 0
         }
 
 
