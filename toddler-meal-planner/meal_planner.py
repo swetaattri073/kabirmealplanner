@@ -1,5 +1,5 @@
 """
-Meal Planning Algorithm for Toddler Meal Planner
+Meal Planning Algorithm for LittleBowl
 Generates personalized meal plans based on preferences, nutrition, and variety
 """
 

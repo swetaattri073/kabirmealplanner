@@ -1,5 +1,5 @@
 """
-Toddler Meal Planner - Main Flask Application
+LittleBowl - Main Flask Application
 A personalized meal planning app for Indian toddlers
 """
 

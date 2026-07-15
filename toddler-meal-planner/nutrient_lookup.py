@@ -15,7 +15,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "KabirMealPlanner/1.0 (toddler meal planner; github.com/swetaattri073/kabirmealplanner)"
+USER_AGENT = "LittleBowl/1.0 (LittleBowl; github.com/swetaattri073/kabirmealplanner)"
 
 # Rough per-100g estimates when external lookup fails (Indian toddler-oriented)
 CATEGORY_ESTIMATES: Dict[str, Dict[str, float]] = {

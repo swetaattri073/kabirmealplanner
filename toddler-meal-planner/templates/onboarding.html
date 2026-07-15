@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome - Toddler Meal Planner</title>
+    <title>Welcome - LittleBowl</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -90,57 +91,15 @@
         .hero-illustration {
             position: relative;
             z-index: 1;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }
         
-        .hero-plate {
-            width: 120px;
-            height: 120px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            position: relative;
-            animation: float 3s ease-in-out infinite;
-        }
-        
-        .hero-plate::before {
-            content: '';
-            position: absolute;
-            inset: 8px;
-            border: 3px dashed var(--border-color);
-            border-radius: 50%;
-        }
-        
-        .hero-plate-icon {
-            font-size: 3.5rem;
-        }
-        
-        .hero-foods {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-        }
-        
-        .hero-food {
-            position: absolute;
-            font-size: 2rem;
-            animation: orbit 8s linear infinite;
-        }
-        
-        .hero-food:nth-child(1) { animation-delay: 0s; }
-        .hero-food:nth-child(2) { animation-delay: -2s; }
-        .hero-food:nth-child(3) { animation-delay: -4s; }
-        .hero-food:nth-child(4) { animation-delay: -6s; }
-        
-        @keyframes orbit {
-            from { transform: rotate(0deg) translateX(80px) rotate(0deg); }
-            to { transform: rotate(360deg) translateX(80px) rotate(-360deg); }
+        .onboarding-logo {
+            width: min(240px, 70vw);
+            height: auto;
+            border-radius: 1.25rem;
+            box-shadow: 0 12px 36px rgba(0,0,0,0.18);
+            background: #fffaf0;
         }
         
         .onboarding-hero h1 {
@@ -151,7 +110,11 @@
             position: relative;
             z-index: 1;
             text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            letter-spacing: -0.02em;
         }
+        
+        .onboarding-hero .brand-little { color: #e8f5c8; }
+        .onboarding-hero .brand-bowl { color: #ffd4a8; }
         
         .onboarding-hero p {
             color: rgba(255,255,255,0.9);
@@ -318,18 +281,10 @@
             <!-- Hero Section -->
             <div class="onboarding-hero">
                 <div class="hero-illustration">
-                    <div class="hero-plate">
-                        <span class="hero-plate-icon">👶</span>
-                        <div class="hero-foods">
-                            <span class="hero-food">🥕</span>
-                            <span class="hero-food">🍎</span>
-                            <span class="hero-food">🥦</span>
-                            <span class="hero-food">🍌</span>
-                        </div>
-                    </div>
+                    <img src="{{ url_for('static', filename='images/littlebowl-logo.png') }}" alt="LittleBowl" class="onboarding-logo" width="220" height="220">
                 </div>
-                <h1>Toddler Meal Planner</h1>
-                <p>Nutritious Indian meals for your little one!</p>
+                <h1><span class="brand-little">Little</span><span class="brand-bowl">Bowl</span></h1>
+                <p>Little meals, big growth. Nutritious Indian meals for your little one!</p>
             </div>
             
             <!-- Form Section -->

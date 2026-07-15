@@ -1,28 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#f97316;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <!-- Background circle -->
-  <circle cx="256" cy="256" r="240" fill="url(#grad)"/>
-  <!-- Plate -->
-  <ellipse cx="256" cy="280" rx="140" ry="100" fill="#ffffff" opacity="0.95"/>
-  <ellipse cx="256" cy="280" rx="120" ry="85" fill="#f1f5f9"/>
-  <!-- Food items on plate -->
-  <!-- Rice/grain -->
-  <ellipse cx="220" cy="260" rx="45" ry="30" fill="#fef3c7"/>
-  <!-- Dal/curry -->
-  <ellipse cx="300" cy="270" rx="35" ry="25" fill="#fbbf24"/>
-  <!-- Vegetable -->
-  <circle cx="250" cy="300" r="20" fill="#22c55e"/>
-  <!-- Spoon -->
-  <ellipse cx="380" cy="320" rx="15" ry="35" fill="#e2e8f0" transform="rotate(30, 380, 320)"/>
-  <rect x="375" y="340" width="10" height="60" rx="5" fill="#e2e8f0" transform="rotate(30, 380, 370)"/>
-  <!-- Baby face icon at top -->
-  <circle cx="256" cy="140" r="50" fill="#fef3c7"/>
-  <circle cx="240" cy="130" r="8" fill="#1e293b"/>
-  <circle cx="272" cy="130" r="8" fill="#1e293b"/>
-  <path d="M 240 155 Q 256 170 272 155" stroke="#1e293b" stroke-width="4" fill="none" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LittleBowl">
+  <rect width="512" height="512" rx="96" fill="#FFF8EB"/>
+  <circle cx="256" cy="236" r="170" fill="#F6E7A8"/>
+  <ellipse cx="256" cy="320" rx="145" ry="95" fill="#A8D18A"/>
+  <ellipse cx="256" cy="300" rx="120" ry="55" fill="#F5F0E6"/>
+  <circle cx="210" cy="290" r="22" fill="#F97316"/>
+  <circle cx="256" cy="305" r="20" fill="#4CAF50"/>
+  <ellipse cx="300" cy="285" rx="28" ry="16" fill="#F5E6C8"/>
+  <circle cx="256" cy="160" r="58" fill="#F2D0A7"/>
+  <path d="M210 145c12-28 36-40 46-40s34 12 46 40c-18-8-34-8-46-8s-28 0-46 8z" fill="#5B4636"/>
+  <circle cx="238" cy="158" r="7" fill="#2F2A26"/>
+  <circle cx="274" cy="158" r="7" fill="#2F2A26"/>
+  <path d="M238 180c10 12 26 12 36 0" stroke="#2F2A26" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M330 210c18 30 28 58 30 86" stroke="#6B8F3C" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <ellipse cx="344" cy="200" rx="18" ry="12" fill="#6B8F3C"/>
+  <text x="256" y="460" text-anchor="middle" font-family="Nunito, Arial, sans-serif" font-size="56" font-weight="800">
+    <tspan fill="#6B8F3C">Little</tspan><tspan fill="#F97316">Bowl</tspan>
+  </text>
 </svg>

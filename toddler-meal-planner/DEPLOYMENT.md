@@ -1,4 +1,4 @@
-# Deployment Guide - Toddler Meal Planner
+# Deployment Guide - LittleBowl
 
 ## Quick Comparison
 

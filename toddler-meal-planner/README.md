@@ -1,4 +1,6 @@
-# Toddler Meal Planner
+# LittleBowl
+
+**Little meals, big growth.**
 
 A personalized meal planning application for Indian toddlers (6 months - 5 years). Track daily meals, get nutrition insights, and receive customized meal plans based on your child's preferences and nutritional needs.
 

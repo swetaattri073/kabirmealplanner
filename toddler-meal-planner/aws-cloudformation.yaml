@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Toddler Meal Planner - One-click deployment on AWS Lightsail'
+Description: 'LittleBowl - One-click deployment on AWS Lightsail'
 
 Parameters:
   InstanceName:
@@ -77,7 +77,7 @@ Resources:
         chown -R ec2-user:ec2-user /home/ec2-user/meal-planner-data
       Tags:
         - Key: Application
-          Value: ToddlerMealPlanner
+          Value: LittleBowl
 
   MealPlannerStaticIp:
     Type: AWS::Lightsail::StaticIp
@@ -104,11 +104,11 @@ Resources:
 
 Outputs:
   InstancePublicIp:
-    Description: Public IP of your Meal Planner
+    Description: Public IP of your LittleBowl
     Value: !GetAtt MealPlannerStaticIp.IpAddress
   
   ApplicationURL:
-    Description: URL to access your Meal Planner (wait 5 min after deployment)
+    Description: URL to access your LittleBowl (wait 5 min after deployment)
     Value: !Sub 'http://${MealPlannerStaticIp.IpAddress}'
   
   SSHCommand:

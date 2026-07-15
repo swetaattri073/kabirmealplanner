@@ -1,5 +1,5 @@
 """
-Database models for Toddler Meal Planner
+Database models for LittleBowl
 Uses SQLite with SQLAlchemy ORM
 """
 

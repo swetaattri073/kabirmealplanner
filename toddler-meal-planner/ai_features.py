@@ -1,5 +1,5 @@
 """
-AI Features for Toddler Meal Planner
+AI Features for LittleBowl
 - Natural Language Meal Parsing
 - Food Similarity (Semantic Search)
 - Image-based Food Recognition (placeholder for TensorFlow.js integration)

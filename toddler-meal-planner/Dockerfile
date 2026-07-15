@@ -1,4 +1,4 @@
-# Toddler Meal Planner - Docker Configuration
+# LittleBowl - Docker Configuration
 FROM python:3.11-slim
 
 # Set environment variables

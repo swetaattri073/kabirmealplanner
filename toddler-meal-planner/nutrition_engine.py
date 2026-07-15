@@ -1,5 +1,5 @@
 """
-Nutrition Engine for Toddler Meal Planner
+Nutrition Engine for LittleBowl
 Handles RDA calculations, deficiency detection, and meal suggestions
 Based on Indian RDA (NIN - National Institute of Nutrition) guidelines
 """

@@ -1,5 +1,5 @@
 /**
- * Toddler Meal Planner - Frontend JavaScript
+ * LittleBowl - Frontend JavaScript
  */
 
 // API Base URL

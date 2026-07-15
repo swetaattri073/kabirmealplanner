@@ -1,4 +1,4 @@
-// Service Worker for Toddler Meal Planner PWA
+// Service Worker for LittleBowl PWA
 const CACHE_NAME = 'toddler-meal-planner-v1';
 const urlsToCache = [
   '/',
@@ -127,7 +127,7 @@ self.addEventListener('push', event => {
   };
 
   event.waitUntil(
-    self.registration.showNotification('Toddler Meal Planner', options)
+    self.registration.showNotification('LittleBowl', options)
   );
 });
 

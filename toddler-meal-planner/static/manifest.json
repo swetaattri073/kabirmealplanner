@@ -1,11 +1,11 @@
 {
-  "name": "Toddler Meal Planner",
-  "short_name": "MealPlanner",
-  "description": "Personalized meal planning for Indian toddlers with nutrition tracking",
+  "name": "LittleBowl",
+  "short_name": "LittleBowl",
+  "description": "Little meals, big growth. Personalized meal planning for Indian toddlers with nutrition tracking",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#6366f1",
+  "background_color": "#fffaf0",
+  "theme_color": "#6b8f3c",
   "orientation": "portrait-primary",
   "icons": [
     {
