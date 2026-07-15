@@ -35,6 +35,12 @@ async function apiCall(endpoint, method = 'GET', data = null) {
     }
 }
 
+function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -142,12 +148,20 @@ function renderMealSchedule(data) {
     const allMeals = [...(data.schedule?.meals || []), ...(data.schedule?.snacks || [])];
     const todayLogs = data.today_logs || [];
     const suggestions = data.suggestions || {};
+    const plannedMeals = data.today_plan?.meals || {};
     
     let html = '';
     allMeals.forEach(mealType => {
         const isEaten = data.meals_eaten?.includes(mealType);
         const log = todayLogs.find(l => l.meal_type === mealType);
+        const plannedName = getPlannedMealDisplayName(plannedMeals[mealType]);
         const suggestion = suggestions[mealType]?.[0];
+        let pendingLabel = 'Not planned yet';
+        if (plannedName) {
+            pendingLabel = plannedName;
+        } else if (suggestion?.food?.name) {
+            pendingLabel = `Suggested: ${suggestion.food.name}`;
+        }
         
         html += `
             <div class="meal-slot ${isEaten ? 'completed' : 'pending'}">
@@ -157,7 +171,7 @@ function renderMealSchedule(data) {
                     <div class="meal-food">
                         ${isEaten 
                             ? (log?.food?.name || log?.custom_food_name || 'Logged') 
-                            : (suggestion?.food?.name ? `Suggested: ${suggestion.food.name}` : 'Not logged yet')}
+                            : pendingLabel}
                     </div>
                 </div>
                 ${isEaten 
@@ -511,6 +525,17 @@ function selectAdaptedFood(item) {
 
 let currentWeekStart = null;
 
+/** Display name for a planned meal (matches Log Meal: summary / food / main). */
+function getPlannedMealDisplayName(meal) {
+    if (!meal) return '';
+    if (meal.display_name) return meal.display_name;
+    if (meal.is_complete_meal && meal.summary) return meal.summary;
+    return meal.food?.name
+        || meal.main?.food?.name
+        || meal.main?.food_name
+        || '';
+}
+
 async function loadWeeklyPlan(toddlerId, weekStart = null) {
     try {
         let url = `/meal-plan/weekly/${toddlerId}`;
@@ -549,12 +574,14 @@ function renderWeeklyPlan(plan) {
                     <div class="day-date">${formatDate(day.date)}</div>
                 </div>
                 <div class="day-meals">
-                    ${Object.entries(day.meals || {}).map(([mealType, meal]) => `
+                    ${Object.entries(day.meals || {}).map(([mealType, meal]) => {
+                        const name = getPlannedMealDisplayName(meal) || 'Not planned';
+                        return `
                         <div class="day-meal">
                             <div class="day-meal-type">${getMealTypeIcon(mealType)} ${formatMealType(mealType)}</div>
-                            <div class="day-meal-food">${meal.food?.name || 'Not planned'}</div>
-                        </div>
-                    `).join('')}
+                            <div class="day-meal-food">${escapeHtml(name)}</div>
+                        </div>`;
+                    }).join('')}
                 </div>
             </div>
         `;

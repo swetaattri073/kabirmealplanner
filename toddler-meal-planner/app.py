@@ -1794,7 +1794,7 @@ def recognize_food():
         sources.append('meal_suggestions')
         category_prefs = {
             'breakfast': ['breakfast', 'grain', 'dairy', 'fruit'],
-            'morning_snack': ['fruit', 'dairy', 'snack'],
+            'mid_morning_snack': ['fruit', 'dairy', 'snack'],
             'lunch': ['dal', 'curry', 'vegetable', 'grain', 'complete'],
             'evening_snack': ['fruit', 'dairy', 'snack'],
             'dinner': ['dal', 'curry', 'vegetable', 'grain', 'complete'],
@@ -1862,9 +1862,23 @@ def get_dashboard_data(toddler_id):
     # Alerts
     alerts = engine.generate_alerts(toddler)
     
-    # Daily suggestions
+    # Today's plan from the same weekly-plan source as Log Meal / Weekly Plan
     planner = MealPlanner(db.session)
+    week_start = today - timedelta(days=today.weekday())
+    weekly = planner.generate_weekly_plan(toddler, week_start, regenerate=False)
+    today_plan = next(
+        (d for d in weekly.get('days', []) if d.get('date') == today.isoformat()),
+        None
+    )
+    
+    # Fallback suggestions only for slots with no plan entry
     suggestions = planner.get_daily_suggestions(toddler, today)
+    planned_types = set((today_plan or {}).get('meals', {}).keys())
+    fallback_suggestions = {
+        mt: foods
+        for mt, foods in (suggestions.get('suggestions') or {}).items()
+        if mt not in planned_types
+    }
     
     # Schedule
     schedule = toddler.get_recommended_schedule()
@@ -1878,9 +1892,10 @@ def get_dashboard_data(toddler_id):
         'meals_eaten': list(eaten_meals),
         'meals_remaining': [m for m in all_meals if m not in eaten_meals],
         'today_logs': [l.to_dict() for l in today_logs],
+        'today_plan': today_plan,
         'nutrition': nutrition,
         'alerts': alerts[:3],  # Top 3 alerts
-        'suggestions': suggestions.get('suggestions', {})
+        'suggestions': fallback_suggestions
     })
 
 
