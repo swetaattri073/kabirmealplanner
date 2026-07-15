@@ -118,6 +118,44 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Daily Enhancement Tip -->
+        <div class="card">
+            <div class="card-header">
+                <h2>✨ Make It More Nutritious</h2>
+            </div>
+            <div class="card-body">
+                <div id="daily-tip-container">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="#" onclick="loadFlavorExploration({{ toddler.id }}); return false;" style="color: var(--primary); font-weight: 600;">
+                    🔍 Explore new flavors based on favorites →
+                </a>
+            </div>
+        </div>
+        
+        <!-- Flavor Exploration -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🌈 Try New Flavors</h2>
+            </div>
+            <div class="card-body">
+                <div id="flavor-exploration-container">
+                    <p style="color: var(--text-secondary);">
+                        Based on what {{ toddler.name }} already likes, here are similar foods to try...
+                    </p>
+                    <div id="flavor-suggestions" style="margin-top: 1rem;">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -184,5 +222,89 @@
     function showHealthModal() {
         alert('Health update modal - coming soon! For now, you can update via the API.');
     }
+    
+    // Load daily tip
+    async function loadDailyTip(toddlerId) {
+        try {
+            const data = await apiCall(`/daily-tip/${toddlerId}`);
+            renderDailyTip(data.tip);
+        } catch (error) {
+            console.error('Failed to load daily tip:', error);
+        }
+    }
+    
+    function renderDailyTip(tip) {
+        const container = document.getElementById('daily-tip-container');
+        if (!container || !tip) return;
+        
+        container.innerHTML = `
+            <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(249, 115, 22, 0.1)); padding: 1.25rem; border-radius: var(--radius-md);">
+                <h4 style="margin-bottom: 0.5rem; color: var(--primary);">
+                    ${tip.title || 'Nutrition Tip'}
+                </h4>
+                ${tip.food ? `<p style="margin-bottom: 0.5rem;"><strong>For ${tip.food}:</strong></p>` : ''}
+                <p style="font-size: 1rem; margin-bottom: 0.5rem;">
+                    <strong>${tip.method}</strong> → ${tip.benefit}
+                </p>
+                <p style="font-size: 0.9rem; color: var(--text-secondary);">
+                    💡 How: ${tip.how}
+                </p>
+            </div>
+        `;
+    }
+    
+    // Load flavor exploration
+    async function loadFlavorExploration(toddlerId) {
+        try {
+            const data = await apiCall(`/explore-flavors/${toddlerId}`);
+            renderFlavorSuggestions(data);
+        } catch (error) {
+            console.error('Failed to load flavor suggestions:', error);
+        }
+    }
+    
+    function renderFlavorSuggestions(data) {
+        const container = document.getElementById('flavor-suggestions');
+        if (!container) return;
+        
+        if (!data.suggestions || data.suggestions.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="padding: 1rem;">
+                    <p>Log more meal reactions to get personalized flavor suggestions!</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        data.suggestions.forEach(suggestion => {
+            html += `
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 0.75rem;">
+                    <div style="font-weight: 600; margin-bottom: 0.5rem;">
+                        Because ${data.toddler_name || 'toddler'} likes: 
+                        <span style="color: var(--success);">${suggestion.because_likes.slice(0, 2).join(', ')}</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                        ${suggestion.description}
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        ${suggestion.try_these.map(food => `
+                            <span class="food-chip" style="background: rgba(99, 102, 241, 0.1); border-color: var(--primary);">
+                                🆕 ${food}
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDailyTip({{ toddler.id }});
+        loadFlavorExploration({{ toddler.id }});
+    });
 </script>
 {% endblock %}

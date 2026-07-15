@@ -16,6 +16,10 @@ from models import db, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, Nutri
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
 from meal_planner import MealPlanner, update_preferences_from_log
+from food_enhancer import (
+    get_enhancement_suggestions, get_flavor_exploration, 
+    get_daily_enhancement_tip, get_all_boosters, NUTRITION_BOOSTERS
+)
 
 # Create Flask app
 app = Flask(__name__)
@@ -577,6 +581,110 @@ def update_preference(toddler_id, food_id):
     
     db.session.commit()
     return jsonify(pref.to_dict())
+
+
+# --- Food Enhancement & Flavor Exploration ---
+
+@app.route('/api/enhance/<int:toddler_id>', methods=['GET'])
+def get_food_enhancements(toddler_id):
+    """Get enhancement suggestions for a specific food"""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    food_name = request.args.get('food')
+    
+    if not food_name:
+        return jsonify({'error': 'Food name is required'}), 400
+    
+    suggestions = get_enhancement_suggestions(food_name, toddler)
+    return jsonify(suggestions)
+
+
+@app.route('/api/enhance/liked/<int:toddler_id>', methods=['GET'])
+def get_liked_food_enhancements(toddler_id):
+    """Get enhancement suggestions for all liked foods"""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    
+    # Get liked foods
+    prefs = FoodPreference.query.filter(
+        FoodPreference.toddler_id == toddler_id,
+        FoodPreference.preference_score >= 1
+    ).all()
+    
+    enhancements = []
+    for pref in prefs:
+        if pref.food:
+            suggestions = get_enhancement_suggestions(pref.food.name, toddler)
+            if suggestions.get('boosts') or suggestions.get('flavor_variations'):
+                enhancements.append({
+                    'food': pref.food.to_dict(),
+                    'preference_score': pref.preference_score,
+                    'enhancements': suggestions
+                })
+    
+    return jsonify({
+        'toddler_id': toddler_id,
+        'toddler_name': toddler.name,
+        'liked_foods_with_enhancements': enhancements
+    })
+
+
+@app.route('/api/explore-flavors/<int:toddler_id>', methods=['GET'])
+def explore_flavors(toddler_id):
+    """Get flavor exploration suggestions based on liked foods"""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    
+    # Get liked foods
+    prefs = FoodPreference.query.filter(
+        FoodPreference.toddler_id == toddler_id,
+        FoodPreference.preference_score >= 0.5
+    ).all()
+    
+    liked_foods = [{'name': p.food.name, 'score': p.preference_score} 
+                   for p in prefs if p.food]
+    
+    exploration = get_flavor_exploration(liked_foods, toddler)
+    
+    return jsonify({
+        'toddler_id': toddler_id,
+        'toddler_name': toddler.name,
+        **exploration
+    })
+
+
+@app.route('/api/daily-tip/<int:toddler_id>', methods=['GET'])
+def get_daily_tip(toddler_id):
+    """Get a daily enhancement tip"""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    
+    # Get liked foods
+    prefs = FoodPreference.query.filter(
+        FoodPreference.toddler_id == toddler_id,
+        FoodPreference.preference_score >= 1
+    ).all()
+    
+    liked_foods = [{'name': p.food.name} for p in prefs if p.food]
+    
+    tip = get_daily_enhancement_tip(toddler, liked_foods)
+    
+    if not tip:
+        # Fallback generic tip
+        tip = {
+            'tip_type': 'general',
+            'title': 'Nutrition Tip',
+            'method': 'Add ghee to meals',
+            'benefit': 'Healthy fats for brain development',
+            'how': 'Add 1 tsp ghee to dal, rice, or rotis'
+        }
+    
+    return jsonify({
+        'toddler_id': toddler_id,
+        'tip': tip
+    })
+
+
+@app.route('/api/nutrition-boosters', methods=['GET'])
+def get_nutrition_boosters():
+    """Get all nutrition boosters organized by nutrient"""
+    return jsonify(get_all_boosters())
 
 
 # --- Dashboard Data ---
