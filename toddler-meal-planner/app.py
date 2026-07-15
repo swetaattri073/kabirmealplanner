@@ -902,6 +902,22 @@ def reseed_foods():
 
 # --- Meal Logging ---
 
+def _normalize_portion_for_reaction(portion_eaten_percent, toddler_reaction):
+    """
+    Align stored portion with reaction for accurate nutrition stats.
+    Refused foods are stored as 0% eaten.
+    """
+    reaction = (toddler_reaction or '').lower().strip()
+    if reaction == 'refused':
+        return 0
+    if portion_eaten_percent is None:
+        return 100
+    try:
+        return max(0, min(100, int(portion_eaten_percent)))
+    except (TypeError, ValueError):
+        return 100
+
+
 @app.route('/api/meal-logs', methods=['GET'])
 def get_meal_logs():
     """Get meal logs with optional filtering"""
@@ -992,6 +1008,11 @@ def create_meal_log():
         if not reaction:
             return jsonify({'error': f'Reaction required for {item.get("name") or "each food"}'}), 400
         
+        portion = _normalize_portion_for_reaction(
+            item.get('portion_eaten_percent', 100),
+            reaction,
+        )
+        
         log = MealLog(
             toddler_id=toddler.id,
             food_id=item.get('food_id'),
@@ -999,7 +1020,7 @@ def create_meal_log():
             meal_type=meal_type,
             custom_food_name=item.get('custom_food_name'),
             portion_offered_g=item.get('portion_offered_g'),
-            portion_eaten_percent=item.get('portion_eaten_percent', 100),
+            portion_eaten_percent=portion,
             is_adult_meal_adapted=data.get('is_adult_meal_adapted', False),
             adult_meal_description=data.get('adult_meal_description'),
             toddler_reaction=reaction,
@@ -1166,12 +1187,16 @@ def update_meal_log(log_id):
         log.food_id = data['food_id']
     if 'custom_food_name' in data:
         log.custom_food_name = data['custom_food_name']
-    if 'portion_eaten_percent' in data:
-        log.portion_eaten_percent = data['portion_eaten_percent']
     if 'toddler_reaction' in data:
         if not data['toddler_reaction']:
             return jsonify({'error': 'Reaction is required'}), 400
         log.toddler_reaction = data['toddler_reaction']
+    if 'portion_eaten_percent' in data or 'toddler_reaction' in data:
+        portion_src = data.get('portion_eaten_percent', log.portion_eaten_percent)
+        log.portion_eaten_percent = _normalize_portion_for_reaction(
+            portion_src,
+            log.toddler_reaction,
+        )
     if 'notes' in data:
         log.notes = data['notes']
 
@@ -1220,12 +1245,16 @@ def update_meal_logs_batch():
 
         if 'food_id' in item:
             log.food_id = item['food_id']
-        if 'portion_eaten_percent' in item:
-            log.portion_eaten_percent = item['portion_eaten_percent']
         if 'toddler_reaction' in item:
             if not item['toddler_reaction']:
                 return jsonify({'error': f'Reaction required for log {log_id}'}), 400
             log.toddler_reaction = item['toddler_reaction']
+        if 'portion_eaten_percent' in item or 'toddler_reaction' in item:
+            portion_src = item.get('portion_eaten_percent', log.portion_eaten_percent)
+            log.portion_eaten_percent = _normalize_portion_for_reaction(
+                portion_src,
+                log.toddler_reaction,
+            )
         if 'notes' in item:
             log.notes = item['notes']
         updated.append(log)
@@ -1760,6 +1789,10 @@ def smart_meal_log():
         
         # Determine reaction
         reaction = parsed['food_reactions'].get(food_info['name']) or parsed['overall_reaction']
+        # Per-food ate/refused: if this food was refused, force 0% intake
+        if (reaction or '').lower() == 'refused':
+            portion = 0
+        portion = _normalize_portion_for_reaction(portion, reaction)
         
         log = MealLog(
             toddler_id=toddler.id,

@@ -603,6 +603,12 @@ function pickItemReaction(mealType, mode, idx, reaction) {
     const items = getItemState(mealType, mode);
     if (!items[idx]) return;
     items[idx].reaction = reaction;
+    // Refused meals contribute 0% to nutrition — keep portion in sync
+    if (reaction === 'refused') {
+        items[idx].portion = 0;
+    } else if (items[idx].portion === 0) {
+        items[idx].portion = 100;
+    }
     setItemState(mealType, mode, items);
     renderItemRows(mealType, mode);
 }
@@ -611,9 +617,14 @@ function setItemPortion(mealType, mode, idx, portion) {
     const items = getItemState(mealType, mode);
     if (!items[idx]) return;
     items[idx].portion = portion;
+    // Zero portion implies refused for nutrition purposes
+    if (portion === 0 && items[idx].reaction !== 'refused') {
+        items[idx].reaction = 'refused';
+    } else if (portion > 0 && items[idx].reaction === 'refused') {
+        items[idx].reaction = 'neutral';
+    }
     setItemState(mealType, mode, items);
-    const label = document.getElementById(`portion-label-${mode}-${mealType}-${idx}`);
-    if (label) label.textContent = 'Ate: ' + portion + '%';
+    renderItemRows(mealType, mode);
 }
 
 function lookupReaction(reactionsMap, itemName, foodName) {

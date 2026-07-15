@@ -431,13 +431,45 @@ class MealLog(db.Model):
     # Relationship
     food = db.relationship('Food', backref='meal_logs')
     
+    def effective_portion_eaten_percent(self):
+        """
+        Portion that contributes to nutrition stats.
+        Refused foods count as 0% eaten even if the slider was left at 100%.
+        """
+        if (self.toddler_reaction or '').lower() == 'refused':
+            return 0
+        pct = self.portion_eaten_percent
+        if pct is None:
+            return 100
+        return max(0, min(100, int(pct)))
+
     def get_actual_nutrients(self):
-        """Calculate nutrients actually consumed"""
+        """Calculate nutrients actually consumed (respects portion % and refusals)."""
         if not self.food:
             return None
-        
-        serving = self.portion_offered_g or self.food.get_serving_for_age(self.toddler.age_months)
-        actual_serving = serving * (self.portion_eaten_percent / 100.0)
+
+        portion_pct = self.effective_portion_eaten_percent()
+        if portion_pct <= 0:
+            # Zero-calorie entry so callers still see the nutrient keys when needed
+            return {
+                'calories': 0.0,
+                'protein_g': 0.0,
+                'carbs_g': 0.0,
+                'fat_g': 0.0,
+                'fiber_g': 0.0,
+                'calcium_mg': 0.0,
+                'iron_mg': 0.0,
+                'zinc_mg': 0.0,
+                'vitamin_a_mcg': 0.0,
+                'vitamin_c_mg': 0.0,
+                'vitamin_d_mcg': 0.0,
+                'vitamin_b12_mcg': 0.0,
+                'folate_mcg': 0.0,
+            }
+
+        age_months = self.toddler.age_months if self.toddler else 24
+        serving = self.portion_offered_g or self.food.get_serving_for_age(age_months)
+        actual_serving = serving * (portion_pct / 100.0)
         return self.food.get_nutrients_for_serving(actual_serving)
     
     def to_dict(self):
@@ -451,6 +483,7 @@ class MealLog(db.Model):
             'meal_type': self.meal_type,
             'portion_offered_g': self.portion_offered_g,
             'portion_eaten_percent': self.portion_eaten_percent,
+            'effective_portion_eaten_percent': self.effective_portion_eaten_percent(),
             'is_adult_meal_adapted': self.is_adult_meal_adapted,
             'adult_meal_description': self.adult_meal_description,
             'toddler_reaction': self.toddler_reaction,
