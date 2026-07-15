@@ -68,40 +68,76 @@ class MealPlanner:
             day_nutrition = defaultdict(float)
             
             for meal_type in all_meal_types:
-                # Get best food for this meal
-                food = self._select_food_for_meal(
-                    toddler=toddler,
-                    meal_type=meal_type,
-                    suitable_foods=suitable_foods,
-                    preferences=preferences,
-                    recent_foods=recent_foods,
-                    nutrition_gaps=nutrition_gaps,
-                    day_nutrition=day_nutrition,
-                    used_foods=used_foods,
-                    day_of_week=day
-                )
-                
-                if food:
-                    # Create plan entry
-                    plan_entry = WeeklyPlan(
-                        toddler_id=toddler.id,
-                        week_start=week_start,
-                        day_of_week=day,
+                # For lunch/dinner, generate complete meal (main + carb + side)
+                if meal_type in ['lunch', 'dinner']:
+                    complete_meal = self._select_complete_meal(
+                        toddler=toddler,
                         meal_type=meal_type,
-                        food_id=food['food'].id,
-                        alternatives=food.get('alternatives', []),
-                        is_generated=True,
-                        nutrition_reason=food.get('reason', '')
+                        suitable_foods=suitable_foods,
+                        preferences=preferences,
+                        recent_foods=recent_foods,
+                        nutrition_gaps=nutrition_gaps,
+                        day_nutrition=day_nutrition,
+                        used_foods=used_foods,
+                        day_of_week=day
                     )
-                    self.db.add(plan_entry)
-                    day_plan.append(plan_entry)
                     
-                    # Update tracking
-                    used_foods[food['food'].id] += 1
-                    serving = food['food'].get_serving_for_age(toddler.age_months)
-                    nutrients = food['food'].get_nutrients_for_serving(serving)
-                    for k, v in nutrients.items():
-                        day_nutrition[k] += v
+                    if complete_meal:
+                        plan_entry = WeeklyPlan(
+                            toddler_id=toddler.id,
+                            week_start=week_start,
+                            day_of_week=day,
+                            meal_type=meal_type,
+                            food_id=complete_meal['main']['food'].id,
+                            alternatives=complete_meal,  # Store full meal structure
+                            is_generated=True,
+                            nutrition_reason=complete_meal.get('reason', '')
+                        )
+                        self.db.add(plan_entry)
+                        day_plan.append(plan_entry)
+                        
+                        # Update tracking for all components
+                        for component in ['main', 'carb', 'side']:
+                            if complete_meal.get(component) and complete_meal[component].get('food'):
+                                food_item = complete_meal[component]['food']
+                                used_foods[food_item.id] += 1
+                                serving = food_item.get_serving_for_age(toddler.age_months)
+                                nutrients = food_item.get_nutrients_for_serving(serving)
+                                for k, v in nutrients.items():
+                                    day_nutrition[k] += v
+                else:
+                    # For breakfast and snacks, use single food selection
+                    food = self._select_food_for_meal(
+                        toddler=toddler,
+                        meal_type=meal_type,
+                        suitable_foods=suitable_foods,
+                        preferences=preferences,
+                        recent_foods=recent_foods,
+                        nutrition_gaps=nutrition_gaps,
+                        day_nutrition=day_nutrition,
+                        used_foods=used_foods,
+                        day_of_week=day
+                    )
+                    
+                    if food:
+                        plan_entry = WeeklyPlan(
+                            toddler_id=toddler.id,
+                            week_start=week_start,
+                            day_of_week=day,
+                            meal_type=meal_type,
+                            food_id=food['food'].id,
+                            alternatives=food.get('alternatives', []),
+                            is_generated=True,
+                            nutrition_reason=food.get('reason', '')
+                        )
+                        self.db.add(plan_entry)
+                        day_plan.append(plan_entry)
+                        
+                        used_foods[food['food'].id] += 1
+                        serving = food['food'].get_serving_for_age(toddler.age_months)
+                        nutrients = food['food'].get_nutrients_for_serving(serving)
+                        for k, v in nutrients.items():
+                            day_nutrition[k] += v
             
             weekly_plan.extend(day_plan)
         
@@ -340,32 +376,218 @@ class MealPlanner:
         if not scored_foods:
             return None
         
-        # Get top choice and alternatives (ensure variety in alternatives)
+        # Get top choice and 1 backup alternative
         top_choice = scored_foods[0]
         
-        # Get alternatives from different categories for variety
-        alternatives = []
-        used_categories = {top_choice['food'].category}
-        
-        for item in scored_foods[1:]:
-            if len(alternatives) >= 3:
-                break
-            # Prefer alternatives from different categories
-            if item['food'].category not in used_categories or len(alternatives) < 2:
-                alternatives.append({
+        # Get 1 backup from a different category if possible
+        backup = None
+        for item in scored_foods[1:5]:
+            if item['food'].category != top_choice['food'].category:
+                backup = {
                     'food_id': item['food'].id,
                     'food_name': item['food'].name,
                     'category': item['food'].category,
                     'reason': item['reason']
-                })
-                used_categories.add(item['food'].category)
+                }
+                break
+        
+        # If no different category found, just take the second best
+        if not backup and len(scored_foods) > 1:
+            item = scored_foods[1]
+            backup = {
+                'food_id': item['food'].id,
+                'food_name': item['food'].name,
+                'category': item['food'].category,
+                'reason': item['reason']
+            }
         
         return {
             'food': top_choice['food'],
             'score': top_choice['score'],
             'reason': top_choice['reason'],
-            'alternatives': alternatives
+            'backup': backup  # Single backup option
         }
+    
+    def _select_complete_meal(self, toddler, meal_type, suitable_foods, preferences,
+                              recent_foods, nutrition_gaps, day_nutrition, used_foods, day_of_week):
+        """
+        Select a complete lunch/dinner meal with:
+        - Main dish (sabji/curry/dal)
+        - Carb (roti/rice)
+        - Side (salad/dahi)
+        - Nutritious add-ins
+        """
+        
+        # Categorize foods
+        main_dishes = []  # Dal, sabzi, curry, protein
+        carbs = []        # Roti, rice
+        sides = []        # Dahi, salad, raita
+        
+        for food in suitable_foods:
+            name_lower = food.name.lower()
+            
+            # Main dishes: dal, sabzi, curry, paneer dishes, protein
+            if food.category in ['dal', 'vegetable', 'protein']:
+                main_dishes.append(food)
+            elif food.category == 'combo' and any(kw in name_lower for kw in ['paneer', 'sabzi', 'curry', 'aloo', 'gobi']):
+                main_dishes.append(food)
+            
+            # Carbs: roti, rice, paratha (plain)
+            elif food.category == 'grain':
+                if any(kw in name_lower for kw in ['rice', 'roti', 'chapati', 'paratha', 'phulka']):
+                    carbs.append(food)
+            
+            # Sides: curd, raita, salad
+            elif food.category == 'dairy' and any(kw in name_lower for kw in ['curd', 'yogurt', 'dahi', 'raita', 'lassi']):
+                sides.append(food)
+        
+        # Add cucumber/tomato as salad options if available
+        for food in suitable_foods:
+            if food.category == 'vegetable' and any(kw in food.name.lower() for kw in ['cucumber', 'tomato', 'salad']):
+                sides.append(food)
+        
+        # If no dedicated sides, use curd from dairy
+        if not sides:
+            for food in suitable_foods:
+                if food.category == 'dairy' and 'curd' in food.name.lower():
+                    sides.append(food)
+                    break
+        
+        # Score and select each component
+        def score_food(food):
+            score = 0
+            pref_score = preferences.get(food.id, 0)
+            score += (max(pref_score, -0.5) + 2) * 2.5 * 0.3  # Preference 30%
+            
+            # Nutrition gap filling
+            serving = food.get_serving_for_age(toddler.age_months)
+            food_nutrients = food.get_nutrients_for_serving(serving)
+            for nutrient, gap in nutrition_gaps.items():
+                nutrient_value = food_nutrients.get(nutrient, 0)
+                rda_value = self.nutrition_engine.get_rda(toddler.age_months).get(nutrient, 1)
+                if rda_value > 0:
+                    contribution = (nutrient_value / rda_value) * 100
+                    score += min(contribution * (gap / 100), 5) * 0.4  # Nutrition 40%
+            
+            # Variety penalty
+            times_used = used_foods.get(food.id, 0) + recent_foods.get(food.id, 0)
+            score -= times_used * 2  # Penalty for repetition
+            
+            # Random factor for variety
+            score += random.uniform(0, 1)
+            
+            return score
+        
+        # Select best main dish
+        if main_dishes:
+            main_dishes_scored = [(f, score_food(f)) for f in main_dishes]
+            main_dishes_scored.sort(key=lambda x: x[1], reverse=True)
+            selected_main = main_dishes_scored[0][0]
+            backup_main = main_dishes_scored[1][0] if len(main_dishes_scored) > 1 else None
+        else:
+            return None
+        
+        # Select carb (alternate between roti and rice)
+        if carbs:
+            # Prefer variety - if yesterday was rice, suggest roti today
+            rice_options = [f for f in carbs if 'rice' in f.name.lower()]
+            roti_options = [f for f in carbs if any(kw in f.name.lower() for kw in ['roti', 'chapati', 'paratha', 'phulka'])]
+            
+            # Alternate based on day
+            if day_of_week % 2 == 0 and roti_options:
+                selected_carb = random.choice(roti_options)
+            elif rice_options:
+                selected_carb = random.choice(rice_options)
+            else:
+                selected_carb = carbs[0]
+        else:
+            selected_carb = None
+        
+        # Select side
+        if sides:
+            selected_side = random.choice(sides)
+        else:
+            selected_side = None
+        
+        # Generate nutritious add-in suggestions
+        add_ins = self._get_nutritious_addins(toddler, nutrition_gaps, selected_main, selected_carb, selected_side)
+        
+        # Create complete meal structure
+        complete_meal = {
+            'main': {
+                'food': selected_main,
+                'food_id': selected_main.id,
+                'food_name': selected_main.name,
+                'category': selected_main.category
+            },
+            'carb': {
+                'food': selected_carb,
+                'food_id': selected_carb.id if selected_carb else None,
+                'food_name': selected_carb.name if selected_carb else 'Roti/Rice',
+                'category': 'grain'
+            } if selected_carb else None,
+            'side': {
+                'food': selected_side,
+                'food_id': selected_side.id if selected_side else None,
+                'food_name': selected_side.name if selected_side else 'Dahi/Salad',
+                'category': selected_side.category if selected_side else 'dairy'
+            } if selected_side else None,
+            'add_ins': add_ins,
+            'backup': {
+                'main': {
+                    'food_id': backup_main.id,
+                    'food_name': backup_main.name
+                } if backup_main else None
+            },
+            'reason': f"Balanced {meal_type} with {selected_main.name}"
+        }
+        
+        return complete_meal
+    
+    def _get_nutritious_addins(self, toddler, nutrition_gaps, main, carb, side):
+        """Suggest nutritious add-ins based on gaps"""
+        add_ins = []
+        
+        # Common nutritious add-ins
+        addin_suggestions = {
+            'iron_mg': [
+                {'name': 'Jaggery powder', 'add_to': 'dahi or roti', 'benefit': 'Boosts iron'},
+                {'name': 'Spinach puree', 'add_to': 'dal or roti dough', 'benefit': 'Iron rich'},
+                {'name': 'Dates (chopped)', 'add_to': 'dahi', 'benefit': 'Iron & energy'}
+            ],
+            'calcium_mg': [
+                {'name': 'Sesame seeds (til)', 'add_to': 'roti dough or salad', 'benefit': 'High calcium'},
+                {'name': 'Paneer cubes', 'add_to': 'any sabji', 'benefit': 'Calcium & protein'},
+                {'name': 'Curd/Dahi', 'add_to': 'serve alongside', 'benefit': 'Calcium rich'}
+            ],
+            'protein_g': [
+                {'name': 'Paneer crumbles', 'add_to': 'sabji or paratha', 'benefit': 'Extra protein'},
+                {'name': 'Curd', 'add_to': 'serve with meal', 'benefit': 'Protein & probiotics'},
+                {'name': 'Moong dal paste', 'add_to': 'roti dough', 'benefit': 'Protein boost'}
+            ],
+            'vitamin_a_mcg': [
+                {'name': 'Carrot (grated)', 'add_to': 'salad or raita', 'benefit': 'Vitamin A'},
+                {'name': 'Ghee (small amount)', 'add_to': 'roti or dal', 'benefit': 'Helps absorb vitamins'}
+            ],
+            'fiber_g': [
+                {'name': 'Cucumber/Tomato salad', 'add_to': 'serve alongside', 'benefit': 'Fiber & hydration'},
+                {'name': 'Methi leaves', 'add_to': 'roti dough', 'benefit': 'Fiber & iron'}
+            ]
+        }
+        
+        # Add suggestions for top 2 nutritional gaps
+        gaps_sorted = sorted(nutrition_gaps.items(), key=lambda x: x[1], reverse=True)[:2]
+        
+        for nutrient, gap in gaps_sorted:
+            if nutrient in addin_suggestions and gap > 20:
+                suggestion = random.choice(addin_suggestions[nutrient])
+                add_ins.append(suggestion)
+        
+        # Always suggest at least one add-in
+        if not add_ins:
+            add_ins.append({'name': 'Ghee', 'add_to': 'roti or rice', 'benefit': 'Healthy fats & taste'})
+        
+        return add_ins[:2]  # Max 2 add-ins
     
     def _filter_by_meal_type(self, foods, meal_type):
         """Filter foods appropriate for the meal type with strict separation"""
@@ -452,29 +674,52 @@ class MealPlanner:
             if 'meals' not in days[day_key]:
                 days[day_key]['meals'] = {}
             
-            # Get alternative foods with full details
-            alt_foods = []
-            if entry.alternatives:
-                from models import Food
-                for alt in entry.alternatives[:3]:
-                    if isinstance(alt, dict):
-                        alt_foods.append(alt)
-                    elif isinstance(alt, int):
-                        alt_food = Food.query.get(alt)
-                        if alt_food:
-                            alt_foods.append({
-                                'food_id': alt_food.id,
-                                'food_name': alt_food.name,
-                                'category': alt_food.category
-                            })
-            
-            days[day_key]['meals'][entry.meal_type] = {
-                'id': entry.id,
-                'food': entry.food.to_dict() if entry.food else None,
-                'alternatives': alt_foods,
-                'reason': entry.nutrition_reason,
-                'is_generated': entry.is_generated
-            }
+            # Check if this is a complete meal (lunch/dinner) or single food
+            if entry.meal_type in ['lunch', 'dinner'] and isinstance(entry.alternatives, dict) and 'main' in entry.alternatives:
+                # Complete meal format
+                complete_meal = entry.alternatives
+                
+                # Format the complete meal for response
+                meal_data = {
+                    'id': entry.id,
+                    'is_complete_meal': True,
+                    'main': {
+                        'food': entry.food.to_dict() if entry.food else None,
+                        'food_name': complete_meal.get('main', {}).get('food_name', '')
+                    },
+                    'carb': complete_meal.get('carb'),
+                    'side': complete_meal.get('side'),
+                    'add_ins': complete_meal.get('add_ins', []),
+                    'backup': complete_meal.get('backup'),
+                    'reason': entry.nutrition_reason,
+                    'is_generated': entry.is_generated,
+                    # Summary for display
+                    'summary': self._format_meal_summary(complete_meal)
+                }
+                
+                # Remove food objects from nested structures (not JSON serializable)
+                if meal_data['carb'] and 'food' in meal_data['carb']:
+                    del meal_data['carb']['food']
+                if meal_data['side'] and 'food' in meal_data['side']:
+                    del meal_data['side']['food']
+                
+                days[day_key]['meals'][entry.meal_type] = meal_data
+            else:
+                # Single food format (breakfast, snacks)
+                backup = None
+                if isinstance(entry.alternatives, dict) and 'backup' in entry.alternatives:
+                    backup = entry.alternatives.get('backup')
+                elif isinstance(entry.alternatives, list) and entry.alternatives:
+                    backup = entry.alternatives[0] if entry.alternatives else None
+                
+                days[day_key]['meals'][entry.meal_type] = {
+                    'id': entry.id,
+                    'is_complete_meal': False,
+                    'food': entry.food.to_dict() if entry.food else None,
+                    'backup': backup,
+                    'reason': entry.nutrition_reason,
+                    'is_generated': entry.is_generated
+                }
         
         # Sort by day
         sorted_days = sorted(days.values(), key=lambda x: x['day_of_week'])
@@ -484,6 +729,28 @@ class MealPlanner:
             'week_end': (week_start + timedelta(days=6)).isoformat(),
             'days': sorted_days
         }
+    
+    def _format_meal_summary(self, complete_meal):
+        """Create a readable summary of a complete meal"""
+        parts = []
+        
+        if complete_meal.get('main'):
+            parts.append(complete_meal['main'].get('food_name', 'Main dish'))
+        
+        if complete_meal.get('carb'):
+            parts.append(complete_meal['carb'].get('food_name', 'Roti/Rice'))
+        
+        if complete_meal.get('side'):
+            parts.append(complete_meal['side'].get('food_name', 'Dahi'))
+        
+        summary = ' + '.join(parts)
+        
+        # Add add-ins hint
+        if complete_meal.get('add_ins'):
+            addin_names = [a['name'] for a in complete_meal['add_ins'][:2]]
+            summary += f" (add: {', '.join(addin_names)})"
+        
+        return summary
     
     def update_plan_item(self, plan_id, new_food_id, is_manual=True):
         """Update a specific meal in the plan"""
