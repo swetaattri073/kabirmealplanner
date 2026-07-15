@@ -974,6 +974,17 @@ def create_meal_log():
     shared_notes = data.get('notes') or ''
     photo_saved = None
     
+    # When re-logging the same meal slot, clear previous entries for that day
+    if data.get('replace_existing'):
+        existing = MealLog.query.filter_by(
+            toddler_id=toddler.id,
+            date=log_date,
+            meal_type=meal_type,
+        ).all()
+        for old in existing:
+            db.session.delete(old)
+        db.session.flush()
+    
     for idx, item in enumerate(items):
         if not item.get('food_id') and not item.get('custom_food_name'):
             continue
@@ -1143,25 +1154,32 @@ def _save_meal_photo(toddler_id, photo_data):
 
 @app.route('/api/meal-logs/<int:log_id>', methods=['PUT'])
 def update_meal_log(log_id):
-    """Update a meal log"""
+    """Update a meal log (portion, reaction, notes, food)."""
     log = MealLog.query.get_or_404(log_id)
-    data = request.json
-    
+    toddler = Toddler.query.get_or_404(log.toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+
+    data = request.json or {}
+
     if 'food_id' in data:
         log.food_id = data['food_id']
+    if 'custom_food_name' in data:
+        log.custom_food_name = data['custom_food_name']
     if 'portion_eaten_percent' in data:
         log.portion_eaten_percent = data['portion_eaten_percent']
     if 'toddler_reaction' in data:
+        if not data['toddler_reaction']:
+            return jsonify({'error': 'Reaction is required'}), 400
         log.toddler_reaction = data['toddler_reaction']
     if 'notes' in data:
         log.notes = data['notes']
-    
+
     db.session.commit()
-    
-    # Update preferences
+
     if log.toddler_reaction and log.food_id:
         update_preferences_from_log(db.session, log)
-    
+
     return jsonify(log.to_dict())
 
 
@@ -1169,9 +1187,63 @@ def update_meal_log(log_id):
 def delete_meal_log(log_id):
     """Delete a meal log"""
     log = MealLog.query.get_or_404(log_id)
+    toddler = Toddler.query.get_or_404(log.toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
     db.session.delete(log)
     db.session.commit()
     return jsonify({'message': 'Meal log deleted successfully'})
+
+
+@app.route('/api/meal-logs/batch', methods=['PUT'])
+def update_meal_logs_batch():
+    """
+    Update multiple meal log items in one request.
+    Body: { items: [{id, portion_eaten_percent?, toddler_reaction?, notes?, food_id?}, ...] }
+    """
+    data = request.json or {}
+    items = data.get('items') or []
+    if not items:
+        return jsonify({'error': 'No items to update'}), 400
+
+    updated = []
+    for item in items:
+        log_id = item.get('id')
+        if not log_id:
+            continue
+        log = MealLog.query.get(log_id)
+        if not log:
+            return jsonify({'error': f'Meal log {log_id} not found'}), 404
+        toddler = Toddler.query.get(log.toddler_id)
+        if not toddler or not owns_toddler(toddler):
+            return jsonify({'error': 'Not authorized'}), 403
+
+        if 'food_id' in item:
+            log.food_id = item['food_id']
+        if 'portion_eaten_percent' in item:
+            log.portion_eaten_percent = item['portion_eaten_percent']
+        if 'toddler_reaction' in item:
+            if not item['toddler_reaction']:
+                return jsonify({'error': f'Reaction required for log {log_id}'}), 400
+            log.toddler_reaction = item['toddler_reaction']
+        if 'notes' in item:
+            log.notes = item['notes']
+        updated.append(log)
+
+    if not updated:
+        return jsonify({'error': 'No valid items to update'}), 400
+
+    db.session.commit()
+
+    for log in updated:
+        if log.toddler_reaction and log.food_id:
+            update_preferences_from_log(db.session, log)
+
+    return jsonify({
+        'updated_logs': [l.to_dict() for l in updated],
+        'count': len(updated),
+        'message': f'Updated {len(updated)} meal log(s)',
+    })
 
 
 # --- Nutrition Analysis ---
