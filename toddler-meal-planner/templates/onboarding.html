@@ -7,33 +7,354 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* Animated background */
+        .bg-decoration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            overflow: hidden;
+        }
+        
+        .floating-food {
+            position: absolute;
+            font-size: 2.5rem;
+            opacity: 0.15;
+            animation: floatFood 20s infinite ease-in-out;
+        }
+        
+        .floating-food:nth-child(1) { left: 5%; top: 10%; animation-delay: 0s; }
+        .floating-food:nth-child(2) { left: 15%; top: 60%; animation-delay: -3s; }
+        .floating-food:nth-child(3) { left: 25%; top: 30%; animation-delay: -6s; }
+        .floating-food:nth-child(4) { left: 75%; top: 20%; animation-delay: -9s; }
+        .floating-food:nth-child(5) { left: 85%; top: 70%; animation-delay: -12s; }
+        .floating-food:nth-child(6) { left: 90%; top: 40%; animation-delay: -15s; }
+        .floating-food:nth-child(7) { left: 50%; top: 80%; animation-delay: -18s; }
+        .floating-food:nth-child(8) { left: 35%; top: 90%; animation-delay: -2s; }
+        .floating-food:nth-child(9) { left: 60%; top: 5%; animation-delay: -7s; }
+        .floating-food:nth-child(10) { left: 45%; top: 50%; animation-delay: -11s; }
+        
+        @keyframes floatFood {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25% { transform: translateY(-30px) rotate(10deg); }
+            50% { transform: translateY(-15px) rotate(-5deg); }
+            75% { transform: translateY(-40px) rotate(15deg); }
+        }
+        
+        .onboarding-container {
+            max-width: 580px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        .onboarding-card {
+            background: white;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            animation: slide-up 0.6s ease-out;
+        }
+        
+        .onboarding-hero {
+            background: var(--gradient-primary);
+            padding: 3rem 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .onboarding-hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            animation: pulse-soft 4s ease-in-out infinite;
+        }
+        
+        .hero-illustration {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 1.5rem;
+        }
+        
+        .hero-plate {
+            width: 120px;
+            height: 120px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            position: relative;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        .hero-plate::before {
+            content: '';
+            position: absolute;
+            inset: 8px;
+            border: 3px dashed var(--border-color);
+            border-radius: 50%;
+        }
+        
+        .hero-plate-icon {
+            font-size: 3.5rem;
+        }
+        
+        .hero-foods {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+        
+        .hero-food {
+            position: absolute;
+            font-size: 2rem;
+            animation: orbit 8s linear infinite;
+        }
+        
+        .hero-food:nth-child(1) { animation-delay: 0s; }
+        .hero-food:nth-child(2) { animation-delay: -2s; }
+        .hero-food:nth-child(3) { animation-delay: -4s; }
+        .hero-food:nth-child(4) { animation-delay: -6s; }
+        
+        @keyframes orbit {
+            from { transform: rotate(0deg) translateX(80px) rotate(0deg); }
+            to { transform: rotate(360deg) translateX(80px) rotate(-360deg); }
+        }
+        
+        .onboarding-hero h1 {
+            color: white;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .onboarding-hero p {
+            color: rgba(255,255,255,0.9);
+            font-size: 1.1rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .onboarding-form {
+            padding: 2.5rem;
+        }
+        
+        .form-section {
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .form-section:last-of-type {
+            border-bottom: none;
+            margin-bottom: 1rem;
+        }
+        
+        .form-section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+        
+        .form-section-title .icon {
+            width: 36px;
+            height: 36px;
+            background: var(--gradient-primary);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.1rem;
+        }
+        
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        @media (max-width: 500px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .submit-section {
+            padding: 1.5rem 2.5rem 2.5rem;
+            background: linear-gradient(135deg, var(--bg-tertiary) 0%, white 100%);
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 1.25rem 2rem;
+            font-size: 1.15rem;
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            border-radius: var(--radius-full);
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            transition: all var(--transition-normal);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(99, 102, 241, 0.5);
+        }
+        
+        .submit-btn:active {
+            transform: translateY(-1px);
+        }
+        
+        .submit-btn i {
+            font-size: 1.25rem;
+        }
+        
+        .privacy-note {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        .privacy-note i {
+            color: var(--success);
+        }
+
+        /* Enhanced checkbox and radio styles */
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 0.75rem;
+        }
+        
+        .health-option {
+            padding: 0.875rem;
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            font-size: 0.9rem;
+        }
+        
+        .health-option:hover {
+            border-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .health-option.selected {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(236, 72, 153, 0.05) 100%);
+            border-color: var(--primary);
+        }
+        
+        .health-option input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+        
+        .health-option .emoji {
+            font-size: 1.25rem;
+        }
+    </style>
 </head>
 <body>
+    <!-- Animated Background -->
+    <div class="bg-decoration">
+        <div class="floating-food">🥕</div>
+        <div class="floating-food">🍎</div>
+        <div class="floating-food">🥦</div>
+        <div class="floating-food">🍌</div>
+        <div class="floating-food">🥛</div>
+        <div class="floating-food">🍚</div>
+        <div class="floating-food">🥗</div>
+        <div class="floating-food">🍳</div>
+        <div class="floating-food">🧀</div>
+        <div class="floating-food">🥜</div>
+    </div>
+
     <div class="onboarding-container">
-        <div class="card">
-            <div class="card-body">
-                <div class="onboarding-header">
-                    <div class="onboarding-icon">🥗</div>
-                    <h1>Toddler Meal Planner</h1>
-                    <p>Let's set up a personalized meal plan for your little one!</p>
+        <div class="onboarding-card">
+            <!-- Hero Section -->
+            <div class="onboarding-hero">
+                <div class="hero-illustration">
+                    <div class="hero-plate">
+                        <span class="hero-plate-icon">👶</span>
+                        <div class="hero-foods">
+                            <span class="hero-food">🥕</span>
+                            <span class="hero-food">🍎</span>
+                            <span class="hero-food">🥦</span>
+                            <span class="hero-food">🍌</span>
+                        </div>
+                    </div>
                 </div>
-                
-                <form onsubmit="createToddler(event)">
+                <h1>Toddler Meal Planner</h1>
+                <p>Nutritious Indian meals for your little one!</p>
+            </div>
+            
+            <!-- Form Section -->
+            <form onsubmit="createToddler(event)" class="onboarding-form">
+                <!-- Basic Info -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <span class="icon"><i class="fas fa-baby"></i></span>
+                        <span>Basic Information</span>
+                    </div>
+                    
                     <div class="form-group">
                         <label class="form-label">Toddler's Name</label>
-                        <input type="text" name="name" class="form-input" placeholder="Enter your toddler's name" required>
+                        <input type="text" name="name" class="form-input" placeholder="What's your little one called?" required>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Age (in months)</label>
-                        <input type="number" name="age_months" class="form-input" min="6" max="60" placeholder="e.g., 18" required>
-                        <p class="form-hint">Enter age in months (6-60 months supported)</p>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Birth Date (optional)</label>
-                        <input type="date" name="birth_date" class="form-input">
-                        <p class="form-hint">We'll automatically update the age each month</p>
+                    <div class="two-col">
+                        <div class="form-group">
+                            <label class="form-label">Age (months)</label>
+                            <input type="number" name="age_months" class="form-input" min="6" max="60" placeholder="e.g., 18" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Birth Date</label>
+                            <input type="date" name="birth_date" class="form-input">
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -49,11 +370,26 @@
                             </label>
                         </div>
                     </div>
+                </div>
+                
+                <!-- Health & Activity -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <span class="icon"><i class="fas fa-heartbeat"></i></span>
+                        <span>Health & Activity</span>
+                    </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Current Weight (kg) - optional</label>
-                        <input type="number" name="weight_kg" class="form-input" step="0.1" min="3" max="30" placeholder="e.g., 10.5">
-                        <p class="form-hint">Helps us identify if your toddler needs more calories</p>
+                    <div class="two-col">
+                        <div class="form-group">
+                            <label class="form-label">Weight (kg)</label>
+                            <input type="number" name="weight_kg" class="form-input" step="0.1" min="3" max="30" placeholder="e.g., 10.5">
+                            <p class="form-hint">Optional - helps customize calories</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Height (cm)</label>
+                            <input type="number" name="height_cm" class="form-input" min="40" max="120" placeholder="e.g., 80">
+                            <p class="form-hint">Optional - tracks growth</p>
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -80,41 +416,52 @@
                     
                     <div class="form-group">
                         <label class="form-label">Any Health Concerns?</label>
-                        <p class="form-hint">Select all that apply - helps us customize meal plans</p>
-                        <div class="checkbox-group">
-                            <label class="checkbox-item">
+                        <p class="form-hint" style="margin-bottom: 0.75rem;">Select all that apply to personalize meal plans</p>
+                        <div class="checkbox-grid">
+                            <label class="health-option">
                                 <input type="checkbox" name="health_conditions" value="underweight">
-                                <span>📉 Underweight</span>
+                                <span class="emoji">📉</span>
+                                <span>Underweight</span>
                             </label>
-                            <label class="checkbox-item">
+                            <label class="health-option">
                                 <input type="checkbox" name="health_conditions" value="overweight">
-                                <span>📈 Overweight</span>
+                                <span class="emoji">📈</span>
+                                <span>Overweight</span>
                             </label>
-                            <label class="checkbox-item">
+                            <label class="health-option">
                                 <input type="checkbox" name="health_conditions" value="anemia">
-                                <span>🩸 Anemia/Low Iron</span>
+                                <span class="emoji">🩸</span>
+                                <span>Low Iron</span>
                             </label>
-                            <label class="checkbox-item">
+                            <label class="health-option">
                                 <input type="checkbox" name="health_conditions" value="constipation">
-                                <span>😣 Constipation</span>
+                                <span class="emoji">😣</span>
+                                <span>Constipation</span>
                             </label>
-                            <label class="checkbox-item">
+                            <label class="health-option">
                                 <input type="checkbox" name="health_conditions" value="poor_appetite">
-                                <span>😐 Poor Appetite</span>
+                                <span class="emoji">😐</span>
+                                <span>Poor Appetite</span>
                             </label>
-                            <label class="checkbox-item">
+                            <label class="health-option">
                                 <input type="checkbox" name="health_conditions" value="frequent_illness">
-                                <span>🤒 Frequent Illness</span>
+                                <span class="emoji">🤒</span>
+                                <span>Gets Sick Often</span>
                             </label>
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="health_conditions" value="delayed_teething">
-                                <span>🦷 Delayed Teething</span>
-                            </label>
-                            <label class="checkbox-item">
+                            <label class="health-option">
                                 <input type="checkbox" name="health_conditions" value="picky_eater">
-                                <span>🙅 Picky Eater</span>
+                                <span class="emoji">🙅</span>
+                                <span>Picky Eater</span>
                             </label>
                         </div>
+                    </div>
+                </div>
+                
+                <!-- Diet Preferences -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <span class="icon"><i class="fas fa-utensils"></i></span>
+                        <span>Diet Preferences</span>
                     </div>
                     
                     <div class="form-group">
@@ -136,28 +483,60 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Any Allergies?</label>
-                        <p class="form-hint">Select all that apply</p>
-                        <div class="checkbox-group">
+                        <label class="form-label">Any Food Allergies?</label>
+                        <p class="form-hint" style="margin-bottom: 0.75rem;">We'll exclude these from meal plans</p>
+                        <div class="checkbox-grid">
                             {% for allergen in allergens %}
-                            <label class="checkbox-item">
+                            <label class="health-option">
                                 <input type="checkbox" name="allergies" value="{{ allergen }}">
                                 <span>{{ allergen | title }}</span>
                             </label>
                             {% endfor %}
                         </div>
                     </div>
-                    
-                    <button type="submit" class="btn btn-primary btn-lg btn-block">
-                        <i class="fas fa-rocket"></i>
-                        Get Started
-                    </button>
-                </form>
+                </div>
+            </form>
+            
+            <!-- Submit Section -->
+            <div class="submit-section">
+                <button type="submit" class="submit-btn" onclick="document.querySelector('.onboarding-form').dispatchEvent(new Event('submit', {cancelable: true}))">
+                    <i class="fas fa-rocket"></i>
+                    <span>Start Planning Meals!</span>
+                </button>
+                <p class="privacy-note">
+                    <i class="fas fa-lock"></i> Your data stays on your device. 100% private.
+                </p>
             </div>
         </div>
     </div>
     
     <div id="toast-container"></div>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        // Add selected state to checkboxes and radio buttons
+        document.querySelectorAll('.health-option, .radio-item, .checkbox-item').forEach(item => {
+            const input = item.querySelector('input');
+            
+            // Set initial state
+            if (input.checked) {
+                item.classList.add('selected');
+            }
+            
+            input.addEventListener('change', () => {
+                if (input.type === 'radio') {
+                    // Deselect all in group
+                    document.querySelectorAll(`input[name="${input.name}"]`).forEach(radio => {
+                        radio.closest('.radio-item, .health-option')?.classList.remove('selected');
+                    });
+                }
+                
+                if (input.checked) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        });
+    </script>
 </body>
 </html>
