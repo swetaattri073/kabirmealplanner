@@ -431,16 +431,45 @@ def dashboard(toddler_id):
 
 @app.route('/log-meal/<int:toddler_id>')
 def log_meal_page(toddler_id):
-    """Page to log a meal"""
+    """Page to log a meal — defaults to today's recommended plan"""
     toddler = Toddler.query.get_or_404(toddler_id)
     if not owns_toddler(toddler):
         flash('You do not have access to this profile.', 'error')
         return redirect(url_for('home'))
     foods = Food.query.filter(Food.suitable_from_months <= toddler.age_months).order_by(Food.name).all()
-    # Convert foods to dict for JSON serialization in template
     foods_data = [f.to_dict() for f in foods]
     toddlers = get_user_toddlers()
-    return render_template('log_meal.html', toddler=toddler, toddlers=toddlers, foods=foods, foods_data=foods_data)
+    
+    # Ensure week's plan exists and load today's recommendations
+    planner = MealPlanner(db.session)
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    weekly = planner.generate_weekly_plan(toddler, week_start, regenerate=False)
+    today_plan = next((d for d in weekly.get('days', []) if d.get('date') == today.isoformat()), None)
+    
+    # Existing logs for today (mark meals already logged)
+    today_logs = MealLog.query.filter_by(toddler_id=toddler.id, date=today).all()
+    logged_by_meal = {}
+    for log in today_logs:
+        logged_by_meal.setdefault(log.meal_type, []).append(log.to_dict())
+    
+    return render_template(
+        'log_meal.html',
+        toddler=toddler,
+        toddlers=toddlers,
+        foods=foods,
+        foods_data=foods_data,
+        today_plan=today_plan,
+        logged_by_meal=logged_by_meal,
+        meal_order=['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner'],
+        meal_labels={
+            'breakfast': '🌅 Breakfast',
+            'mid_morning_snack': '🍎 Mid-Morning Snack',
+            'lunch': '🍱 Lunch',
+            'evening_snack': '🥛 Evening Snack',
+            'dinner': '🌙 Dinner',
+        }
+    )
 
 
 @app.route('/weekly-plan/<int:toddler_id>')
@@ -739,19 +768,31 @@ def get_meal_logs():
 
 @app.route('/api/meal-logs', methods=['POST'])
 def create_meal_log():
-    """Log a meal"""
+    """
+    Log a meal.
+    
+    Optional:
+    - update_plan: if True and food differs from plan, update today's weekly plan
+    - plan_id: weekly plan entry id to update
+    - replace_plan: same as update_plan (alias)
+    """
     data = request.json
     
     if not data.get('toddler_id') or not data.get('meal_type'):
         return jsonify({'error': 'Toddler ID and meal type are required'}), 400
     
     toddler = Toddler.query.get_or_404(data['toddler_id'])
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    
+    log_date = datetime.strptime(data.get('date', date.today().isoformat()), '%Y-%m-%d').date()
+    meal_type = data['meal_type']
     
     log = MealLog(
         toddler_id=toddler.id,
         food_id=data.get('food_id'),
-        date=datetime.strptime(data.get('date', date.today().isoformat()), '%Y-%m-%d').date(),
-        meal_type=data['meal_type'],
+        date=log_date,
+        meal_type=meal_type,
         custom_food_name=data.get('custom_food_name'),
         portion_offered_g=data.get('portion_offered_g'),
         portion_eaten_percent=data.get('portion_eaten_percent', 100),
@@ -762,13 +803,104 @@ def create_meal_log():
     )
     
     db.session.add(log)
+    
+    plan_updated = None
+    should_update_plan = data.get('update_plan') or data.get('replace_plan')
+    
+    if should_update_plan and data.get('food_id'):
+        plan_updated = _update_today_plan_with_food(
+            toddler,
+            meal_type,
+            data['food_id'],
+            log_date,
+            reason=data.get('plan_reason') or 'Logged different meal than planned'
+        )
+    
     db.session.commit()
     
     # Update preferences if reaction provided
     if log.toddler_reaction and log.food_id:
         update_preferences_from_log(db.session, log)
     
-    return jsonify(log.to_dict()), 201
+    result = log.to_dict()
+    if plan_updated is not None:
+        result['plan_updated'] = plan_updated
+    return jsonify(result), 201
+
+
+def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason=''):
+    """Update today's weekly plan entry to a different food and adjust near-future repeats."""
+    week_start = log_date - timedelta(days=log_date.weekday())
+    day_of_week = log_date.weekday()
+    
+    existing_plan = WeeklyPlan.query.filter(
+        WeeklyPlan.toddler_id == toddler.id,
+        WeeklyPlan.week_start == week_start,
+        WeeklyPlan.day_of_week == day_of_week,
+        WeeklyPlan.meal_type == meal_type
+    ).first()
+    
+    food = Food.query.get(food_id)
+    food_name = food.name if food else str(food_id)
+    
+    if existing_plan:
+        old_food_id = existing_plan.food_id
+        existing_plan.food_id = food_id
+        existing_plan.is_generated = False
+        existing_plan.nutrition_reason = reason or f"Replaced with logged meal: {food_name}"
+        # Clear structured complete-meal alternatives when manually replaced
+        existing_plan.alternatives = {'backup': None, 'replaced': True, 'from_log': True}
+        plan_id = existing_plan.id
+    else:
+        new_plan = WeeklyPlan(
+            toddler_id=toddler.id,
+            week_start=week_start,
+            day_of_week=day_of_week,
+            meal_type=meal_type,
+            food_id=food_id,
+            is_generated=False,
+            nutrition_reason=reason or f"Added from meal log: {food_name}",
+            alternatives={'from_log': True}
+        )
+        db.session.add(new_plan)
+        db.session.flush()
+        plan_id = new_plan.id
+        old_food_id = None
+    
+    # Avoid immediate repetition in next 2 days
+    future_plans = WeeklyPlan.query.filter(
+        WeeklyPlan.toddler_id == toddler.id,
+        WeeklyPlan.week_start == week_start,
+        WeeklyPlan.day_of_week > day_of_week,
+        WeeklyPlan.day_of_week <= day_of_week + 2,
+        WeeklyPlan.food_id == food_id
+    ).all()
+    
+    swaps = 0
+    if future_plans:
+        planner = MealPlanner(db.session)
+        suitable = planner._get_suitable_foods(toddler)
+        for plan in future_plans:
+            current = Food.query.get(plan.food_id)
+            alts = [
+                f for f in suitable
+                if f.id != food_id and f.id != (current.id if current else None)
+                and (not current or f.category == current.category)
+            ]
+            if alts:
+                import random
+                swap = random.choice(alts)
+                plan.food_id = swap.id
+                plan.nutrition_reason = f"Swapped to avoid repetition of {food_name}"
+                swaps += 1
+    
+    return {
+        'plan_id': plan_id,
+        'food_id': food_id,
+        'food_name': food_name,
+        'replaced_previous': old_food_id is not None and old_food_id != food_id,
+        'future_plans_adjusted': swaps
+    }
 
 
 @app.route('/api/meal-logs/<int:log_id>', methods=['PUT'])

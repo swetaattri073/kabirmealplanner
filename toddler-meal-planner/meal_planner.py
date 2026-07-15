@@ -30,20 +30,26 @@ class MealPlanner:
             WeeklyPlan.week_start == week_start
         ).all()
         
-        if existing_plans and not regenerate:
+        # Get toddler's schedule early to know expected slot count
+        schedule = toddler.get_recommended_schedule()
+        meals = schedule['meals']
+        snacks = schedule['snacks']
+        all_meal_types = meals + snacks
+        expected_slots = 7 * len(all_meal_types)
+        
+        # Fully complete existing plan → return as-is
+        if existing_plans and not regenerate and len(existing_plans) >= expected_slots:
             return self._format_weekly_plan(existing_plans, week_start)
+        
+        existing_map = {(p.day_of_week, p.meal_type): p for p in existing_plans}
         
         # Delete existing plans if regenerating
         if regenerate:
             for plan in existing_plans:
                 self.db.delete(plan)
             self.db.commit()
-        
-        # Get toddler's schedule
-        schedule = toddler.get_recommended_schedule()
-        meals = schedule['meals']
-        snacks = schedule['snacks']
-        all_meal_types = meals + snacks
+            existing_map = {}
+            existing_plans = []
         
         # Get suitable foods
         suitable_foods = self._get_suitable_foods(toddler)
@@ -59,8 +65,11 @@ class MealPlanner:
         nutrition_gaps = self._identify_nutrition_gaps(weekly_nutrition)
         
         # Generate plan for each day
-        weekly_plan = []
+        weekly_plan = list(existing_plans) if existing_map else []
         used_foods = defaultdict(int)  # Track food usage this week
+        for p in existing_plans:
+            if p.food_id:
+                used_foods[p.food_id] += 1
         
         for day in range(7):
             day_date = week_start + timedelta(days=day)
@@ -68,6 +77,11 @@ class MealPlanner:
             day_nutrition = defaultdict(float)
             
             for meal_type in all_meal_types:
+                # Keep existing manual/generated slot if present (fill-only mode)
+                if (day, meal_type) in existing_map:
+                    day_plan.append(existing_map[(day, meal_type)])
+                    continue
+                
                 # For lunch/dinner, generate complete meal (main + carb + side)
                 if meal_type in ['lunch', 'dinner']:
                     complete_meal = self._select_complete_meal(
@@ -89,7 +103,7 @@ class MealPlanner:
                             day_of_week=day,
                             meal_type=meal_type,
                             food_id=complete_meal['main']['food'].id,
-                            alternatives=complete_meal,  # Store full meal structure
+                            alternatives=self._serialize_complete_meal(complete_meal),
                             is_generated=True,
                             nutrition_reason=complete_meal.get('reason', '')
                         )
@@ -126,7 +140,7 @@ class MealPlanner:
                             day_of_week=day,
                             meal_type=meal_type,
                             food_id=food['food'].id,
-                            alternatives=food.get('alternatives', []),
+                            alternatives={'backup': food.get('backup')},
                             is_generated=True,
                             nutrition_reason=food.get('reason', '')
                         )
@@ -139,11 +153,15 @@ class MealPlanner:
                         for k, v in nutrients.items():
                             day_nutrition[k] += v
             
-            weekly_plan.extend(day_plan)
+            weekly_plan.extend([p for p in day_plan if p not in weekly_plan])
         
         self.db.commit()
         
-        return self._format_weekly_plan(weekly_plan, week_start)
+        all_plans = WeeklyPlan.query.filter(
+            WeeklyPlan.toddler_id == toddler.id,
+            WeeklyPlan.week_start == week_start
+        ).all()
+        return self._format_weekly_plan(all_plans, week_start)
     
     def _get_suitable_foods(self, toddler):
         """Get all foods suitable for this toddler"""
@@ -543,6 +561,29 @@ class MealPlanner:
         }
         
         return complete_meal
+    
+    def _serialize_complete_meal(self, complete_meal):
+        """Remove ORM Food objects so alternatives can be stored as JSON."""
+        if not complete_meal:
+            return None
+        
+        def component(comp):
+            if not comp:
+                return None
+            return {
+                'food_id': comp.get('food_id'),
+                'food_name': comp.get('food_name'),
+                'category': comp.get('category'),
+            }
+        
+        return {
+            'main': component(complete_meal.get('main')),
+            'carb': component(complete_meal.get('carb')),
+            'side': component(complete_meal.get('side')),
+            'add_ins': complete_meal.get('add_ins', []),
+            'backup': complete_meal.get('backup'),
+            'reason': complete_meal.get('reason', ''),
+        }
     
     def _get_nutritious_addins(self, toddler, nutrition_gaps, main, carb, side):
         """Suggest nutritious add-ins based on gaps"""
