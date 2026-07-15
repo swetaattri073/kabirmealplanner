@@ -20,6 +20,10 @@ from food_enhancer import (
     get_enhancement_suggestions, get_flavor_exploration, 
     get_daily_enhancement_tip, get_all_boosters, NUTRITION_BOOSTERS
 )
+from ai_features import (
+    parse_meal_input, find_similar_foods, find_foods_by_features,
+    smart_meal_parser, recognize_food_from_image
+)
 
 # Create Flask app
 app = Flask(__name__)
@@ -685,6 +689,245 @@ def get_daily_tip(toddler_id):
 def get_nutrition_boosters():
     """Get all nutrition boosters organized by nutrient"""
     return jsonify(get_all_boosters())
+
+
+# --- AI Features: Natural Language & Similarity ---
+
+@app.route('/api/parse-meal', methods=['POST'])
+def parse_meal_text():
+    """
+    Parse natural language meal description into structured data.
+    
+    Example input:
+    {
+        "text": "He had some rice and dal with ghee for lunch, ate about half, loved the rice"
+    }
+    
+    Returns parsed foods, portion, meal type, and reactions.
+    """
+    data = request.json
+    text = data.get('text', '')
+    
+    if not text:
+        return jsonify({'error': 'Text is required'}), 400
+    
+    # Get food database for better matching
+    foods = Food.query.all()
+    food_list = [{'name': f.name, 'id': f.id} for f in foods]
+    
+    result = parse_meal_input(text, food_list)
+    
+    # Enhance with food IDs from database
+    for food in result['foods']:
+        db_food = Food.query.filter(Food.name.ilike(f"%{food['name']}%")).first()
+        if db_food:
+            food['food_id'] = db_food.id
+            food['db_name'] = db_food.name
+    
+    return jsonify(result)
+
+
+@app.route('/api/smart-log', methods=['POST'])
+def smart_meal_log():
+    """
+    Smart meal logging using natural language.
+    Parses text, creates meal log entries automatically.
+    
+    Example input:
+    {
+        "toddler_id": 1,
+        "text": "Arjun had idli and sambar for breakfast, ate most of it and loved it"
+    }
+    """
+    data = request.json
+    toddler_id = data.get('toddler_id')
+    text = data.get('text', '')
+    
+    if not toddler_id or not text:
+        return jsonify({'error': 'toddler_id and text are required'}), 400
+    
+    toddler = Toddler.query.get_or_404(toddler_id)
+    
+    # Get food database
+    foods = Food.query.filter(Food.suitable_from_months <= toddler.age_months).all()
+    food_list = [{'name': f.name, 'id': f.id} for f in foods]
+    
+    # Parse the input
+    parsed = parse_meal_input(text, food_list)
+    
+    # Create meal logs
+    created_logs = []
+    meal_type = parsed['meal_type'] or 'lunch'  # Default to lunch if not specified
+    
+    for food_info in parsed['foods']:
+        # Find food in database
+        db_food = None
+        for f in foods:
+            if f.name.lower() == food_info['name'].lower() or \
+               food_info['name'].lower() in f.name.lower():
+                db_food = f
+                break
+        
+        # Determine portion
+        portion = 100
+        if parsed['portion']['type'] == 'percentage':
+            portion = parsed['portion']['value']
+        elif parsed['portion']['value'] == 'small':
+            portion = 50
+        elif parsed['portion']['value'] == 'large':
+            portion = 100
+        
+        # Determine reaction
+        reaction = parsed['food_reactions'].get(food_info['name']) or parsed['overall_reaction']
+        
+        log = MealLog(
+            toddler_id=toddler.id,
+            food_id=db_food.id if db_food else None,
+            custom_food_name=food_info['name'] if not db_food else None,
+            date=date.today(),
+            meal_type=meal_type,
+            portion_eaten_percent=portion,
+            toddler_reaction=reaction,
+            notes=f"Logged via natural language: '{text[:100]}...'" if len(text) > 100 else f"Logged via natural language: '{text}'"
+        )
+        
+        db.session.add(log)
+        created_logs.append(log)
+        
+        # Update preferences if reaction provided
+        if reaction and db_food:
+            from meal_planner import update_preferences_from_log
+            db.session.flush()  # Get log ID
+            update_preferences_from_log(db.session, log)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'parsed': parsed,
+        'created_logs': [log.to_dict() for log in created_logs],
+        'message': f"Created {len(created_logs)} meal log(s) for {toddler.name}"
+    }), 201
+
+
+@app.route('/api/similar-foods/<food_name>', methods=['GET'])
+def get_similar_foods(food_name):
+    """
+    Find foods similar to the given food.
+    Useful for suggesting alternatives or new foods to try.
+    """
+    top_n = request.args.get('top', 5, type=int)
+    
+    similar = find_similar_foods(food_name, top_n=top_n)
+    
+    # Enhance with database info
+    for item in similar:
+        db_food = Food.query.filter(Food.name.ilike(f"%{item['food']}%")).first()
+        if db_food:
+            item['food_id'] = db_food.id
+            item['full_name'] = db_food.name
+            item['category'] = db_food.category
+    
+    return jsonify({
+        'query': food_name,
+        'similar_foods': similar
+    })
+
+
+@app.route('/api/find-foods', methods=['POST'])
+def find_foods_matching():
+    """
+    Find foods matching specific features/preferences.
+    
+    Example input:
+    {
+        "preferences": {
+            "soft": true,
+            "sweet": true,
+            "fruit": true
+        }
+    }
+    """
+    data = request.json
+    preferences = data.get('preferences', {})
+    top_n = data.get('top', 5)
+    
+    if not preferences:
+        return jsonify({'error': 'preferences object is required'}), 400
+    
+    matches = find_foods_by_features(preferences, top_n=top_n)
+    
+    # Enhance with database info
+    for item in matches:
+        db_food = Food.query.filter(Food.name.ilike(f"%{item['food']}%")).first()
+        if db_food:
+            item['food_id'] = db_food.id
+            item['full_name'] = db_food.name
+            item['category'] = db_food.category
+            item['nutrients'] = {
+                'calories': db_food.calories,
+                'protein': db_food.protein_g,
+                'iron': db_food.iron_mg
+            }
+    
+    return jsonify({
+        'preferences': preferences,
+        'matching_foods': matches
+    })
+
+
+@app.route('/api/recognize-food', methods=['POST'])
+def recognize_food():
+    """
+    Placeholder for image-based food recognition.
+    
+    In production, image processing would happen client-side using TensorFlow.js,
+    and this endpoint would just receive the predictions for logging.
+    
+    For now, returns instructions for setting up image recognition.
+    """
+    # Check if image data is provided
+    image_data = request.json.get('image') if request.is_json else None
+    predictions = request.json.get('predictions') if request.is_json else None
+    
+    if predictions:
+        # Client-side recognition was done, process predictions
+        foods_detected = []
+        for pred in predictions:
+            db_food = Food.query.filter(Food.name.ilike(f"%{pred['class']}%")).first()
+            if db_food:
+                foods_detected.append({
+                    'name': db_food.name,
+                    'food_id': db_food.id,
+                    'confidence': pred['confidence']
+                })
+        
+        return jsonify({
+            'status': 'success',
+            'detected_foods': foods_detected
+        })
+    
+    # Return setup instructions
+    return jsonify({
+        'status': 'setup_required',
+        'message': 'Image recognition runs client-side for privacy and offline support',
+        'setup': {
+            'web': {
+                'library': 'TensorFlow.js',
+                'model_url': '/static/models/indian_food_classifier/model.json',
+                'instructions': 'Load model with tf.loadLayersModel(), preprocess image to 224x224, run predict()'
+            },
+            'mobile': {
+                'android': 'Use TFLite with indian_food_classifier.tflite',
+                'ios': 'Use CoreML with indian_food_classifier.mlmodel'
+            },
+            'supported_foods': [
+                'rice', 'roti', 'paratha', 'idli', 'dosa', 'upma', 'poha', 'khichdi',
+                'dal', 'sambar', 'chole', 'rajma', 'paneer', 'sabzi', 'raita',
+                'banana', 'apple', 'mango', 'orange', 'curd', 'milk', 'egg'
+            ]
+        }
+    })
 
 
 # --- Dashboard Data ---
