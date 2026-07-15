@@ -189,6 +189,17 @@ def _login_or_create_oauth_user(provider, oauth_id, email, name=None, avatar_url
 # Initialize database and food data
 with app.app_context():
     db.create_all()
+    # Lightweight schema patches for existing SQLite DBs (create_all won't ALTER)
+    try:
+        from sqlalchemy import text, inspect
+        insp = inspect(db.engine)
+        if 'meal_logs' in insp.get_table_names():
+            cols = {c['name'] for c in insp.get_columns('meal_logs')}
+            if 'photo_path' not in cols:
+                db.session.execute(text('ALTER TABLE meal_logs ADD COLUMN photo_path VARCHAR(500)'))
+                db.session.commit()
+    except Exception as e:
+        app.logger.warning('Schema patch skipped: %s', e)
     init_food_database(db.session, Food)
 
 
@@ -799,8 +810,15 @@ def create_meal_log():
         is_adult_meal_adapted=data.get('is_adult_meal_adapted', False),
         adult_meal_description=data.get('adult_meal_description'),
         toddler_reaction=data.get('toddler_reaction'),
-        notes=data.get('notes')
+        notes=data.get('notes'),
+        photo_path=data.get('photo_path')
     )
+    
+    # Save uploaded photo (base64) if provided
+    if data.get('photo_data') and not log.photo_path:
+        saved = _save_meal_photo(toddler.id, data['photo_data'])
+        if saved:
+            log.photo_path = saved
     
     db.session.add(log)
     
@@ -901,6 +919,30 @@ def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason='
         'replaced_previous': old_food_id is not None and old_food_id != food_id,
         'future_plans_adjusted': swaps
     }
+
+
+def _save_meal_photo(toddler_id, photo_data):
+    """Save a base64 data-URL meal photo under static/uploads/meals/"""
+    import base64
+    import re as _re
+    from pathlib import Path
+    
+    match = _re.match(r'^data:image/(png|jpeg|jpg|webp);base64,(.+)$', photo_data, _re.I | _re.S)
+    if not match:
+        return None
+    
+    ext = match.group(1).lower().replace('jpeg', 'jpg')
+    raw = base64.b64decode(match.group(2))
+    # Cap ~4MB
+    if len(raw) > 4 * 1024 * 1024:
+        return None
+    
+    upload_dir = Path(app.root_path) / 'static' / 'uploads' / 'meals'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"t{toddler_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.{ext}"
+    path = upload_dir / filename
+    path.write_bytes(raw)
+    return f"/static/uploads/meals/{filename}"
 
 
 @app.route('/api/meal-logs/<int:log_id>', methods=['PUT'])
@@ -1550,54 +1592,125 @@ def find_foods_matching():
 @app.route('/api/recognize-food', methods=['POST'])
 def recognize_food():
     """
-    Placeholder for image-based food recognition.
-    
-    In production, image processing would happen client-side using TensorFlow.js,
-    and this endpoint would just receive the predictions for logging.
-    
-    For now, returns instructions for setting up image recognition.
+    Help identify food from a meal photo + optional caption.
+
+    Accepts:
+    - image / photo_data: base64 data-URL (validated; not stored until meal is logged)
+    - caption / text: optional description (uses NLP food matching)
+    - predictions: optional client-side ML class labels
+    - meal_type, toddler_id: used to rank age-suitable suggestions
+
+    Returns ranked suggestion list for the user to confirm before logging.
+    The photo is persisted later via POST /api/meal-logs with photo_data.
     """
-    # Check if image data is provided
-    image_data = request.json.get('image') if request.is_json else None
-    predictions = request.json.get('predictions') if request.is_json else None
-    
-    if predictions:
-        # Client-side recognition was done, process predictions
-        foods_detected = []
-        for pred in predictions:
-            db_food = Food.query.filter(Food.name.ilike(f"%{pred['class']}%")).first()
-            if db_food:
-                foods_detected.append({
-                    'name': db_food.name,
-                    'food_id': db_food.id,
-                    'confidence': pred['confidence']
-                })
-        
-        return jsonify({
-            'status': 'success',
-            'detected_foods': foods_detected
+    data = request.json or {}
+    image_data = data.get('image') or data.get('photo_data')
+    caption = (data.get('caption') or data.get('text') or '').strip()
+    predictions = data.get('predictions') or []
+    meal_type = data.get('meal_type')
+    toddler_id = data.get('toddler_id')
+
+    toddler = Toddler.query.get(toddler_id) if toddler_id else None
+    age_months = toddler.age_months if toddler else 24
+
+    foods = Food.query.filter(Food.suitable_from_months <= age_months).all()
+    food_list = [{'name': f.name, 'id': f.id} for f in foods]
+
+    suggestions = []
+    seen_ids = set()
+    sources = []
+    parsed = None
+
+    def _add_suggestion(food, confidence, source, label=None):
+        if not food or food.id in seen_ids:
+            return
+        seen_ids.add(food.id)
+        suggestions.append({
+            'food_id': food.id,
+            'name': food.name,
+            'name_hindi': food.name_hindi,
+            'category': food.category,
+            'toddler_friendly_version': food.toddler_friendly_version,
+            'confidence': round(float(confidence), 3),
+            'source': source,
+            'label': label or food.name
         })
-    
-    # Return setup instructions
-    return jsonify({
-        'status': 'setup_required',
-        'message': 'Image recognition runs client-side for privacy and offline support',
-        'setup': {
-            'web': {
-                'library': 'TensorFlow.js',
-                'model_url': '/static/models/indian_food_classifier/model.json',
-                'instructions': 'Load model with tf.loadLayersModel(), preprocess image to 224x224, run predict()'
-            },
-            'mobile': {
-                'android': 'Use TFLite with indian_food_classifier.tflite',
-                'ios': 'Use CoreML with indian_food_classifier.mlmodel'
-            },
-            'supported_foods': [
-                'rice', 'roti', 'paratha', 'idli', 'dosa', 'upma', 'poha', 'khichdi',
-                'dal', 'sambar', 'chole', 'rajma', 'paneer', 'sabzi', 'raita',
-                'banana', 'apple', 'mango', 'orange', 'curd', 'milk', 'egg'
-            ]
+
+    # 1) Caption / natural language (most reliable without an on-device model)
+    if caption:
+        sources.append('caption')
+        parsed = parse_meal_input(caption, food_list)
+        for food_info in parsed.get('foods', []):
+            db_food = None
+            fid = food_info.get('id') or food_info.get('food_id')
+            if fid:
+                db_food = Food.query.get(fid)
+            if not db_food:
+                db_food = Food.query.filter(Food.name.ilike(f"%{food_info['name']}%")).first()
+            if db_food:
+                _add_suggestion(db_food, food_info.get('confidence', 0.85), 'caption', food_info['name'])
+
+    # 2) Client-side model predictions (if TensorFlow.js etc. is wired up)
+    if predictions:
+        sources.append('predictions')
+        for pred in predictions:
+            label = pred.get('class') or pred.get('label') or ''
+            if not label:
+                continue
+            conf = pred.get('confidence', 0.5)
+            db_food = Food.query.filter(Food.name.ilike(f"%{label}%")).first()
+            if db_food:
+                _add_suggestion(db_food, conf, 'ml', label)
+
+    # 3) Meal-type ranked fallbacks so the user can always pick something
+    if meal_type:
+        sources.append('meal_suggestions')
+        category_prefs = {
+            'breakfast': ['breakfast', 'grain', 'dairy', 'fruit'],
+            'morning_snack': ['fruit', 'dairy', 'snack'],
+            'lunch': ['dal', 'curry', 'vegetable', 'grain', 'complete'],
+            'evening_snack': ['fruit', 'dairy', 'snack'],
+            'dinner': ['dal', 'curry', 'vegetable', 'grain', 'complete'],
         }
+        preferred = category_prefs.get(meal_type, [])
+        ranked = sorted(
+            foods,
+            key=lambda f: (
+                0 if (f.category or '').lower() in preferred else 1,
+                f.name
+            )
+        )
+        for food in ranked[:12]:
+            _add_suggestion(food, 0.35, 'suggestion')
+
+    photo_ok = False
+    if image_data:
+        # Validate without saving — meal log POST will persist it
+        if isinstance(image_data, str) and image_data.startswith('data:image/'):
+            photo_ok = True
+            sources.append('photo')
+
+    if not suggestions and not photo_ok and not caption:
+        return jsonify({
+            'status': 'need_input',
+            'message': 'Add a photo and/or a short description of what was on the plate.',
+            'suggestions': []
+        }), 400
+
+    suggestions.sort(key=lambda s: s['confidence'], reverse=True)
+
+    return jsonify({
+        'status': 'ok',
+        'photo_ready': photo_ok,
+        'sources': sources,
+        'parsed': parsed,
+        'suggestions': suggestions[:20],
+        'detected_foods': suggestions[:10],  # backwards-compatible alias
+        'message': (
+            'Confirm the food below. Your photo will be saved with the meal log.'
+            if photo_ok else
+            'Confirm the food that matches what was eaten.'
+        )
     })
 
 

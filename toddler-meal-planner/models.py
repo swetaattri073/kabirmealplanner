@@ -412,6 +412,7 @@ class MealLog(db.Model):
     # Feedback
     toddler_reaction = db.Column(db.String(50), nullable=True)  # loved, liked, neutral, disliked, refused
     notes = db.Column(db.String(500), nullable=True)
+    photo_path = db.Column(db.String(500), nullable=True)  # Optional meal photo
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -442,6 +443,7 @@ class MealLog(db.Model):
             'adult_meal_description': self.adult_meal_description,
             'toddler_reaction': self.toddler_reaction,
             'notes': self.notes,
+            'photo_path': self.photo_path,
             'nutrients': self.get_actual_nutrients()
         }
 
