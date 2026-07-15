@@ -728,8 +728,10 @@ def create_food():
             'message': f'"{existing.name}" is already in the database'
         }), 200
 
-    category = (data.get('category') or guess_category(name)).lower().strip()
-    if category not in FOOD_CATEGORIES:
+    category = data.get('category')
+    if category:
+        category = str(category).lower().strip()
+    if not category or category not in FOOD_CATEGORIES:
         category = guess_category(name)
 
     food = Food(
