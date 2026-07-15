@@ -124,6 +124,10 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
         
+        .nav-cta-short {
+            display: none;
+        }
+        
         /* Hero Content */
         .hero-content {
             flex: 1;
@@ -648,6 +652,129 @@
         
         .cta-note i {
             color: var(--success);
+        }
+        
+        /* ===== MOBILE FIXES (buttons / nav / spacing) ===== */
+        @media (max-width: 768px) {
+            .nav {
+                padding: 0.85rem 1rem;
+                gap: 0.5rem;
+            }
+            
+            .nav-logo {
+                font-size: 1.05rem;
+                gap: 0.4rem;
+                flex-shrink: 0;
+            }
+            
+            .nav-logo span:first-child {
+                font-size: 1.35rem;
+            }
+            
+            .nav-actions {
+                gap: 0.5rem;
+                flex-shrink: 1;
+                min-width: 0;
+            }
+            
+            .nav-link {
+                font-size: 0.85rem;
+                white-space: nowrap;
+            }
+            
+            .nav-cta {
+                padding: 0.45rem 0.85rem;
+                font-size: 0.8rem;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+            
+            .hero-content {
+                padding: 1.25rem 1rem 2rem;
+            }
+            
+            .hero-cta-group {
+                flex-direction: column;
+                align-items: stretch;
+                width: 100%;
+                max-width: 320px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            
+            .hero-cta {
+                justify-content: center;
+                padding: 0.85rem 1.25rem;
+                font-size: 0.95rem;
+                white-space: nowrap;
+                width: 100%;
+            }
+            
+            .final-cta {
+                padding: 3rem 1rem;
+            }
+            
+            .cta-box {
+                padding: 1.75rem 1.25rem;
+                border-radius: 20px;
+            }
+            
+            .cta-box h2 {
+                font-size: 1.5rem;
+            }
+            
+            .cta-box p {
+                font-size: 1rem;
+                margin-bottom: 1.25rem;
+            }
+            
+            .cta-emoji {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+            }
+            
+            .cta-button {
+                display: inline-flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                justify-content: center;
+                align-items: center;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                padding: 0.9rem 1.25rem;
+                font-size: 1rem;
+                white-space: nowrap;
+                gap: 0.5rem;
+            }
+            
+            .pain-points {
+                padding: 3.5rem 1rem;
+            }
+            
+            .pain-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .section-title {
+                font-size: 1.75rem;
+            }
+        }
+        
+        @media (max-width: 380px) {
+            .nav-cta {
+                padding: 0.4rem 0.65rem;
+                font-size: 0.75rem;
+            }
+            
+            .nav-link {
+                font-size: 0.8rem;
+            }
+            
+            .cta-button {
+                font-size: 0.9rem;
+                padding: 0.85rem 1rem;
+            }
         }
         
         /* ===== FOOTER ===== */
