@@ -4,15 +4,18 @@ A personalized meal planning app for Indian toddlers
 """
 
 import os
+import secrets
 from datetime import date, datetime, timedelta
-from flask import Flask, render_template, request, jsonify, redirect, url_for, g
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, redirect, url_for, g, session, flash
 from flask_cors import CORS
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-from models import db, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
 from meal_planner import MealPlanner, update_preferences_from_log
@@ -31,6 +34,10 @@ app = Flask(__name__)
 # Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'toddler-meal-planner-secret-key-change-in-production')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 # Database configuration - supports both SQLite and PostgreSQL
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///toddler_meals.db')
@@ -42,6 +49,46 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 # Initialize extensions
 db.init_app(app)
 CORS(app)
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please sign in to access this feature.'
+login_manager.login_message_category = 'info'
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user by ID for Flask-Login"""
+    return User.query.get(int(user_id))
+
+
+def get_session_id():
+    """Get or create a session ID for anonymous users"""
+    if 'anonymous_session_id' not in session:
+        session['anonymous_session_id'] = secrets.token_hex(32)
+        session.permanent = True
+    return session['anonymous_session_id']
+
+
+def get_user_toddlers():
+    """Get toddlers belonging to current user (logged in) or session (anonymous)"""
+    if current_user.is_authenticated:
+        return Toddler.query.filter_by(user_id=current_user.id).all()
+    else:
+        session_id = get_session_id()
+        return Toddler.query.filter_by(session_id=session_id, user_id=None).all()
+
+
+def owns_toddler(toddler):
+    """Check if current user/session owns this toddler"""
+    if current_user.is_authenticated:
+        return toddler.user_id == current_user.id
+    else:
+        session_id = get_session_id()
+        return toddler.session_id == session_id and toddler.user_id is None
+
 
 # Initialize database and food data
 with app.app_context():
@@ -55,8 +102,136 @@ def inject_globals():
     """Inject global variables into all templates"""
     return {
         'now': datetime.now,
-        'today': date.today().isoformat()
+        'today': date.today().isoformat(),
+        'current_user': current_user,
+        'is_authenticated': current_user.is_authenticated if current_user else False
     }
+
+
+# ==================== AUTHENTICATION ROUTES ====================
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    """User registration page"""
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        data = request.form
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        confirm_password = data.get('confirm_password', '')
+        name = data.get('name', '').strip()
+        
+        # Validation
+        errors = []
+        if not email or '@' not in email:
+            errors.append('Please enter a valid email address.')
+        if len(password) < 8:
+            errors.append('Password must be at least 8 characters.')
+        if password != confirm_password:
+            errors.append('Passwords do not match.')
+        if User.query.filter_by(email=email).first():
+            errors.append('An account with this email already exists.')
+        
+        if errors:
+            for error in errors:
+                flash(error, 'error')
+            return render_template('auth/signup.html', email=email, name=name)
+        
+        # Create user
+        user = User(email=email, name=name or None)
+        user.set_password(password)
+        db.session.add(user)
+        
+        # Transfer any anonymous toddlers to this user
+        session_id = session.get('anonymous_session_id')
+        if session_id:
+            anonymous_toddlers = Toddler.query.filter_by(
+                session_id=session_id, 
+                user_id=None
+            ).all()
+            for toddler in anonymous_toddlers:
+                toddler.user_id = user.id
+                toddler.session_id = None
+        
+        db.session.commit()
+        
+        # Log them in
+        login_user(user, remember=True)
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+        
+        flash('Account created successfully! Your data has been saved.', 'success')
+        return redirect(url_for('home'))
+    
+    return render_template('auth/signup.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login page"""
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        data = request.form
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        remember = data.get('remember', False)
+        
+        user = User.query.filter_by(email=email).first()
+        
+        if user and user.check_password(password):
+            if not user.is_active:
+                flash('This account has been deactivated.', 'error')
+                return render_template('auth/login.html', email=email)
+            
+            login_user(user, remember=bool(remember))
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            
+            # Redirect to next page or home
+            next_page = request.args.get('next')
+            if next_page and next_page.startswith('/'):
+                return redirect(next_page)
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid email or password.', 'error')
+            return render_template('auth/login.html', email=email)
+    
+    return render_template('auth/login.html')
+
+
+@app.route('/logout')
+def logout():
+    """Log out user"""
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('index'))
+
+
+@app.route('/profile')
+@login_required
+def profile():
+    """User profile page"""
+    toddlers = get_user_toddlers()
+    return render_template('auth/profile.html', toddlers=toddlers)
+
+
+@app.route('/api/auth/status')
+def auth_status():
+    """API endpoint to check authentication status"""
+    if current_user.is_authenticated:
+        return jsonify({
+            'authenticated': True,
+            'user': current_user.to_dict()
+        })
+    else:
+        return jsonify({
+            'authenticated': False,
+            'session_id': get_session_id()[:8] + '...'  # Partial for privacy
+        })
 
 
 # ==================== WEB ROUTES ====================
@@ -70,7 +245,7 @@ def index():
 @app.route('/home')
 def home():
     """Home page - show dashboard if toddlers exist"""
-    toddlers = Toddler.query.all()
+    toddlers = get_user_toddlers()
     if not toddlers:
         return redirect(url_for('onboarding'))
     return redirect(url_for('dashboard', toddler_id=toddlers[0].id))
@@ -86,40 +261,60 @@ def onboarding():
 def dashboard(toddler_id):
     """Main dashboard for a specific toddler"""
     toddler = Toddler.query.get_or_404(toddler_id)
-    return render_template('dashboard.html', toddler=toddler, toddlers=Toddler.query.all())
+    if not owns_toddler(toddler):
+        flash('You do not have access to this profile.', 'error')
+        return redirect(url_for('home'))
+    toddlers = get_user_toddlers()
+    return render_template('dashboard.html', toddler=toddler, toddlers=toddlers)
 
 
 @app.route('/log-meal/<int:toddler_id>')
 def log_meal_page(toddler_id):
     """Page to log a meal"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        flash('You do not have access to this profile.', 'error')
+        return redirect(url_for('home'))
     foods = Food.query.filter(Food.suitable_from_months <= toddler.age_months).order_by(Food.name).all()
     # Convert foods to dict for JSON serialization in template
     foods_data = [f.to_dict() for f in foods]
-    return render_template('log_meal.html', toddler=toddler, foods=foods, foods_data=foods_data)
+    toddlers = get_user_toddlers()
+    return render_template('log_meal.html', toddler=toddler, toddlers=toddlers, foods=foods, foods_data=foods_data)
 
 
 @app.route('/weekly-plan/<int:toddler_id>')
 def weekly_plan_page(toddler_id):
     """Weekly meal plan page"""
     toddler = Toddler.query.get_or_404(toddler_id)
-    return render_template('weekly_plan.html', toddler=toddler)
+    if not owns_toddler(toddler):
+        flash('You do not have access to this profile.', 'error')
+        return redirect(url_for('home'))
+    toddlers = get_user_toddlers()
+    return render_template('weekly_plan.html', toddler=toddler, toddlers=toddlers)
 
 
 @app.route('/nutrition/<int:toddler_id>')
 def nutrition_page(toddler_id):
     """Nutrition analysis page"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        flash('You do not have access to this profile.', 'error')
+        return redirect(url_for('home'))
+    toddlers = get_user_toddlers()
     engine = NutritionEngine(db.session)
     rda = engine.get_rda(toddler.age_months)
-    return render_template('nutrition.html', toddler=toddler, rda=rda)
+    return render_template('nutrition.html', toddler=toddler, toddlers=toddlers, rda=rda)
 
 
 @app.route('/preferences/<int:toddler_id>')
 def preferences_page(toddler_id):
     """Food preferences page"""
     toddler = Toddler.query.get_or_404(toddler_id)
-    return render_template('preferences.html', toddler=toddler)
+    if not owns_toddler(toddler):
+        flash('You do not have access to this profile.', 'error')
+        return redirect(url_for('home'))
+    toddlers = get_user_toddlers()
+    return render_template('preferences.html', toddler=toddler, toddlers=toddlers)
 
 
 # ==================== API ROUTES ====================
@@ -128,8 +323,8 @@ def preferences_page(toddler_id):
 
 @app.route('/api/toddlers', methods=['GET'])
 def get_toddlers():
-    """Get all toddlers"""
-    toddlers = Toddler.query.all()
+    """Get all toddlers belonging to current user/session"""
+    toddlers = get_user_toddlers()
     return jsonify([t.to_dict() for t in toddlers])
 
 
@@ -157,6 +352,12 @@ def create_toddler():
         meal_schedule=data.get('meal_schedule')
     )
     
+    # Assign ownership
+    if current_user.is_authenticated:
+        toddler.user_id = current_user.id
+    else:
+        toddler.session_id = get_session_id()
+    
     if toddler.weight_kg:
         toddler.weight_updated_at = date.today()
     
@@ -170,6 +371,8 @@ def create_toddler():
 def get_toddler(toddler_id):
     """Get a specific toddler"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
     return jsonify(toddler.to_dict())
 
 
@@ -177,6 +380,8 @@ def get_toddler(toddler_id):
 def update_toddler(toddler_id):
     """Update a toddler profile"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
     data = request.json
     
     if 'name' in data:

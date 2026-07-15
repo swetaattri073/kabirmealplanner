@@ -88,6 +88,24 @@
             font-size: 2rem;
         }
         
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            opacity: 0.9;
+            transition: all 0.3s;
+        }
+        
+        .nav-link:hover {
+            opacity: 1;
+        }
+        
         .nav-cta {
             padding: 0.75rem 1.5rem;
             background: white;
@@ -96,6 +114,9 @@
             font-weight: 700;
             text-decoration: none;
             transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
         .nav-cta:hover {
@@ -666,7 +687,17 @@
                 <span>🥗</span>
                 <span>Meal Planner</span>
             </div>
-            <a href="{{ url_for('onboarding') }}" class="nav-cta">Get Started Free</a>
+            <div class="nav-actions">
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('home') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('profile') }}" class="nav-cta">
+                    <i class="fas fa-user"></i> My Account
+                </a>
+                {% else %}
+                <a href="{{ url_for('login') }}" class="nav-link">Sign In</a>
+                <a href="{{ url_for('signup') }}" class="nav-cta">Get Started Free</a>
+                {% endif %}
+            </div>
         </nav>
         
         <div class="hero-content">

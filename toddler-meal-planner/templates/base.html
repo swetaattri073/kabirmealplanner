@@ -111,6 +111,32 @@
                     <i class="fas fa-plus"></i>
                     <span>Add Toddler</span>
                 </a>
+                
+                {% if current_user.is_authenticated %}
+                <div class="auth-section">
+                    <a href="{{ url_for('profile') }}" class="auth-profile-link">
+                        <div class="auth-avatar">{{ current_user.name[0] | upper if current_user.name else current_user.email[0] | upper }}</div>
+                        <div class="auth-info">
+                            <span class="auth-name">{{ current_user.name or 'My Account' }}</span>
+                            <span class="auth-email">{{ current_user.email }}</span>
+                        </div>
+                    </a>
+                </div>
+                {% else %}
+                <div class="auth-section guest">
+                    <div class="guest-notice">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Using as guest</span>
+                    </div>
+                    <a href="{{ url_for('signup') }}" class="auth-signup-btn">
+                        <i class="fas fa-user-plus"></i>
+                        <span>Sign Up to Save</span>
+                    </a>
+                    <a href="{{ url_for('login') }}" class="auth-login-link">
+                        Already have an account? <strong>Sign In</strong>
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </nav>
         
@@ -119,6 +145,31 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash-message {{ category }}">
+                {% if category == 'success' %}<i class="fas fa-check-circle"></i>
+                {% elif category == 'error' %}<i class="fas fa-exclamation-circle"></i>
+                {% elif category == 'warning' %}<i class="fas fa-exclamation-triangle"></i>
+                {% else %}<i class="fas fa-info-circle"></i>{% endif %}
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <script>
+            setTimeout(() => {
+                document.querySelectorAll('.flash-message').forEach(el => {
+                    el.style.animation = 'slide-in-right 0.3s ease-out reverse forwards';
+                    setTimeout(() => el.remove(), 300);
+                });
+            }, 5000);
+        </script>
+        {% endif %}
+    {% endwith %}
     
     <!-- Toast Notifications -->
     <div id="toast-container"></div>

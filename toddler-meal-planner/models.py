@@ -5,9 +5,69 @@ Uses SQLite with SQLAlchemy ORM
 
 from datetime import datetime, date
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
 from sqlalchemy import JSON
+import bcrypt
 
 db = SQLAlchemy()
+
+
+class User(UserMixin, db.Model):
+    """User model for authentication - optional for app usage"""
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    name = db.Column(db.String(100), nullable=True)
+    
+    # Subscription & features
+    subscription_tier = db.Column(db.String(20), default='free')  # free, premium, family
+    subscription_expires = db.Column(db.DateTime, nullable=True)
+    
+    # Account status
+    is_active = db.Column(db.Boolean, default=True)
+    email_verified = db.Column(db.Boolean, default=False)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    toddlers = db.relationship('Toddler', backref='user', lazy='dynamic')
+    
+    def set_password(self, password):
+        """Hash and set password"""
+        self.password_hash = bcrypt.hashpw(
+            password.encode('utf-8'), 
+            bcrypt.gensalt()
+        ).decode('utf-8')
+    
+    def check_password(self, password):
+        """Verify password"""
+        return bcrypt.checkpw(
+            password.encode('utf-8'),
+            self.password_hash.encode('utf-8')
+        )
+    
+    def is_premium(self):
+        """Check if user has active premium subscription"""
+        if self.subscription_tier == 'free':
+            return False
+        if self.subscription_expires and self.subscription_expires < datetime.utcnow():
+            return False
+        return True
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'name': self.name,
+            'subscription_tier': self.subscription_tier,
+            'is_premium': self.is_premium(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'toddler_count': self.toddlers.count()
+        }
 
 
 class Toddler(db.Model):
@@ -15,6 +75,11 @@ class Toddler(db.Model):
     __tablename__ = 'toddlers'
     
     id = db.Column(db.Integer, primary_key=True)
+    
+    # Owner - either a logged-in user or anonymous session
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    session_id = db.Column(db.String(64), nullable=True, index=True)  # For anonymous users
+    
     name = db.Column(db.String(100), nullable=False)
     age_months = db.Column(db.Integer, nullable=False)
     birth_date = db.Column(db.Date, nullable=True)
