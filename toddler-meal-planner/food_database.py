@@ -1730,13 +1730,24 @@ def search_foods(query):
             (f.get("name_hindi") and query in f["name_hindi"].lower())]
 
 
-def init_food_database(db_session, Food):
+def init_food_database(db_session, Food, force_reseed=False):
     """Initialize the food database with all Indian foods"""
     from sqlalchemy import inspect
     
-    # Check if foods already exist
-    if Food.query.count() > 0:
+    # Check current food count
+    current_count = Food.query.count()
+    expected_count = len(INDIAN_FOODS)
+    
+    # Re-seed if database has significantly fewer foods than expected
+    # This handles cases where the database was partially created
+    if current_count > 0 and current_count >= expected_count * 0.9 and not force_reseed:
         return False
+    
+    # If we have some foods but not all, delete and re-seed
+    if current_count > 0 and current_count < expected_count * 0.9:
+        print(f"Food database incomplete ({current_count}/{expected_count}). Re-seeding...")
+        Food.query.delete()
+        db_session.commit()
     
     for food_data in INDIAN_FOODS:
         food = Food(

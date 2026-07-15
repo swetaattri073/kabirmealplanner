@@ -296,6 +296,48 @@ def get_allergens():
     return jsonify(COMMON_ALLERGENS)
 
 
+@app.route('/api/foods/status', methods=['GET'])
+def get_foods_status():
+    """Check food database status"""
+    from food_database import INDIAN_FOODS
+    
+    current_count = Food.query.count()
+    expected_count = len(INDIAN_FOODS)
+    
+    # Get count by category
+    categories = db.session.query(
+        Food.category, db.func.count(Food.id)
+    ).group_by(Food.category).all()
+    
+    return jsonify({
+        'current_count': current_count,
+        'expected_count': expected_count,
+        'is_complete': current_count >= expected_count * 0.9,
+        'categories': {cat: count for cat, count in categories}
+    })
+
+
+@app.route('/api/foods/reseed', methods=['POST'])
+def reseed_foods():
+    """Force re-seed the food database"""
+    from food_database import INDIAN_FOODS
+    
+    # Delete all existing foods
+    Food.query.delete()
+    db.session.commit()
+    
+    # Re-seed
+    init_food_database(db.session, Food, force_reseed=True)
+    
+    new_count = Food.query.count()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Food database re-seeded with {new_count} foods',
+        'count': new_count
+    })
+
+
 # --- Meal Logging ---
 
 @app.route('/api/meal-logs', methods=['GET'])
