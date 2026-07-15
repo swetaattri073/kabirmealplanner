@@ -109,8 +109,8 @@
                 <div class="form-group">
                     <label class="form-label">Select Food</label>
                     <div id="food-list" class="food-list">
-                        {% for food in foods %}
-                        <div class="food-item" onclick='selectFood({{ food.to_dict() | tojson }})'>
+                        {% for food in foods_data %}
+                        <div class="food-item" onclick='selectFood({{ food | tojson }})'>
                             <div class="food-item-info">
                                 <div class="food-item-name">{{ food.name }}</div>
                                 {% if food.name_hindi %}
@@ -187,7 +187,7 @@
     
     <script>
         // Store foods for search
-        const allFoods = {{ foods | map(attribute='to_dict') | list | tojson }};
+        const allFoods = {{ foods_data | tojson }};
         
         document.addEventListener('DOMContentLoaded', function() {
             initFoodSearch(allFoods);

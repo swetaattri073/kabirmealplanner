@@ -94,7 +94,9 @@ def log_meal_page(toddler_id):
     """Page to log a meal"""
     toddler = Toddler.query.get_or_404(toddler_id)
     foods = Food.query.filter(Food.suitable_from_months <= toddler.age_months).order_by(Food.name).all()
-    return render_template('log_meal.html', toddler=toddler, foods=foods)
+    # Convert foods to dict for JSON serialization in template
+    foods_data = [f.to_dict() for f in foods]
+    return render_template('log_meal.html', toddler=toddler, foods=foods, foods_data=foods_data)
 
 
 @app.route('/weekly-plan/<int:toddler_id>')
