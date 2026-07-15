@@ -18,9 +18,9 @@ from collections import defaultdict
 FOOD_ALIASES = {
     # Grains
     'rice': ['chawal', 'chaval', 'bhat', 'cooked rice', 'plain rice', 'white rice'],
-    'roti': ['chapati', 'chapatti', 'phulka', 'rotis', 'bread'],
+    'roti': ['chapati', 'chapatti', 'phulka', 'rotis'],
     'paratha': ['parantha', 'pratha', 'stuffed roti'],
-    'idli': ['idly', 'idlis', 'idle'],
+    'idli': ['idly', 'idlis'],
     'dosa': ['dosai', 'dosas', 'plain dosa'],
     'upma': ['uppma', 'upuma', 'rava upma'],
     'poha': ['pohe', 'flattened rice', 'beaten rice'],
@@ -28,14 +28,16 @@ FOOD_ALIASES = {
     'daliya': ['dalia', 'broken wheat', 'bulgur'],
     'oats': ['oatmeal', 'oats porridge'],
     
-    # Dals
+    # Dals & legumes
     'dal': ['daal', 'dhal', 'lentils', 'pulses'],
-    'moong dal': ['moong', 'mung dal', 'green gram'],
-    'toor dal': ['arhar dal', 'toor', 'pigeon pea'],
-    'chana dal': ['chana', 'bengal gram'],
-    'masoor dal': ['masoor', 'red lentils'],
+    'moong dal': ['moong', 'mung dal', 'green gram', 'moongdaal'],
+    'toor dal': ['arhar dal', 'toor', 'pigeon pea', 'arhar'],
+    'chana dal': ['bengal gram'],
+    'masoor dal': ['masoor', 'red lentils', 'masoordal'],
+    'lobia': ['lobhiya', 'lobiya', 'black eyed peas', 'black-eyed peas',
+              'black eyed beans', 'chowli', 'chawli', 'rongi'],
     'rajma': ['kidney beans', 'rajmah'],
-    'chole': ['chana', 'chickpeas', 'chhole', 'chhola'],
+    'chole': ['chickpeas', 'chhole', 'chhola', 'kabuli chana'],
     'sambar': ['sambhar', 'sambaar'],
     
     # Vegetables
@@ -48,9 +50,11 @@ FOOD_ALIASES = {
     'beans': ['sem', 'french beans'],
     'cauliflower': ['gobhi', 'gobi', 'phool gobhi'],
     'tomato': ['tamatar', 'tomatoes'],
+    'cucumber': ['kheera', 'kakdi', 'khira', 'cucumbers'],
     'beetroot': ['chukandar', 'beet'],
     'bottle gourd': ['lauki', 'ghiya', 'dudhi'],
     'brinjal': ['baingan', 'eggplant', 'aubergine'],
+    'okra': ['bhindi', 'lady finger'],
     
     # Fruits  
     'banana': ['kela', 'bananas'],
@@ -69,10 +73,11 @@ FOOD_ALIASES = {
     'paneer': ['cottage cheese', 'indian cheese'],
     'cheese': ['cheez'],
     'ghee': ['clarified butter', 'desi ghee'],
-    'buttermilk': ['chaas', 'mattha', 'lassi'],
+    'buttermilk': ['chaas', 'mattha'],
+    'lassi': ['lassie'],
     
     # Protein
-    'egg': ['anda', 'eggs', 'boiled egg', 'scrambled egg'],
+    'egg': ['anda', 'eggs', 'boiled egg', 'scrambled egg', 'omelette', 'omelet'],
     'chicken': ['murgh', 'murgi'],
     'fish': ['machli', 'machhi'],
     
@@ -88,6 +93,16 @@ FOOD_ALIASES = {
     'dates': ['khajoor', 'khajur'],
     'dry fruits': ['meva', 'nuts', 'almonds', 'cashews'],
     'ragi': ['nachni', 'finger millet', 'ragi porridge'],
+}
+
+# Words that must never be treated as food matches
+NLP_STOP_WORDS = {
+    'a', 'an', 'the', 'and', 'or', 'but', 'with', 'without', 'for', 'from',
+    'to', 'of', 'in', 'on', 'at', 'is', 'are', 'was', 'were', 'be', 'been',
+    'have', 'has', 'had', 'him', 'her', 'his', 'he', 'she', 'we', 'they',
+    'them', 'their', 'our', 'my', 'me', 'i', 'you', 'only', 'just', 'also',
+    'some', 'any', 'all', 'ate', 'eat', 'eaten', 'eating', 'gave', 'give',
+    'given', 'today', 'yesterday', 'meal', 'food', 'served', 'serving',
 }
 
 # Quantity patterns
@@ -138,64 +153,121 @@ def normalize_text(text):
 def find_foods_in_text(text, food_database=None):
     """
     Extract food mentions from natural language text.
-    Returns list of (food_name, confidence, matched_text)
+    Uses exact / alias matching with strict fuzzy rules to avoid
+    false positives (e.g. 'and' → 'anda'/egg).
     """
     normalized = normalize_text(text)
     found_foods = []
+    consumed_spans = set()  # word indices already matched
     
-    # Build reverse alias map
+    # Build reverse alias map: alias -> canonical food name
     alias_to_food = {}
     for food, aliases in FOOD_ALIASES.items():
         alias_to_food[food.lower()] = food
         for alias in aliases:
             alias_to_food[alias.lower()] = food
     
-    # Check for food mentions
     words = normalized.split()
     
-    # Try multi-word matches first (e.g., "dal rice", "sweet potato")
-    for n in range(4, 0, -1):  # 4-grams down to 1-grams
-        i = 0
-        while i <= len(words) - n:
-            phrase = ' '.join(words[i:i+n])
-            
-            # Direct match
-            if phrase in alias_to_food:
-                food_name = alias_to_food[phrase]
-                found_foods.append({
-                    'name': food_name.title(),
-                    'matched_text': phrase,
-                    'confidence': 0.95
-                })
-                # Remove matched words to avoid double counting
-                words = words[:i] + words[i+n:]
-            else:
-                # Fuzzy match
-                for alias, food in alias_to_food.items():
-                    similarity = SequenceMatcher(None, phrase, alias).ratio()
-                    if similarity > 0.8:
-                        found_foods.append({
-                            'name': food.title(),
-                            'matched_text': phrase,
-                            'confidence': round(similarity, 2)
-                        })
-                        words = words[:i] + words[i+n:]
-                        break
-                else:
-                    i += 1
+    def span_free(start, end):
+        return not any(i in consumed_spans for i in range(start, end))
     
-    # If food database provided, also check against it
+    def mark_span(start, end):
+        for i in range(start, end):
+            consumed_spans.add(i)
+    
+    # 1) Exact alias matches (longest first)
+    for n in range(4, 0, -1):
+        for i in range(len(words) - n + 1):
+            if not span_free(i, i + n):
+                continue
+            phrase = ' '.join(words[i:i + n])
+            if phrase in NLP_STOP_WORDS:
+                continue
+            if phrase in alias_to_food:
+                found_foods.append({
+                    'name': alias_to_food[phrase].title(),
+                    'matched_text': phrase,
+                    'confidence': 0.95 if n == 1 else 0.98
+                })
+                mark_span(i, i + n)
+    
+    # 2) Strict fuzzy match only for unmatched tokens of length >= 4
+    #    Never fuzzy-match stop words or very short tokens
+    for i, word in enumerate(words):
+        if i in consumed_spans:
+            continue
+        if word in NLP_STOP_WORDS or len(word) < 4:
+            continue
+        
+        best = None
+        best_score = 0.0
+        for alias, food in alias_to_food.items():
+            # Only compare similar-length aliases (avoid 'and' ↔ 'anda')
+            if abs(len(alias) - len(word)) > 2:
+                continue
+            if len(alias) < 4:
+                continue
+            score = SequenceMatcher(None, word, alias).ratio()
+            # Require high similarity AND shared character start for short aliases
+            if score > best_score and score >= 0.88:
+                if word[0] == alias[0] or score >= 0.92:
+                    best_score = score
+                    best = (food, alias)
+        
+        if best:
+            found_foods.append({
+                'name': best[0].title(),
+                'matched_text': word,
+                'confidence': round(best_score, 2)
+            })
+            consumed_spans.add(i)
+    
+    # 3) Match against food database names (whole-word / containment)
     if food_database:
         for food in food_database:
             food_name = food.get('name', '') if isinstance(food, dict) else str(food)
             food_lower = food_name.lower()
-            
-            if food_lower in normalized and not any(f['name'].lower() == food_lower for f in found_foods):
-                found_foods.append({
-                    'name': food_name,
-                    'matched_text': food_lower,
-                    'confidence': 0.90
-                })
+            # Skip combo names that contain filler words when checking
+            # Use word-boundary style check
+            if food_lower in normalized:
+                # Prefer matches where food name appears as contiguous phrase
+                if not any(f['name'].lower() == food_lower for f in found_foods):
+                    # Also skip if only a stop-word part of the name matched via DB
+                    # Require the full name phrase
+                    found_foods.append({
+                        'name': food_name,
+                        'matched_text': food_lower,
+                        'confidence': 0.90,
+                        'food_id': food.get('id') if isinstance(food, dict) else None
+                    })
+            else:
+                # Check significant words from food name (≥4 chars, not stop words)
+                significant = [
+                    w for w in re.split(r'[\s/+\-]+', food_lower)
+                    if len(w) >= 4 and w not in NLP_STOP_WORDS
+                ]
+                for sig in significant:
+                    if re.search(rf'\b{re.escape(sig)}\b', normalized):
+                        # Avoid duplicates of same canonical item
+                        if not any(
+                            f['name'].lower() == food_lower or
+                            f['name'].lower() == sig
+                            for f in found_foods
+                        ):
+                            # Only add if this significant word isn't already claimed
+                            # as a different food's match
+                            already = any(
+                                f.get('matched_text', '') == sig for f in found_foods
+                            )
+                            if not already:
+                                found_foods.append({
+                                    'name': food_name,
+                                    'matched_text': sig,
+                                    'confidence': 0.85,
+                                    'food_id': food.get('id') if isinstance(food, dict) else None
+                                })
+                        break
     
     # Remove duplicates, keep highest confidence
     unique_foods = {}
@@ -205,6 +277,36 @@ def find_foods_in_text(text, food_database=None):
             unique_foods[name] = food
     
     return list(unique_foods.values())
+
+
+def extract_eaten_vs_served(text):
+    """
+    Detect foods that were only served vs actually eaten.
+    E.g. "gave him X, Y, Z. He ate only Y and Z" → eaten={Y,Z}, refused={X}
+    """
+    normalized = normalize_text(text)
+    eaten = set()
+    refused = set()
+    
+    # Patterns for "ate only X"
+    only_match = re.search(
+        r'(?:ate|eaten|finished|had)\s+only\s+(.+?)(?:\.|$)',
+        normalized
+    )
+    if only_match:
+        only_foods = find_foods_in_text(only_match.group(1))
+        eaten = {f['name'].lower() for f in only_foods}
+    
+    # Patterns for refused / didn't eat
+    refuse_match = re.search(
+        r"(?:didn'?t eat|did not eat|refused|skipped)\s+(.+?)(?:\.|$)",
+        normalized
+    )
+    if refuse_match:
+        refused_foods = find_foods_in_text(refuse_match.group(1))
+        refused = {f['name'].lower() for f in refused_foods}
+    
+    return eaten, refused
 
 
 def extract_portion(text):
@@ -263,25 +365,43 @@ def parse_meal_input(text, food_database=None):
         'raw_text': '...'
     }
     """
+    foods = find_foods_in_text(text, food_database)
+    eaten, refused = extract_eaten_vs_served(text)
+    
+    # Annotate foods with ate/refused based on "ate only" clauses
+    food_reactions = {}
+    for food in foods:
+        name_lower = food['name'].lower()
+        if eaten:
+            if name_lower in eaten:
+                food['eaten'] = True
+                food_reactions[food['name']] = 'liked'
+            else:
+                food['eaten'] = False
+                food_reactions[food['name']] = 'refused'
+        elif name_lower in refused:
+            food['eaten'] = False
+            food_reactions[food['name']] = 'refused'
+    
     result = {
-        'foods': find_foods_in_text(text, food_database),
+        'foods': foods,
         'portion': extract_portion(text),
         'meal_type': extract_meal_type(text),
         'overall_reaction': extract_reaction(text),
-        'food_reactions': {},
+        'food_reactions': food_reactions,
         'raw_text': text
     }
     
-    # Try to extract per-food reactions
-    # Split by conjunctions and analyze each part
+    # Try to extract per-food reactions from clause parts (override if stronger signal)
     parts = re.split(r'\b(but|however|though|and|,)\b', text.lower())
     
     for food in result['foods']:
         food_name = food['name'].lower()
+        aliases = FOOD_ALIASES.get(food_name, [])
         for part in parts:
-            if food_name in part or any(alias in part for alias in FOOD_ALIASES.get(food_name.lower(), [])):
+            if food_name in part or any(alias in part for alias in aliases):
                 reaction = extract_reaction(part)
-                if reaction:
+                if reaction and food['name'] not in food_reactions:
                     result['food_reactions'][food['name']] = reaction
     
     return result

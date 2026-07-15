@@ -10,6 +10,7 @@ from functools import wraps
 from flask import Flask, render_template, request, jsonify, redirect, url_for, g, session, flash
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -57,6 +58,46 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Please sign in to access this feature.'
 login_manager.login_message_category = 'info'
 
+# Initialize OAuth (Google + Facebook; Instagram consumer login uses Facebook)
+oauth = OAuth(app)
+
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+FACEBOOK_CLIENT_ID = os.environ.get('FACEBOOK_CLIENT_ID', '')
+FACEBOOK_CLIENT_SECRET = os.environ.get('FACEBOOK_CLIENT_SECRET', '')
+
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    oauth.register(
+        name='google',
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+        client_kwargs={'scope': 'openid email profile'}
+    )
+
+if FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET:
+    oauth.register(
+        name='facebook',
+        client_id=FACEBOOK_CLIENT_ID,
+        client_secret=FACEBOOK_CLIENT_SECRET,
+        access_token_url='https://graph.facebook.com/oauth/access_token',
+        access_token_params=None,
+        authorize_url='https://www.facebook.com/dialog/oauth',
+        authorize_params=None,
+        api_base_url='https://graph.facebook.com/',
+        client_kwargs={'scope': 'email public_profile'},
+    )
+
+
+def oauth_providers_available():
+    """Which social providers are configured via env vars"""
+    return {
+        'google': bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
+        'facebook': bool(FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET),
+        # Instagram consumer login goes through Facebook Login
+        'instagram': bool(FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET),
+    }
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -90,6 +131,61 @@ def owns_toddler(toddler):
         return toddler.session_id == session_id and toddler.user_id is None
 
 
+def _transfer_anonymous_toddlers(user):
+    """Move guest session toddlers to a newly logged-in/signed-up user"""
+    session_id = session.get('anonymous_session_id')
+    if not session_id:
+        return 0
+    anonymous_toddlers = Toddler.query.filter_by(
+        session_id=session_id,
+        user_id=None
+    ).all()
+    for toddler in anonymous_toddlers:
+        toddler.user_id = user.id
+        toddler.session_id = None
+    return len(anonymous_toddlers)
+
+
+def _login_or_create_oauth_user(provider, oauth_id, email, name=None, avatar_url=None):
+    """Find or create a user from an OAuth provider profile"""
+    if not email:
+        raise ValueError(f'{provider.title()} did not share an email. Please allow email access.')
+    
+    email = email.strip().lower()
+    
+    # Prefer exact OAuth identity match
+    user = User.query.filter_by(oauth_provider=provider, oauth_id=str(oauth_id)).first()
+    
+    if not user:
+        # Link to existing email account if present
+        user = User.query.filter_by(email=email).first()
+        if user:
+            user.oauth_provider = provider
+            user.oauth_id = str(oauth_id)
+            if avatar_url and not user.avatar_url:
+                user.avatar_url = avatar_url
+            if name and not user.name:
+                user.name = name
+            user.email_verified = True
+        else:
+            user = User(
+                email=email,
+                name=name,
+                oauth_provider=provider,
+                oauth_id=str(oauth_id),
+                avatar_url=avatar_url,
+                email_verified=True,
+            )
+            db.session.add(user)
+    
+    _transfer_anonymous_toddlers(user)
+    user.last_login = datetime.utcnow()
+    db.session.commit()
+    
+    login_user(user, remember=True)
+    return user
+
+
 # Initialize database and food data
 with app.app_context():
     db.create_all()
@@ -116,6 +212,8 @@ def signup():
     if current_user.is_authenticated:
         return redirect(url_for('home'))
     
+    providers = oauth_providers_available()
+    
     if request.method == 'POST':
         data = request.form
         email = data.get('email', '').strip().lower()
@@ -137,24 +235,15 @@ def signup():
         if errors:
             for error in errors:
                 flash(error, 'error')
-            return render_template('auth/signup.html', email=email, name=name)
+            return render_template('auth/signup.html', email=email, name=name, providers=providers)
         
         # Create user
         user = User(email=email, name=name or None)
         user.set_password(password)
         db.session.add(user)
+        db.session.flush()
         
-        # Transfer any anonymous toddlers to this user
-        session_id = session.get('anonymous_session_id')
-        if session_id:
-            anonymous_toddlers = Toddler.query.filter_by(
-                session_id=session_id, 
-                user_id=None
-            ).all()
-            for toddler in anonymous_toddlers:
-                toddler.user_id = user.id
-                toddler.session_id = None
-        
+        transferred = _transfer_anonymous_toddlers(user)
         db.session.commit()
         
         # Log them in
@@ -162,10 +251,13 @@ def signup():
         user.last_login = datetime.utcnow()
         db.session.commit()
         
-        flash('Account created successfully! Your data has been saved.', 'success')
+        msg = 'Account created successfully! Your data has been saved.'
+        if transferred:
+            msg = f'Account created! {transferred} toddler profile(s) transferred to your account.'
+        flash(msg, 'success')
         return redirect(url_for('home'))
     
-    return render_template('auth/signup.html')
+    return render_template('auth/signup.html', providers=providers)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -173,6 +265,8 @@ def login():
     """User login page"""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
+    
+    providers = oauth_providers_available()
     
     if request.method == 'POST':
         data = request.form
@@ -185,8 +279,9 @@ def login():
         if user and user.check_password(password):
             if not user.is_active:
                 flash('This account has been deactivated.', 'error')
-                return render_template('auth/login.html', email=email)
+                return render_template('auth/login.html', email=email, providers=providers)
             
+            _transfer_anonymous_toddlers(user)
             login_user(user, remember=bool(remember))
             user.last_login = datetime.utcnow()
             db.session.commit()
@@ -198,9 +293,9 @@ def login():
             return redirect(url_for('home'))
         else:
             flash('Invalid email or password.', 'error')
-            return render_template('auth/login.html', email=email)
+            return render_template('auth/login.html', email=email, providers=providers)
     
-    return render_template('auth/login.html')
+    return render_template('auth/login.html', providers=providers)
 
 
 @app.route('/logout')
@@ -209,6 +304,70 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
+
+
+@app.route('/login/google')
+def login_google():
+    """Start Google OAuth login"""
+    if not oauth_providers_available()['google']:
+        flash('Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.', 'error')
+        return redirect(url_for('login'))
+    redirect_uri = url_for('authorize_google', _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@app.route('/authorize/google')
+def authorize_google():
+    """Google OAuth callback"""
+    try:
+        token = oauth.google.authorize_access_token()
+        userinfo = token.get('userinfo') or oauth.google.userinfo()
+        _login_or_create_oauth_user(
+            provider='google',
+            oauth_id=userinfo.get('sub'),
+            email=userinfo.get('email'),
+            name=userinfo.get('name'),
+            avatar_url=userinfo.get('picture'),
+        )
+        flash('Signed in with Google!', 'success')
+        return redirect(url_for('home'))
+    except Exception as e:
+        flash(f'Google sign-in failed: {str(e)}', 'error')
+        return redirect(url_for('login'))
+
+
+@app.route('/login/facebook')
+def login_facebook():
+    """Start Facebook / Instagram (via Facebook) OAuth login"""
+    if not oauth_providers_available()['facebook']:
+        flash('Facebook sign-in is not configured. Set FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET.', 'error')
+        return redirect(url_for('login'))
+    redirect_uri = url_for('authorize_facebook', _external=True)
+    return oauth.facebook.authorize_redirect(redirect_uri)
+
+
+@app.route('/authorize/facebook')
+def authorize_facebook():
+    """Facebook OAuth callback (also covers Instagram consumer login)"""
+    try:
+        token = oauth.facebook.authorize_access_token()
+        resp = oauth.facebook.get('me?fields=id,name,email,picture.type(large)')
+        profile = resp.json()
+        avatar = None
+        if profile.get('picture') and profile['picture'].get('data'):
+            avatar = profile['picture']['data'].get('url')
+        _login_or_create_oauth_user(
+            provider='facebook',
+            oauth_id=profile.get('id'),
+            email=profile.get('email'),
+            name=profile.get('name'),
+            avatar_url=avatar,
+        )
+        flash('Signed in with Facebook!', 'success')
+        return redirect(url_for('home'))
+    except Exception as e:
+        flash(f'Facebook sign-in failed: {str(e)}', 'error')
+        return redirect(url_for('login'))
 
 
 @app.route('/profile')
@@ -225,12 +384,14 @@ def auth_status():
     if current_user.is_authenticated:
         return jsonify({
             'authenticated': True,
-            'user': current_user.to_dict()
+            'user': current_user.to_dict(),
+            'providers': oauth_providers_available()
         })
     else:
         return jsonify({
             'authenticated': False,
-            'session_id': get_session_id()[:8] + '...'  # Partial for privacy
+            'session_id': get_session_id()[:8] + '...',
+            'providers': oauth_providers_available()
         })
 
 

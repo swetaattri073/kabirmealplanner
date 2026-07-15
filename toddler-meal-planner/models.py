@@ -18,8 +18,13 @@ class User(UserMixin, db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=True)  # Null for OAuth-only users
     name = db.Column(db.String(100), nullable=True)
+    
+    # Social / OAuth identity
+    oauth_provider = db.Column(db.String(30), nullable=True)  # google, facebook, apple
+    oauth_id = db.Column(db.String(255), nullable=True, index=True)
+    avatar_url = db.Column(db.String(500), nullable=True)
     
     # Subscription & features
     subscription_tier = db.Column(db.String(20), default='free')  # free, premium, family
@@ -45,6 +50,8 @@ class User(UserMixin, db.Model):
     
     def check_password(self, password):
         """Verify password"""
+        if not self.password_hash:
+            return False
         return bcrypt.checkpw(
             password.encode('utf-8'),
             self.password_hash.encode('utf-8')
@@ -63,6 +70,8 @@ class User(UserMixin, db.Model):
             'id': self.id,
             'email': self.email,
             'name': self.name,
+            'oauth_provider': self.oauth_provider,
+            'avatar_url': self.avatar_url,
             'subscription_tier': self.subscription_tier,
             'is_premium': self.is_premium(),
             'created_at': self.created_at.isoformat() if self.created_at else None,

@@ -4,6 +4,7 @@ Handles RDA calculations, deficiency detection, and meal suggestions
 Based on Indian RDA (NIN - National Institute of Nutrition) guidelines
 """
 
+import re
 from datetime import date, timedelta
 from collections import defaultdict
 
@@ -648,51 +649,141 @@ class NutritionEngine:
 
 def adapt_adult_meal_for_toddler(adult_meal_description, db_session, toddler):
     """
-    Suggest toddler-friendly adaptations for an adult meal
-    Returns matching foods and adaptation tips
+    Suggest toddler-friendly adaptations for an adult meal.
+    Uses alias-aware keyword matching — never matches stop words like 'with'.
     """
     from models import Food
+    from ai_features import FOOD_ALIASES, NLP_STOP_WORDS, find_foods_in_text, normalize_text
     
-    adult_meal_lower = adult_meal_description.lower()
+    adult_meal_lower = normalize_text(adult_meal_description)
     
-    # Search for matching foods
-    matching_foods = []
-    all_foods = Food.query.all()
+    # Extract food concepts from the adult meal text
+    parsed_foods = find_foods_in_text(adult_meal_description)
+    keywords = set()
+    for pf in parsed_foods:
+        name = pf['name'].lower()
+        keywords.add(name)
+        keywords.update(FOOD_ALIASES.get(name, []))
+        keywords.add(pf.get('matched_text', '').lower())
+    
+    # Also keep significant raw tokens (≥4 chars, not stop words)
+    for word in adult_meal_lower.split():
+        if len(word) >= 4 and word not in NLP_STOP_WORDS:
+            keywords.add(word)
+    
+    keywords = {k for k in keywords if k and k not in NLP_STOP_WORDS}
+    
+    # Score each food in the database
+    scored = []
+    all_foods = Food.query.filter(
+        Food.suitable_from_months <= toddler.age_months
+    ).all()
+    
+    toddler_allergens = set(toddler.allergies or [])
     
     for food in all_foods:
+        # Skip allergen foods
+        if toddler_allergens and any(a in (food.allergens or []) for a in toddler_allergens):
+            continue
+        
         food_name_lower = food.name.lower()
         hindi_name_lower = (food.name_hindi or '').lower()
         
-        # Check if any word from the adult meal matches
-        for word in adult_meal_lower.split():
-            if len(word) > 2 and (word in food_name_lower or word in hindi_name_lower):
-                # Check if suitable for toddler's age
-                if food.suitable_from_months <= toddler.age_months:
-                    # Check allergens
-                    has_allergen = False
-                    for allergen in (toddler.allergies or []):
-                        if allergen in (food.allergens or []):
-                            has_allergen = True
-                            break
-                    
-                    if not has_allergen:
-                        matching_foods.append(food)
-                        break
+        # Significant words from food name (ignore 'with', 'and', etc.)
+        name_tokens = [
+            t for t in re.split(r'[\s/+\-]+', food_name_lower)
+            if len(t) >= 3 and t not in NLP_STOP_WORDS
+        ]
+        hindi_tokens = [
+            t for t in re.split(r'[\s/+\-]+', hindi_name_lower)
+            if len(t) >= 3 and t not in NLP_STOP_WORDS
+        ]
+        
+        score = 0
+        matched_keywords = []
+        
+        for kw in keywords:
+            # Exact food name / hindi name contains keyword as whole token
+            if kw in name_tokens or kw in hindi_tokens:
+                score += 10
+                matched_keywords.append(kw)
+            elif kw == food_name_lower or kw == hindi_name_lower:
+                score += 15
+                matched_keywords.append(kw)
+            elif len(kw) >= 4 and (kw in food_name_lower or kw in hindi_name_lower):
+                # Contained match only for longer keywords (e.g. lobia in Lobia Curry)
+                # But require word-ish boundary to avoid 'with' style issues
+                if re.search(rf'\b{re.escape(kw)}\b', food_name_lower) or \
+                   re.search(rf'\b{re.escape(kw)}\b', hindi_name_lower):
+                    score += 8
+                    matched_keywords.append(kw)
+            
+            # Alias expansion: if food name matches alias of keyword
+            for food_key, aliases in FOOD_ALIASES.items():
+                all_names = [food_key] + aliases
+                if kw in all_names:
+                    for an in all_names:
+                        if an in name_tokens or an in hindi_tokens or an == food_name_lower:
+                            score += 12
+                            matched_keywords.append(an)
+        
+        # Prefer lunch/dinner style foods when adapting adult meals
+        # (meals like "lobia with roti" are typically lunch/dinner)
+        if food.category in ['dal', 'vegetable', 'protein', 'combo']:
+            score += 1
+        if food.category == 'grain' and any(g in food_name_lower for g in ['roti', 'rice', 'chawal']):
+            score += 2
+        
+        # Penalize breakfast combo names that coincidentally shared stop words before
+        if 'breakfast' in (getattr(food, 'meal_type', None) or ''):
+            # only keep if they actually matched a real keyword
+            if not matched_keywords:
+                continue
+        
+        if score >= 8:  # Must have a real keyword match
+            scored.append((score, food, matched_keywords))
     
-    # Generate adaptations
+    # Sort by score descending, take top matches
+    scored.sort(key=lambda x: x[0], reverse=True)
+    
     adaptations = []
-    for food in matching_foods[:5]:
-        adaptation = {
+    seen_ids = set()
+    for score, food, matched_kw in scored[:6]:
+        if food.id in seen_ids:
+            continue
+        seen_ids.add(food.id)
+        
+        adaptations.append({
             'original_food': food.name,
             'food_id': food.id,
-            'toddler_version': food.toddler_friendly_version or f"Serve {food.name} in small portions",
+            'match_score': score,
+            'matched_keywords': list(set(matched_kw)),
+            'toddler_version': food.toddler_friendly_version or f"Serve {food.name} in small portions, mild spices",
             'preparation_tips': food.preparation_tips,
             'serving_size': food.get_serving_for_age(toddler.age_months),
             'spice_warning': food.spice_level > 1,
             'texture': food.texture,
+            'category': food.category,
             'nutrients': food.to_dict()
-        }
-        adaptations.append(adaptation)
+        })
+    
+    # If no DB matches but we parsed foods, create synthetic adaptation tips
+    synthetic = []
+    if not adaptations and parsed_foods:
+        for pf in parsed_foods:
+            synthetic.append({
+                'original_food': pf['name'],
+                'food_id': None,
+                'match_score': pf.get('confidence', 0.5),
+                'matched_keywords': [pf.get('matched_text', '')],
+                'toddler_version': f"Serve mild {pf['name']} in soft, bite-sized pieces",
+                'preparation_tips': "Reduce spice; mash or cut small; pair with a familiar carb like roti or rice.",
+                'serving_size': 50,
+                'spice_warning': False,
+                'texture': 'soft',
+                'category': 'unknown',
+                'nutrients': {}
+            })
     
     # General tips based on meal type
     general_tips = []
@@ -710,9 +801,14 @@ def adapt_adult_meal_for_toddler(adult_meal_description, db_session, toddler):
     if any(word in adult_meal_lower for word in ['salt', 'salty', 'namkeen']):
         general_tips.append("Reduce salt content for toddler - their kidneys are still developing")
     
+    if any(k in keywords for k in ['lobia', 'rajma', 'chole', 'dal']):
+        general_tips.append("Cook legumes until very soft; mash lightly for younger toddlers")
+        general_tips.append("Pair with roti or rice plus a cooling side like cucumber or dahi")
+    
     return {
         'adult_meal': adult_meal_description,
-        'matched_foods': adaptations,
+        'detected_foods': [pf['name'] for pf in parsed_foods],
+        'matched_foods': adaptations or synthetic,
         'general_tips': general_tips,
         'toddler_name': toddler.name,
         'toddler_age_months': toddler.age_months
