@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#6b8f3c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Meal Planner">
-    <meta name="description" content="Personalized meal planning for Indian toddlers with nutrition tracking">
+    <meta name="apple-mobile-web-app-title" content="LittleBowl">
+    <meta name="application-name" content="LittleBowl">
+    <meta name="description" content="LittleBowl — Little meals, big growth. Personalized meal planning for Indian toddlers.">
     
-    <title>{% block title %}Toddler Meal Planner{% endblock %}</title>
+    <title>{% block title %}LittleBowl{% endblock %}</title>
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     
     <!-- Favicon & App Icons -->
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/icon.svg') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon.svg') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     
     <!-- Stylesheets -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -31,9 +32,9 @@
             <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">
                 <i class="fas fa-bars"></i>
             </button>
-            <a class="mobile-logo" href="{% if toddler %}{{ url_for('dashboard', toddler_id=toddler.id) }}{% else %}{{ url_for('home') }}{% endif %}" aria-label="Go to dashboard">
-                <span class="logo-icon">🥗</span>
-                <span class="logo-text">Meal Planner</span>
+            <a class="mobile-logo" href="{% if toddler %}{{ url_for('dashboard', toddler_id=toddler.id) }}{% else %}{{ url_for('home') }}{% endif %}" aria-label="LittleBowl dashboard">
+                <img class="logo-mark" src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="LittleBowl" width="36" height="36">
+                <span class="logo-text"><span class="brand-little">Little</span><span class="brand-bowl">Bowl</span></span>
             </a>
             {% if toddler %}
             <div class="mobile-avatar">{{ toddler.name[0] | upper }}</div>
@@ -46,9 +47,12 @@
         <!-- Sidebar Navigation -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <a class="logo" href="{% if toddler %}{{ url_for('dashboard', toddler_id=toddler.id) }}{% else %}{{ url_for('home') }}{% endif %}" aria-label="Go to dashboard">
-                    <span class="logo-icon">🥗</span>
-                    <span class="logo-text">Meal Planner</span>
+                <a class="logo" href="{% if toddler %}{{ url_for('dashboard', toddler_id=toddler.id) }}{% else %}{{ url_for('home') }}{% endif %}" aria-label="LittleBowl dashboard">
+                    <img class="logo-mark" src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="LittleBowl" width="48" height="48">
+                    <div class="logo-wordmark">
+                        <span class="logo-text"><span class="brand-little">Little</span><span class="brand-bowl">Bowl</span></span>
+                        <span class="logo-tagline">Little meals, big growth.</span>
+                    </div>
                 </a>
             </div>
             
