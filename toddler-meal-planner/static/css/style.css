@@ -175,15 +175,26 @@ input, select, textarea {
 .logo {
     display: flex;
     align-items: center;
-    gap: 0.875rem;
+    gap: 0.75rem;
     text-decoration: none;
     color: inherit;
 }
 
-.logo-icon {
-    font-size: 2.5rem;
-    animation: wiggle 2s ease-in-out infinite;
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+.logo-mark {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fffaf0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    flex-shrink: 0;
+}
+
+.logo-wordmark {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
 }
 
 .logo-text {
@@ -191,6 +202,18 @@ input, select, textarea {
     font-weight: 800;
     color: white;
     text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+
+.logo-text .brand-little { color: #e8f5c8; }
+.logo-text .brand-bowl { color: #ffd4a8; }
+
+.logo-tagline {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    white-space: nowrap;
 }
 
 .toddler-info {
@@ -1481,23 +1504,26 @@ input, select, textarea {
 .mobile-logo {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
+    gap: 0.5rem;
     text-decoration: none;
     color: inherit;
 }
 
-.mobile-logo .logo-icon {
-    font-size: 1.75rem;
+.mobile-logo .logo-mark {
+    width: 36px;
+    height: 36px;
 }
 
 .mobile-logo .logo-text {
     font-weight: 800;
     font-size: 1.15rem;
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    letter-spacing: -0.02em;
+    background: none;
+    -webkit-text-fill-color: initial;
 }
+
+.mobile-logo .brand-little { color: #6b8f3c; }
+.mobile-logo .brand-bowl { color: #f97316; }
 
 .mobile-avatar {
     width: 40px;
