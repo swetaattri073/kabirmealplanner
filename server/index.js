@@ -21,7 +21,7 @@
 // message explaining it isn't configured yet.
 
 import { createServer } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { normalizeNutrients, pickBestMatch } from "./nutrients.js";
@@ -30,7 +30,22 @@ import { callOpenAIChat } from "./chat.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnv(path.join(__dirname, "..", ".env"));
 
-const PORT = Number(process.env.NUTRITION_PROXY_PORT) || 8787;
+const PORT = Number(process.env.PORT || process.env.NUTRITION_PROXY_PORT) || 8787;
+const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "dist");
+const shouldServeStatic =
+  process.env.SERVE_STATIC === "1" ||
+  (process.env.NODE_ENV === "production" && existsSync(path.join(STATIC_DIR, "index.html")));
+
+const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".json": "application/json",
+  ".woff2": "font/woff2",
+};
 const API_KEY = process.env.USDA_FDC_API_KEY || "DEMO_KEY";
 const FDC_BASE = "https://api.nal.usda.gov/fdc/v1";
 
@@ -85,6 +100,34 @@ function sendJson(res, status, data) {
     "Access-Control-Allow-Origin": "*",
   });
   res.end(JSON.stringify(data));
+}
+
+function resolveStaticPath(urlPath) {
+  const relative = urlPath === "/" ? "index.html" : urlPath.replace(/^\//, "");
+  const filePath = path.normalize(path.join(STATIC_DIR, relative));
+  if (!filePath.startsWith(STATIC_DIR)) return null;
+  return filePath;
+}
+
+function serveStaticFile(req, res, url) {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.writeHead(405);
+    res.end();
+    return true;
+  }
+
+  let filePath = resolveStaticPath(url.pathname);
+  if (!filePath || !existsSync(filePath) || statSync(filePath).isDirectory()) {
+    filePath = path.join(STATIC_DIR, "index.html");
+  }
+  if (!existsSync(filePath)) return false;
+
+  const ext = path.extname(filePath);
+  const body = readFileSync(filePath);
+  res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" });
+  if (req.method === "HEAD") res.end();
+  else res.end(body);
+  return true;
 }
 
 function readJsonBody(req) {
@@ -149,6 +192,10 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, usingDemoKey: API_KEY === "DEMO_KEY" });
     }
 
+    if (url.pathname === "/health" && req.method === "GET") {
+      return sendJson(res, 200, { ok: true, static: shouldServeStatic });
+    }
+
     if (url.pathname === "/api/chat/health" && req.method === "GET") {
       return sendJson(res, 200, { ok: !!process.env.OPENAI_API_KEY });
     }
@@ -169,6 +216,10 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    if (shouldServeStatic && !url.pathname.startsWith("/api/") && serveStaticFile(req, res, url)) {
+      return;
+    }
+
     sendJson(res, 404, { error: "Not found" });
   } catch (err) {
     console.error("[proxy] error:", err.message);
@@ -177,7 +228,8 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[proxy] listening on http://localhost:${PORT} (USDA FoodData Central + OpenAI chat)`);
+  const mode = shouldServeStatic ? "app + API" : "API proxy only";
+  console.log(`[server] listening on http://localhost:${PORT} (${mode}: USDA FoodData Central + OpenAI chat)`);
   if (!process.env.OPENAI_API_KEY) {
     console.warn(
       "[proxy] No OPENAI_API_KEY found - the Chat tab won't work until you add one to .env. " +

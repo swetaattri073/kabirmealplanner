@@ -69,15 +69,50 @@ The chat only ever gets one tool it can call (`log_food_feedback`) - it can't ta
 - `npm run build` - production build
 - `npm run lint` - eslint
 - `npm run preview` - preview a production build
+- `npm start` - production server (serves `dist/` + `/api/*` on port 5000)
 
-## A note on setup
+## Docker deployment (this React app)
 
-I couldn't create a `.gitignore` in this session (blocked by a repo safety check), so please add one yourself before committing, with at least:
+From the **repo root** (not `toddler-meal-planner/`):
 
+```bash
+cd ~/kabirmealplanner && git pull origin main
+
+# Optional: copy API keys into .env at the repo root
+cp .env.example .env
+# edit .env — USDA_FDC_API_KEY and/or OPENAI_API_KEY
+
+sudo docker build -t littlebowl-app .
+sudo docker stop littlebowl-app 2>/dev/null; sudo docker rm littlebowl-app 2>/dev/null
+sudo docker run -d --name littlebowl-app --restart always \
+  -p 80:5000 \
+  --env-file .env \
+  littlebowl-app
 ```
-node_modules
-dist
-.env
+
+Or with Compose:
+
+```bash
+cd ~/kabirmealplanner
+docker compose up -d --build
 ```
 
-`.env` in particular holds your USDA API key - it should never be committed.
+The container serves the built React UI and the `/api/*` proxy on port 5000 (mapped to host port 80 above). Profile and meal data live in the browser's `localStorage` — no server volume is required.
+
+## Legacy Flask app (`toddler-meal-planner/`)
+
+The older **LittleBowl PWA** (Flask + SQLite) still lives in `toddler-meal-planner/`. Its Docker commands are unchanged — run them from that subdirectory:
+
+```bash
+cd ~/kabirmealplanner/toddler-meal-planner
+sudo docker build -t meal-planner .
+sudo docker stop meal-planner && sudo docker rm meal-planner
+sudo docker run -d --name meal-planner --restart always \
+  -p 80:5000 -v ~/meal-data:/app/instance meal-planner
+```
+
+Do not run both containers on host port 80 at the same time. Pick one app per server, or map different ports (e.g. `-p 8080:5000`).
+
+## Environment files
+
+Copy `.env.example` to `.env` at the repo root. `.env` holds your USDA and OpenAI keys and should never be committed.
