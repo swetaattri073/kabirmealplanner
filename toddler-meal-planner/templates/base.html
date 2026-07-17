@@ -39,7 +39,11 @@
                 <img class="logo-mark" src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="LittleBowl" width="36" height="36">
                 <span class="logo-text"><span class="brand-little">Little</span><span class="brand-bowl">Bowl</span></span>
             </a>
-            {% if toddler %}
+            {% if current_user.is_authenticated %}
+            <a class="mobile-avatar mobile-avatar-link" href="{{ url_for('profile') }}" aria-label="My account" title="My account">
+                {{ current_user.name[0] | upper if current_user.name else current_user.email[0] | upper }}
+            </a>
+            {% elif toddler %}
             <div class="mobile-avatar">{{ toddler.name[0] | upper }}</div>
             {% endif %}
         </header>
@@ -127,12 +131,13 @@
                 
                 {% if current_user.is_authenticated %}
                 <div class="auth-section">
-                    <a href="{{ url_for('profile') }}" class="auth-profile-link">
-                        <div class="auth-avatar">{{ current_user.name[0] | upper if current_user.name else current_user.email[0] | upper }}</div>
+                    <a href="{{ url_for('profile') }}" class="auth-profile-link" id="account-profile-link">
+                        <div class="auth-avatar" aria-hidden="true">{{ current_user.name[0] | upper if current_user.name else current_user.email[0] | upper }}</div>
                         <div class="auth-info">
                             <span class="auth-name">{{ current_user.name or 'My Account' }}</span>
-                            <span class="auth-email">{{ current_user.email }}</span>
+                            <span class="auth-email">View account &amp; subscription</span>
                         </div>
+                        <i class="fas fa-chevron-right auth-chevron" aria-hidden="true"></i>
                     </a>
                 </div>
                 {% else %}
