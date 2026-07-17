@@ -62,6 +62,20 @@ Optional `.env` at the repo root (see `.env.example`):
 - `USDA_FDC_API_KEY` — real nutrition data (falls back to USDA `DEMO_KEY`)
 - `OPENAI_API_KEY` — enables the Chat tab
 
+### Optional React Docker (not production)
+
+From the **repo root** only if you intentionally want the React prototype:
+
+```bash
+cd ~/kabirmealplanner
+cp .env.example .env   # optional API keys
+sudo docker build -t littlebowl-app .
+sudo docker run -d --name littlebowl-app --restart always \
+  -p 8080:5000 --env-file .env littlebowl-app
+```
+
+Use port **8080** (or another free port) so it does not conflict with Flask on port 80.
+
 ### Project structure (React)
 
 - `src/foodEngine.js` — weekly plan rules engine
