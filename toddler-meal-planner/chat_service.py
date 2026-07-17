@@ -74,3 +74,68 @@ def call_openai_chat(
 
 def chat_configured() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
+
+
+def summarize_chat_history(
+    *,
+    messages: List[Dict[str, Any]],
+    prior_summary: Optional[str] = None,
+    toddler_name: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> str:
+    """
+    Compress older chat turns into a short rolling summary for session continuity.
+    """
+    lines = []
+    for m in messages:
+        role = (m.get("role") or "").strip().lower()
+        content = (m.get("content") or "").strip()
+        if role not in ("user", "assistant") or not content:
+            continue
+        label = "Parent" if role == "user" else "Assistant"
+        lines.append(f"{label}: {content}")
+    if not lines and not (prior_summary or "").strip():
+        return ""
+
+    name = toddler_name or "the toddler"
+    prior = (prior_summary or "").strip() or "(none)"
+    transcript = "\n".join(lines) if lines else "(no new messages)"
+
+    prompt = (
+        f"You maintain a rolling summary of a parent chat about {name}'s meals and nutrition "
+        "in the LittleBowl app.\n"
+        "Update the summary so a future assistant can continue helpfully without the full transcript.\n"
+        "Keep: food likes/dislikes, allergies/safety notes, plan changes requested or applied, "
+        "open questions, and key advice already given.\n"
+        "Drop chit-chat. Max 8 short sentences. Plain text only.\n\n"
+        f"Prior summary:\n{prior}\n\n"
+        f"New messages to fold in:\n{transcript}"
+    )
+
+    try:
+        data = call_openai_chat(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You write concise chat memory summaries for a toddler meal planner.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            tools=None,
+            api_key=api_key,
+        )
+        choice = (data.get("choices") or [{}])[0]
+        content = ((choice.get("message") or {}).get("content") or "").strip()
+        if content:
+            return content
+    except (ChatConfigError, ChatRequestError):
+        pass
+
+    # Offline / API fallback: compact extractive memory
+    bits = []
+    if prior and prior != "(none)":
+        bits.append(prior)
+    for line in lines[-12:]:
+        bits.append(line[:160])
+    joined = " | ".join(bits)
+    return joined[:1200]

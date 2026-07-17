@@ -140,6 +140,15 @@
     border: 1px solid var(--border-color);
 }
 
+.lb-chat-bubble.lb-chat-memory {
+    max-width: 100%;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--text-secondary, #64748b);
+    background: #f8fafc;
+    border-style: dashed;
+}
+
 .lb-chat-warning {
     background: #fffbeb;
     border: 1px solid #fde68a;

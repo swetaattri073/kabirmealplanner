@@ -1,10 +1,19 @@
 /**
  * Floating LittleBowl chat assistant
  * Requires window.LITTLEBOWL_CHAT = { toddlerId, toddlerName }
+ *
+ * Session memory:
+ * - Persists last 10 messages in sessionStorage for this browser tab session
+ * - Older turns are folded into a rolling summary (server-assisted)
+ * - Cleared when the tab/session ends, or after 15 minutes of site inactivity
  */
 (function () {
   const cfg = window.LITTLEBOWL_CHAT;
   if (!cfg || !cfg.toddlerId) return;
+
+  const MAX_RECENT = 10;
+  const IDLE_MS = 15 * 60 * 1000;
+  const STORAGE_KEY = `lb_chat_session_${cfg.toddlerId}`;
 
   const TIPS = [
     () => "Need help navigating the app?",
@@ -17,7 +26,10 @@
   let tipIndex = 0;
   let busy = false;
   let messages = [];
+  let summary = "";
   let tipTimer = null;
+  let idleTimer = null;
+  let compacting = false;
 
   const dock = document.createElement("div");
   dock.className = "lb-chat-fab-dock";
@@ -32,11 +44,142 @@
   const tipEl = document.getElementById("lb-chat-tip");
   const fab = document.getElementById("lb-chat-fab");
 
+  function now() {
+    return Date.now();
+  }
+
+  function loadState() {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      const last = Number(data.lastActivity) || 0;
+      if (!last || now() - last > IDLE_MS) {
+        clearChatHistory("idle-on-load");
+        return;
+      }
+      messages = Array.isArray(data.messages) ? data.messages.filter(isValidMsg) : [];
+      summary = typeof data.summary === "string" ? data.summary : "";
+      if (messages.length > MAX_RECENT) {
+        messages = messages.slice(-MAX_RECENT);
+      }
+    } catch (err) {
+      clearChatHistory("load-error");
+    }
+  }
+
+  function isValidMsg(m) {
+    return m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim();
+  }
+
+  function saveState() {
+    try {
+      sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          messages,
+          summary,
+          lastActivity: now(),
+        })
+      );
+    } catch (err) {
+      // Quota / private mode — keep in-memory only
+    }
+  }
+
+  function clearChatHistory(_reason) {
+    messages = [];
+    summary = "";
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      /* ignore */
+    }
+    if (open) renderMessages();
+  }
+
+  function touchActivity() {
+    saveState();
+    resetIdleTimer();
+  }
+
+  function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      clearChatHistory("idle-15min");
+    }, IDLE_MS);
+  }
+
+  function bindActivityWatchers() {
+    const events = ["click", "keydown", "mousemove", "scroll", "touchstart", "visibilitychange"];
+    let lastMove = 0;
+    const onActivity = (e) => {
+      if (e.type === "mousemove") {
+        const t = now();
+        if (t - lastMove < 2000) return;
+        lastMove = t;
+      }
+      if (e.type === "visibilitychange" && document.visibilityState === "hidden") {
+        saveState();
+        return;
+      }
+      touchActivity();
+    };
+    events.forEach((ev) => document.addEventListener(ev, onActivity, { passive: true }));
+
+    // Tab/session end: sessionStorage already drops; also clear in-memory for safety
+    window.addEventListener("pagehide", () => {
+      // Keep sessionStorage for back/forward within session; browser clears it when session ends.
+      saveState();
+    });
+  }
+
+  function localFallbackSummary(prior, overflow) {
+    const bits = [];
+    if (prior) bits.push(prior);
+    overflow.forEach((m) => {
+      const label = m.role === "user" ? "Parent" : "Assistant";
+      bits.push(`${label}: ${String(m.content || "").slice(0, 140)}`);
+    });
+    return bits.join(" | ").slice(0, 1200);
+  }
+
+  async function compactIfNeeded() {
+    if (messages.length <= MAX_RECENT || compacting) return;
+    compacting = true;
+    const overflow = messages.slice(0, messages.length - MAX_RECENT);
+    const recent = messages.slice(-MAX_RECENT);
+    try {
+      const res = await fetch("/api/chat/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          toddler_id: cfg.toddlerId,
+          prior_summary: summary || "",
+          messages: overflow.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data.summary === "string" && data.summary.trim()) {
+        summary = data.summary.trim();
+      } else {
+        summary = localFallbackSummary(summary, overflow);
+      }
+    } catch (err) {
+      summary = localFallbackSummary(summary, overflow);
+    } finally {
+      messages = recent;
+      saveState();
+      compacting = false;
+      renderMessages();
+    }
+  }
+
   function renderTip() {
     const name = cfg.toddlerName || "your little one";
     tipEl.textContent = TIPS[tipIndex](name);
     tipEl.style.display = open ? "none" : "block";
-    // retrigger animation
     tipEl.style.animation = "none";
     void tipEl.offsetWidth;
     tipEl.style.animation = "";
@@ -102,16 +245,25 @@
   function renderMessages() {
     const box = document.getElementById("lb-chat-messages");
     if (!box) return;
-    if (!messages.length) {
-      box.innerHTML = `<div class="lb-chat-bubble assistant">No messages yet — try "what's the plan for today?" or "is honey okay for a toddler?"</div>`;
-      return;
+    const parts = [];
+    if (summary) {
+      parts.push(
+        `<div class="lb-chat-bubble assistant lb-chat-memory"><em>Earlier in this visit:</em> ${escapeHtml(summary)}</div>`
+      );
     }
-    box.innerHTML = messages
-      .map((m) => `<div class="lb-chat-bubble ${m.role}">${escapeHtml(m.content)}</div>`)
-      .join("");
+    if (!messages.length && !summary) {
+      parts.push(
+        `<div class="lb-chat-bubble assistant">No messages yet — try "what's the plan for today?" or "is honey okay for a toddler?"</div>`
+      );
+    } else {
+      messages.forEach((m) => {
+        parts.push(`<div class="lb-chat-bubble ${m.role}">${escapeHtml(m.content)}</div>`);
+      });
+    }
     if (busy) {
-      box.innerHTML += `<div class="lb-chat-bubble assistant">Thinking...</div>`;
+      parts.push(`<div class="lb-chat-bubble assistant">Thinking...</div>`);
     }
+    box.innerHTML = parts.join("");
     box.scrollTop = box.scrollHeight;
   }
 
@@ -140,6 +292,8 @@
     if (!text || busy) return;
     input.value = "";
     messages.push({ role: "user", content: text });
+    touchActivity();
+    await compactIfNeeded();
     busy = true;
     renderMessages();
 
@@ -147,8 +301,10 @@
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           toddler_id: cfg.toddlerId,
+          summary: summary || "",
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
         }),
       });
@@ -156,6 +312,9 @@
       if (!res.ok) throw new Error(data.error || `Chat failed (${res.status})`);
       const reply = (data.message && data.message.content) || "Got it.";
       messages.push({ role: "assistant", content: reply });
+      touchActivity();
+      await compactIfNeeded();
+
       const planTools = (data.tool_results || []).filter((t) => t.tool === "update_weekly_plan");
       if (planTools.length && typeof showToast === "function") {
         const results = planTools.map((t) => t.result || {});
@@ -178,6 +337,8 @@
       }
     } catch (err) {
       messages.push({ role: "assistant", content: err.message || "Something went wrong." });
+      touchActivity();
+      await compactIfNeeded();
     } finally {
       busy = false;
       renderMessages();
@@ -196,6 +357,7 @@
     overlay.style.display = "flex";
     renderMessages();
     checkHealth();
+    touchActivity();
     setTimeout(() => document.getElementById("lb-chat-input")?.focus(), 50);
   }
 
@@ -208,6 +370,7 @@
     if (overlay) overlay.style.display = "none";
     renderTip();
     startTips();
+    saveState();
   }
 
   fab.addEventListener("click", () => {
@@ -215,6 +378,9 @@
     else openChat();
   });
 
+  loadState();
+  bindActivityWatchers();
+  resetIdleTimer();
   renderTip();
   startTips();
 })();

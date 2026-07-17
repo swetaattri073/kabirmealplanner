@@ -226,10 +226,16 @@ The `-v ~/meal-data:/app/instance` mount keeps **all of that** across rebuilds. 
 | `SECRET_KEY` | Flask secret key | Random (dev) |
 | `DATABASE_URL` | SQLite/Postgres URL | `sqlite:////app/instance/toddler_meals.db` in Docker |
 | `OPENAI_API_KEY` | Chat assistant (from `.env`) | unset → chat disabled |
+| `OPENAI_CHAT_MODEL` | Chat model override | `gpt-4o-mini` |
 | `USDA_FDC_API_KEY` | Optional USDA lookups | DEMO_KEY |
+| `SESSION_COOKIE_SECURE` | `true` only behind HTTPS | unset/false for HTTP IP access |
 | `FLASK_ENV` | Environment mode | production (Docker) |
 
-Put secrets in **`~/meal-data/.env`** (same folder as the DB). Pass them with `--env-file ~/meal-data/.env`, and/or rely on the app loading `/app/instance/.env` from the volume. Do not put API keys in `docker run -e` flags, and do not keep production secrets only inside the git checkout (that can be wiped on a fresh clone).
+Put secrets in **`~/meal-data/.env`** (same folder as the DB). Pass them with `--env-file ~/meal-data/.env`, and/or rely on the app loading `/app/instance/.env` from the volume.
+
+Auth is email/password only (social login removed).
+
+Do not put API keys in `docker run -e` flags, and do not keep production secrets only inside the git checkout (that can be wiped on a fresh clone).
 
 ---
 

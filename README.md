@@ -6,14 +6,27 @@ This repository contains **one production app** and an optional React prototype 
 
 | Path | What it is | Deploy this? |
 |------|------------|--------------|
-| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): auth, meal logging, weekly plans, NLP/photo, recipes, food-safety checks, floating OpenAI chat, USDA lookups, install popup, branding | **Yes — this is production** |
-| Repo root (`src/`, `server/`) | Earlier React prototype — features have been **ported into Flask**. Keep for reference; do not deploy as the main product | Optional / local only |
+| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): email/password auth, meal logging, weekly plans, NLP/photo, recipes, food-safety, floating OpenAI chat with session memory, USDA lookups, audit logs | **Yes — production** |
+| Repo root (`src/`, `server/`) | Earlier React prototype — features ported into Flask. Reference only | Optional / local |
+
+**Full docs:**  
+→ [`toddler-meal-planner/README.md`](toddler-meal-planner/README.md)  
+→ [`toddler-meal-planner/DEPLOYMENT.md`](toddler-meal-planner/DEPLOYMENT.md)
+
+---
+
+## Tech stack (production)
+
+- **Backend:** Python, Flask, SQLAlchemy, Flask-Login
+- **Database:** SQLite (default, Docker volume) or PostgreSQL
+- **Auth:** Email/password (social login removed for now)
+- **Frontend:** Jinja2, HTML/CSS, vanilla JS, PWA
+- **AI:** OpenAI chat (+ rolling chat summaries)
+- **Deploy:** Docker / gunicorn (also Render, Railway, Fly, AWS)
 
 ---
 
 ## Deploy the complete app (Flask LittleBowl)
-
-Use these commands on your server. This keeps your existing UI, data, and features.
 
 ```bash
 cd ~/kabirmealplanner && git pull origin main
@@ -21,7 +34,7 @@ cd toddler-meal-planner
 
 mkdir -p ~/meal-data
 cp -n .env.example ~/meal-data/.env
-# edit ~/meal-data/.env → OPENAI_API_KEY=... and SECRET_KEY=...
+# edit ~/meal-data/.env → SECRET_KEY, OPENAI_API_KEY
 
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
@@ -32,11 +45,10 @@ sudo docker run -d --name meal-planner --restart always \
   meal-planner
 ```
 
-- App URL: `http://YOUR_SERVER_IP`
-- **DB + `.env` both live in `~/meal-data`** and survive redeploys
-- More options: see [`toddler-meal-planner/DEPLOYMENT.md`](toddler-meal-planner/DEPLOYMENT.md)
+- App: `http://YOUR_SERVER_IP`
+- **DB + `.env` stay in `~/meal-data`** across redeploys
 
-### First-time setup (if the repo is not on the server yet)
+### First-time server setup
 
 ```bash
 sudo yum update -y   # or apt update
@@ -45,54 +57,26 @@ sudo systemctl start docker && sudo systemctl enable docker
 
 git clone https://github.com/swetaattri073/kabirmealplanner.git
 cd kabirmealplanner/toddler-meal-planner
-# then run the docker build / run commands above
+# then docker build / run above
 ```
 
 ---
 
-## React prototype (optional — same LittleBowl branding)
+## Recent product notes
 
-Styled to match Flask LittleBowl (Nunito, purple/pink gradient, logo mark). Functionality is the separate React planner (profiles in the browser, USDA nutrition, chat). It does **not** replace the Flask production features.
+- Chat keeps the **last 10 messages** per visit and **summarizes** older turns; clears after **session end** or **15 min** inactivity  
+- Chat plan updates only touch **future unlogged** slots; meal history is separate  
+- Secrets belong in **`~/meal-data/.env`**, not one-off `docker run -e` flags  
+- Sign-in is **email/password only** for now  
 
-### Local development
+---
+
+## React prototype (optional)
 
 ```bash
 npm install
-npm run dev      # terminal 1 — UI
-npm run server   # terminal 2 — USDA + OpenAI proxy
+npm run dev      # UI
+npm run server   # USDA + OpenAI proxy
 ```
 
-Optional `.env` at the repo root (see `.env.example`):
-
-- `USDA_FDC_API_KEY` — real nutrition data (falls back to USDA `DEMO_KEY`)
-- `OPENAI_API_KEY` — enables the Chat tab
-
-### Optional React Docker (not production)
-
-From the **repo root** only if you intentionally want the React prototype:
-
-```bash
-cd ~/kabirmealplanner
-cp .env.example .env   # optional API keys
-sudo docker build -t littlebowl-app .
-sudo docker run -d --name littlebowl-app --restart always \
-  -p 8080:5000 --env-file .env littlebowl-app
-```
-
-Use port **8080** (or another free port) so it does not conflict with Flask on port 80.
-
-### Project structure (React)
-
-- `src/foodEngine.js` — weekly plan rules engine
-- `src/defaultProfile.js` — starter profiles + recipes
-- `src/foodSafety.js` — age-appropriate safety flags
-- `src/nutritionApi.js` / `server/` — USDA + OpenAI proxy
-- `src/App.jsx` — UI (LittleBowl-branded)
-
----
-
-## Important
-
-- **Production users should only deploy `toddler-meal-planner/`.**
-- Do not run Flask and a root-level React container both on port 80 at once.
-- Keep using `-v ~/meal-data:/app/instance` so you do not lose logged meals.
+Not required for production. See root `.env.example` for `OPENAI_API_KEY` / `USDA_FDC_API_KEY`.
