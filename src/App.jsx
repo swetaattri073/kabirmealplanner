@@ -25,6 +25,15 @@ function todayName() {
 const STORAGE_KEY = "toddlerMealPlanner.profiles.v2";
 const ACTIVE_KEY = "toddlerMealPlanner.activeProfileId.v2";
 
+const MAIN_TABS = ["day", "week", "foods", "settings", "recipes"];
+
+const CHAT_TIP_TEMPLATES = [
+  () => "Need help navigating the app?",
+  (name) => `What did ${name} eat today?`,
+  (name) => `Any concerns about ${name}'s diet?`,
+  () => "Find all the diet and nutrition related answers here.",
+];
+
 function loadProfiles() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
@@ -74,6 +83,8 @@ export default function App() {
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatTipIndex, setChatTipIndex] = useState(0);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
@@ -88,7 +99,20 @@ export default function App() {
     checkChatHealth().then(setChatStatus);
   }, []);
 
+  useEffect(() => {
+    if (tab === "chat") setTab("day");
+  }, [tab]);
+
+  useEffect(() => {
+    if (chatOpen) return undefined;
+    const id = setInterval(() => {
+      setChatTipIndex((i) => (i + 1) % CHAT_TIP_TEMPLATES.length);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [chatOpen]);
+
   const activeProfile = profiles.find((p) => p.id === activeProfileId) || profiles[0];
+  const chatTip = CHAT_TIP_TEMPLATES[chatTipIndex](activeProfile?.name || "your little one");
   const mealSlots = activeProfile.mealSlots && activeProfile.mealSlots.length ? activeProfile.mealSlots : DEFAULT_MEAL_SLOTS;
   const plan = useMemo(() => generateWeekPlan(activeProfile), [activeProfile]);
   const tip = useMemo(() => getTip(activeProfile), [activeProfile]);
@@ -360,7 +384,7 @@ export default function App() {
         </div>
 
         <div style={styles.tabsWrap}>
-          {["day", "week", "foods", "chat", "settings", "recipes"].map((t) => (
+          {MAIN_TABS.map((t) => (
             <button key={t} style={tab === t ? styles.activeTab : styles.tab} onClick={() => setTab(t)}>
               {t[0].toUpperCase() + t.slice(1)}
             </button>
@@ -572,48 +596,6 @@ export default function App() {
           </section>
         )}
 
-        {tab === "chat" && (
-          <section style={styles.card}>
-            <div style={styles.spaceBetween}>
-              <h2 style={styles.sectionTitle}>Ask about {activeProfile.name}'s food</h2>
-              {chatMessages.length > 0 && <button style={styles.smallButton} onClick={clearChat}>Clear chat</button>}
-            </div>
-            <p style={styles.small}>
-              Ask what's on today's plan, whether a food is a good idea for a toddler/infant, or just tell it things like "he doesn't eat carrots" or "she's been picky all week" - it'll note that for future planning.
-            </p>
-            {chatStatus && !chatStatus.ok && (
-              <p style={styles.warningText}>
-                Chat isn't available yet ({chatStatus.error || "OPENAI_API_KEY not set"}). Add an OpenAI API key to your <code>.env</code> file and restart <code>npm run server</code> (see README).
-              </p>
-            )}
-
-            <div style={styles.chatWindow}>
-              {!chatMessages.length && <p style={styles.small}>No messages yet - try "what's the plan for today?"</p>}
-              {chatMessages.map((m, i) => (
-                <div key={i} style={m.role === "user" ? styles.chatBubbleUser : styles.chatBubbleAssistant}>
-                  {m.content}
-                </div>
-              ))}
-              {chatBusy && <div style={styles.chatBubbleAssistant}>Thinking...</div>}
-            </div>
-            {chatError && <p style={styles.warningText}>{chatError}</p>}
-
-            <div style={styles.row}>
-              <input
-                style={styles.inputFull}
-                placeholder="e.g. What's today's plan?"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSendChat(); }}
-                disabled={!!(chatStatus && !chatStatus.ok)}
-              />
-            </div>
-            <button style={styles.primaryButton} onClick={handleSendChat} disabled={chatBusy || (chatStatus && !chatStatus.ok)}>
-              {chatBusy ? "Sending..." : "Send"}
-            </button>
-          </section>
-        )}
-
         {tab === "settings" && (
           <section style={styles.card}>
             <h2 style={styles.sectionTitle}>Plan settings for {activeProfile.name}</h2>
@@ -694,6 +676,94 @@ export default function App() {
           Goal: safe foods + hidden nutrition + no-pressure exposure. Rejected foods stay in rotation — repetition, not removal, builds acceptance.
         </footer>
       </div>
+
+      {chatOpen && (
+        <div
+          style={styles.chatOverlay}
+          role="dialog"
+          aria-label="LittleBowl chat assistant"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setChatOpen(false);
+          }}
+        >
+          <div style={styles.chatPanel}>
+            <div style={styles.chatPanelHeader}>
+              <div>
+                <p style={styles.chatPanelTitle}>Ask about {activeProfile.name}&apos;s food</p>
+                <p style={styles.chatPanelSubtitle}>Diet, nutrition, and navigating LittleBowl</p>
+              </div>
+              <div style={styles.chatPanelActions}>
+                {chatMessages.length > 0 && (
+                  <button type="button" style={styles.smallButton} onClick={clearChat}>Clear</button>
+                )}
+                <button type="button" style={styles.chatCloseButton} onClick={() => setChatOpen(false)} aria-label="Close chat">
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {chatStatus && !chatStatus.ok && (
+              <p style={styles.warningText}>
+                Chat isn&apos;t available yet ({chatStatus.error || "OPENAI_API_KEY not set"}). Add an OpenAI API key to your <code>.env</code> file and restart <code>npm run server</code>.
+              </p>
+            )}
+
+            <div style={styles.chatWindow}>
+              {!chatMessages.length && (
+                <p style={styles.small}>No messages yet — try &quot;what&apos;s the plan for today?&quot; or &quot;is honey okay for a toddler?&quot;</p>
+              )}
+              {chatMessages.map((m, i) => (
+                <div key={i} style={m.role === "user" ? styles.chatBubbleUser : styles.chatBubbleAssistant}>
+                  {m.content}
+                </div>
+              ))}
+              {chatBusy && <div style={styles.chatBubbleAssistant}>Thinking...</div>}
+            </div>
+            {chatError && <p style={styles.warningText}>{chatError}</p>}
+
+            <div style={styles.chatComposer}>
+              <input
+                style={styles.chatInput}
+                placeholder="Ask about diet, meals, or the app…"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSendChat(); }}
+                disabled={!!(chatStatus && !chatStatus.ok)}
+              />
+              <button
+                type="button"
+                style={styles.chatSendButton}
+                onClick={handleSendChat}
+                disabled={chatBusy || (chatStatus && !chatStatus.ok)}
+              >
+                {chatBusy ? "…" : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={styles.chatFabDock}>
+        {!chatOpen && (
+          <div key={chatTipIndex} className="chat-tip-bubble" style={styles.chatTipBubble}>
+            {chatTip}
+          </div>
+        )}
+        <button
+          type="button"
+          className={chatOpen ? "chat-fab chat-fab-open" : "chat-fab"}
+          style={styles.chatFab}
+          onClick={() => setChatOpen((open) => !open)}
+          aria-label={chatOpen ? "Close chat" : "Open chat assistant"}
+          aria-expanded={chatOpen}
+        >
+          {chatOpen ? (
+            <span style={styles.chatFabGlyph}>×</span>
+          ) : (
+            <span style={styles.chatFabGlyph} aria-hidden="true">💬</span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -701,7 +771,7 @@ export default function App() {
 const styles = {
   page: {
     minHeight: "100vh",
-    padding: 16,
+    padding: "16px 16px 96px",
     fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, sans-serif',
     color: "#1e1b4b",
   },
@@ -919,10 +989,11 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 8,
-    maxHeight: 360,
+    flex: 1,
     overflowY: "auto",
     margin: "10px 0",
     padding: 4,
+    minHeight: 160,
   },
   chatBubbleUser: {
     alignSelf: "flex-end",
@@ -943,6 +1014,131 @@ const styles = {
     maxWidth: "85%",
     whiteSpace: "pre-wrap",
     border: "1px solid #e9d5ff",
+  },
+  chatFabDock: {
+    position: "fixed",
+    right: 18,
+    bottom: 18,
+    zIndex: 40,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 10,
+    maxWidth: "min(280px, calc(100vw - 36px))",
+  },
+  chatTipBubble: {
+    background: "#fff",
+    color: "#1e1b4b",
+    border: "1px solid #e9d5ff",
+    borderRadius: 16,
+    padding: "10px 12px",
+    fontSize: 13,
+    fontWeight: 700,
+    lineHeight: 1.35,
+    boxShadow: "0 10px 28px rgba(99, 102, 241, 0.22)",
+    textAlign: "left",
+  },
+  chatFab: {
+    width: 60,
+    height: 60,
+    borderRadius: 999,
+    border: 0,
+    cursor: "pointer",
+    background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)",
+    color: "#fff",
+    boxShadow: "0 10px 28px rgba(99, 102, 241, 0.4)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chatFabGlyph: {
+    fontSize: 26,
+    lineHeight: 1,
+    fontWeight: 800,
+  },
+  chatOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 35,
+    background: "rgba(30, 27, 75, 0.28)",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  chatPanel: {
+    width: "min(420px, 100%)",
+    maxHeight: "min(72vh, 560px)",
+    background: "#fff",
+    borderRadius: 24,
+    border: "1px solid #e9d5ff",
+    boxShadow: "0 20px 48px rgba(99, 102, 241, 0.28)",
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    marginBottom: 72,
+  },
+  chatPanelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  chatPanelTitle: {
+    margin: 0,
+    fontSize: 17,
+    fontWeight: 800,
+    color: "#1e1b4b",
+  },
+  chatPanelSubtitle: {
+    margin: "2px 0 0",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#6b7280",
+  },
+  chatPanelActions: {
+    display: "flex",
+    gap: 6,
+    alignItems: "center",
+  },
+  chatCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    border: "1px solid #e9d5ff",
+    background: "#faf5ff",
+    color: "#4f46e5",
+    fontSize: 22,
+    fontWeight: 700,
+    cursor: "pointer",
+    lineHeight: 1,
+  },
+  chatComposer: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+  },
+  chatInput: {
+    flex: 1,
+    height: 44,
+    borderRadius: 16,
+    border: "1px solid #e9d5ff",
+    padding: "0 12px",
+    fontSize: 14,
+    background: "#fff",
+    color: "#1e1b4b",
+  },
+  chatSendButton: {
+    height: 44,
+    minWidth: 72,
+    border: 0,
+    borderRadius: 16,
+    background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 14,
+    cursor: "pointer",
+    padding: "0 14px",
   },
   badge: {
     display: "inline-block",

@@ -78,3 +78,46 @@ h3 {
   font-family: inherit;
   color: var(--text-primary);
 }
+
+@keyframes chat-fab-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes chat-fab-pulse {
+  0%,
+  100% {
+    box-shadow: 0 10px 28px rgba(99, 102, 241, 0.4);
+  }
+  50% {
+    box-shadow: 0 10px 28px rgba(99, 102, 241, 0.4), 0 0 0 12px rgba(99, 102, 241, 0.14);
+  }
+}
+
+@keyframes chat-tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.chat-fab {
+  animation: chat-fab-bob 2.4s ease-in-out infinite, chat-fab-pulse 2.4s ease-in-out infinite;
+}
+
+.chat-fab-open {
+  animation: none;
+}
+
+.chat-tip-bubble {
+  animation: chat-tip-in 0.35s ease;
+}
