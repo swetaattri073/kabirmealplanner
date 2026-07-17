@@ -178,6 +178,11 @@ with app.app_context():
                 if col_name not in food_cols:
                     db.session.execute(text(f'ALTER TABLE foods ADD COLUMN {col_name} {col_type}'))
             db.session.commit()
+        if 'food_preferences' in insp.get_table_names():
+            pref_cols = {c['name'] for c in insp.get_columns('food_preferences')}
+            if 'last_reaction' not in pref_cols:
+                db.session.execute(text('ALTER TABLE food_preferences ADD COLUMN last_reaction VARCHAR(50)'))
+                db.session.commit()
     except Exception as e:
         app.logger.warning('Schema patch skipped: %s', e)
     init_food_database(db.session, Food)
@@ -1623,11 +1628,42 @@ def get_preferences(toddler_id):
     toddler = Toddler.query.get_or_404(toddler_id)
     
     preferences = FoodPreference.query.filter_by(toddler_id=toddler_id).all()
+
+    # Backfill last_reaction from newest meal log when missing (legacy rows)
+    missing = [p for p in preferences if not p.last_reaction and p.food_id]
+    if missing:
+        for pref in missing:
+            latest = (
+                MealLog.query.filter_by(toddler_id=toddler_id, food_id=pref.food_id)
+                .filter(MealLog.toddler_reaction.isnot(None))
+                .order_by(MealLog.date.desc(), MealLog.id.desc())
+                .first()
+            )
+            if latest and latest.toddler_reaction:
+                pref.last_reaction = latest.toddler_reaction.lower().strip()
+                # Align score if old EMA left "loved" stuck under the liked threshold
+                if pref.last_reaction in FoodPreference.REACTION_SCORES:
+                    target = FoodPreference.REACTION_SCORES[pref.last_reaction]
+                    if pref.last_reaction in ('loved', 'liked') and (pref.preference_score or 0) < 0.5:
+                        pref.preference_score = target
+                    elif pref.last_reaction == 'neutral':
+                        pref.preference_score = 0.0
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
     
-    # Categorize by preference
-    liked = [p.to_dict() for p in preferences if p.preference_score >= 1]
-    neutral = [p.to_dict() for p in preferences if -1 < p.preference_score < 1]
-    disliked = [p.to_dict() for p in preferences if p.preference_score <= -1]
+    # Categorize by last reaction (falls back to score) so UI matches meal logging
+    liked, neutral, disliked = [], [], []
+    for p in preferences:
+        bucket = p.display_bucket()
+        row = p.to_dict()
+        if bucket == 'liked':
+            liked.append(row)
+        elif bucket == 'disliked':
+            disliked.append(row)
+        else:
+            neutral.append(row)
     
     return jsonify({
         'toddler_id': toddler_id,
