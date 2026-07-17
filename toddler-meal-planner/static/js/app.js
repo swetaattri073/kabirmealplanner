@@ -722,8 +722,8 @@ async function loadPreferences(toddlerId) {
 }
 
 function renderPreferences(data) {
-    // Render liked foods
-    renderPreferenceSection('liked-foods', data.liked, '💚 Loved', 'liked');
+    // Render liked / loved foods
+    renderPreferenceSection('liked-foods', data.liked, '💚 Loved & Liked', 'liked');
     
     // Render neutral foods
     renderPreferenceSection('neutral-foods', data.neutral, '😐 Neutral', 'neutral');
@@ -735,6 +735,17 @@ function renderPreferences(data) {
     // Render challenging foods (refused after 15+ tries)
     const challenging = data.disliked?.filter(p => p.exposures_remaining === 0) || [];
     renderPreferenceSection('disliked-foods', challenging, '🙅 Challenging', 'disliked');
+}
+
+function reactionLabel(reaction) {
+    const labels = {
+        loved: '😍 Loved',
+        liked: '😊 Liked',
+        neutral: '😐 Okay',
+        disliked: '😕 Disliked',
+        refused: '🤢 Refused',
+    };
+    return labels[(reaction || '').toLowerCase()] || '';
 }
 
 function renderPreferenceSection(containerId, foods, title, type) {
@@ -754,16 +765,22 @@ function renderPreferenceSection(containerId, foods, title, type) {
     
     foods.forEach(pref => {
         const acceptRate = pref.acceptance_rate ? `${Math.round(pref.acceptance_rate)}% accepted` : '';
+        const lastRx = reactionLabel(pref.last_reaction);
+        const emoji = pref.last_reaction === 'loved' ? '😍'
+            : pref.last_reaction === 'liked' ? '😊'
+            : type === 'liked' ? '😋'
+            : type === 'disliked' ? '😣'
+            : '😐';
         
         html += `
             <div class="preference-item">
                 <div class="preference-score ${type}">
-                    ${type === 'liked' ? '😋' : type === 'disliked' ? '😣' : '😐'}
+                    ${emoji}
                 </div>
                 <div class="preference-info">
                     <div class="preference-food">${pref.food?.name || 'Unknown'}</div>
                     <div class="preference-stats">
-                        Offered ${pref.times_offered}x ${acceptRate ? `• ${acceptRate}` : ''}
+                        ${lastRx ? `${lastRx} · ` : ''}Offered ${pref.times_offered}x ${acceptRate ? `• ${acceptRate}` : ''}
                     </div>
                 </div>
             </div>

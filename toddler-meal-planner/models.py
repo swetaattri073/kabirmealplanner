@@ -506,11 +506,21 @@ class FoodPreference(db.Model):
     times_offered = db.Column(db.Integer, default=0)
     times_accepted = db.Column(db.Integer, default=0)
     last_offered = db.Column(db.Date, nullable=True)
+    # Most recent logged reaction — Preferences UI matches this
+    last_reaction = db.Column(db.String(50), nullable=True)
     
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationship
     food = db.relationship('Food', backref='preferences')
+
+    REACTION_SCORES = {
+        'loved': 2.0,
+        'liked': 1.0,
+        'neutral': 0.0,
+        'disliked': -0.3,  # Mild penalty - still offer occasionally
+        'refused': -0.5,   # Mild penalty - need more exposure, not less
+    }
     
     def update_from_reaction(self, reaction):
         """
@@ -521,26 +531,44 @@ class FoodPreference(db.Model):
         - Removing refused foods reinforces picky eating
         - We want to encourage continued exposure with accepted foods
         """
-        reaction_scores = {
-            'loved': 2,
-            'liked': 1,
-            'neutral': 0,
-            'disliked': -0.3,  # Mild penalty - still offer occasionally
-            'refused': -0.5    # Mild penalty - need more exposure, not less
-        }
-        
-        score = reaction_scores.get(reaction, 0)
-        self.times_offered += 1
+        reaction = (reaction or '').lower().strip()
+        if reaction not in self.REACTION_SCORES:
+            return
+
+        score = self.REACTION_SCORES[reaction]
+        self.last_reaction = reaction
+        self.times_offered = (self.times_offered or 0) + 1
         if score > 0:
-            self.times_accepted += 1
+            self.times_accepted = (self.times_accepted or 0) + 1
         
-        # Weighted average - but floor the score at -1 to ensure food still appears
-        weight = 0.3  # New reaction weight
-        new_score = (1 - weight) * self.preference_score + weight * score
+        # First logged reaction should match the parent's choice immediately
+        # (old 0.3 EMA left "loved" at 0.6 → Preferences showed Neutral).
+        if self.times_offered <= 1:
+            new_score = score
+        else:
+            weight = 0.55
+            new_score = (1 - weight) * (self.preference_score or 0) + weight * score
         
-        # Don't let score go below -1 (ensures food still gets offered occasionally)
-        self.preference_score = max(new_score, -1.0)
+        # Floor at -1 so refused foods still appear occasionally; cap at +2
+        self.preference_score = max(min(new_score, 2.0), -1.0)
         self.last_offered = date.today()
+
+    def display_bucket(self):
+        """Preferences page bucket — prefer last reaction so UI matches logging."""
+        reaction = (self.last_reaction or '').lower().strip()
+        if reaction in ('loved', 'liked'):
+            return 'liked'
+        if reaction in ('disliked', 'refused'):
+            return 'disliked'
+        if reaction == 'neutral':
+            return 'neutral'
+
+        score = self.preference_score or 0
+        if score >= 0.5:
+            return 'liked'
+        if score <= -0.3:
+            return 'disliked'
+        return 'neutral'
     
     def needs_reexposure(self):
         """
@@ -563,11 +591,21 @@ class FoodPreference(db.Model):
     
     def get_exposure_status(self):
         """Get exposure status for display"""
+        reaction = (self.last_reaction or '').lower().strip()
+        if reaction == 'loved':
+            return 'loved'
+        if reaction == 'liked':
+            return 'accepted'
+        if reaction in ('disliked', 'refused') and (self.times_offered or 0) < 15:
+            return 'needs_exposure'
+        if reaction in ('disliked', 'refused'):
+            return 'challenging'
+
         if self.times_offered < 5:
             return 'new'  # Still introducing
         elif self.times_offered < 15 and self.preference_score < 0:
             return 'needs_exposure'  # Needs more tries (research: 10-15 exposures)
-        elif self.preference_score >= 1:
+        elif self.preference_score >= 0.5:
             return 'accepted'
         elif self.preference_score >= 0:
             return 'neutral'
@@ -581,6 +619,8 @@ class FoodPreference(db.Model):
             'food_id': self.food_id,
             'food': self.food.to_dict() if self.food else None,
             'preference_score': round(self.preference_score, 2),
+            'last_reaction': self.last_reaction,
+            'display_bucket': self.display_bucket(),
             'times_offered': self.times_offered,
             'times_accepted': self.times_accepted,
             'acceptance_rate': round(self.times_accepted / self.times_offered * 100, 1) if self.times_offered > 0 else None,
