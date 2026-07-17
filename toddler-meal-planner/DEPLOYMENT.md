@@ -183,19 +183,24 @@ Works on DigitalOcean, Linode, Vultr, Lightsail, or any Linux server.
 cd ~/kabirmealplanner && git pull origin main
 cd toddler-meal-planner
 
+# One-time: copy and fill secrets (OPENAI_API_KEY, SECRET_KEY, …)
+cp -n .env.example .env
+# edit .env — put OPENAI_API_KEY=sk-... there (never pass the key on the command line)
+
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
 sudo docker run -d --name meal-planner --restart always \
   -p 80:5000 \
   -v ~/meal-data:/app/instance \
+  --env-file .env \
   meal-planner
 ```
 
-Or with Compose:
+Or with Compose (also reads `.env` automatically via `env_file`):
 
 ```bash
 cd ~/kabirmealplanner/toddler-meal-planner
-cp .env.example .env   # optional
+cp -n .env.example .env   # then edit OPENAI_API_KEY=...
 docker compose up -d --build
 ```
 
@@ -210,8 +215,12 @@ Open `http://YOUR_PUBLIC_IP`.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SECRET_KEY` | Flask secret key | Random (dev) |
-| `DATABASE_URL` | PostgreSQL URL | SQLite (local) |
-| `FLASK_ENV` | Environment mode | development |
+| `DATABASE_URL` | SQLite/Postgres URL | `sqlite:////app/instance/toddler_meals.db` in Docker |
+| `OPENAI_API_KEY` | Chat assistant (from `.env`) | unset → chat disabled |
+| `USDA_FDC_API_KEY` | Optional USDA lookups | DEMO_KEY |
+| `FLASK_ENV` | Environment mode | production (Docker) |
+
+Put secrets in **`toddler-meal-planner/.env`** and pass them with `--env-file .env` (or Compose `env_file`). Do not put API keys in the `docker run` `-e` flags.
 
 ---
 
@@ -225,10 +234,14 @@ Push to GitHub → Auto-deploys
 cd ~/kabirmealplanner
 git pull origin main
 cd toddler-meal-planner
+# Ensure .env has OPENAI_API_KEY=... (and other secrets)
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner && sudo docker rm meal-planner
 sudo docker run -d --name meal-planner --restart always \
-  -p 80:5000 -v ~/meal-data:/app/instance meal-planner
+  -p 80:5000 \
+  -v ~/meal-data:/app/instance \
+  --env-file .env \
+  meal-planner
 ```
 ### AWS App Runner:
 Push to GitHub → GitHub Actions auto-deploys
