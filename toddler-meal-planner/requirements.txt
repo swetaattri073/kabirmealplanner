@@ -6,8 +6,8 @@ Flask-Login==0.6.3
 SQLAlchemy==2.0.23
 Werkzeug==3.0.1
 
-# OAuth / Social Login
-Authlib==1.3.0
+# OAuth / Social Login — removed for now (email/password only)
+# Authlib==1.3.0
 requests==2.31.0
 
 # Production Server
