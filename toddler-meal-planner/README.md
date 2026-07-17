@@ -224,9 +224,11 @@ The app follows **ICMR-NIN (National Institute of Nutrition)** guidelines for In
 
 ## Technology Stack
 
-- **Backend**: Python, Flask
-- **Database**: SQLite with SQLAlchemy ORM
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
+- **Backend**: Python, Flask, Flask-Login
+- **Database**: SQLite with SQLAlchemy ORM (optional PostgreSQL)
+- **Auth**: Email/password (bcrypt) — social login removed for now
+- **Frontend**: HTML5, CSS3, Vanilla JavaScript, PWA
+- **AI chat**: OpenAI (optional via `OPENAI_API_KEY`)
 - **Styling**: Custom CSS with CSS variables
 
 ## Food Database
