@@ -19,22 +19,22 @@ Use these commands on your server. This keeps your existing UI, data, and featur
 cd ~/kabirmealplanner && git pull origin main
 cd toddler-meal-planner
 
-cp -n .env.example .env
-# edit .env and set OPENAI_API_KEY=... (and SECRET_KEY)
+mkdir -p ~/meal-data
+cp -n .env.example ~/meal-data/.env
+# edit ~/meal-data/.env → OPENAI_API_KEY=... and SECRET_KEY=...
 
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
 sudo docker run -d --name meal-planner --restart always \
   -p 80:5000 \
   -v ~/meal-data:/app/instance \
-  --env-file .env \
+  --env-file ~/meal-data/.env \
   meal-planner
 ```
 
 - App URL: `http://YOUR_SERVER_IP`
-- Meal data persists in `~/meal-data` (do not remove this volume)
-- Secrets (`OPENAI_API_KEY`, etc.) come from `.env` via `--env-file`
-- More options (Render, Lightsail, etc.): see [`toddler-meal-planner/DEPLOYMENT.md`](toddler-meal-planner/DEPLOYMENT.md)
+- **DB + `.env` both live in `~/meal-data`** and survive redeploys
+- More options: see [`toddler-meal-planner/DEPLOYMENT.md`](toddler-meal-planner/DEPLOYMENT.md)
 
 ### First-time setup (if the repo is not on the server yet)
 

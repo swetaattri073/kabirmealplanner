@@ -13,8 +13,16 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Resolve paths early so secrets on the Docker data volume are picked up.
+# Production: -v ~/meal-data:/app/instance  →  put secrets in ~/meal-data/.env
+# Local dev: also supports toddler-meal-planner/.env
+_APP_DIR = os.path.abspath(os.path.dirname(__file__))
+_INSTANCE_DIR = os.path.join(_APP_DIR, 'instance')
+os.makedirs(_INSTANCE_DIR, exist_ok=True)
+
+# Project .env first (local/dev), then instance/.env (persistent Docker volume) wins.
+load_dotenv(os.path.join(_APP_DIR, '.env'))
+load_dotenv(os.path.join(_INSTANCE_DIR, '.env'), override=True)
 
 from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
@@ -68,11 +76,9 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 # SQLite defaults to instance/toddler_meals.db so Docker volume mounts at
 # /app/instance (e.g. -v ~/meal-data:/app/instance) persist users + meal history
 # across rebuilds/redeploys.
-_INSTANCE_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance')
-os.makedirs(_INSTANCE_DIR, exist_ok=True)
 _DEFAULT_SQLITE = 'sqlite:///' + os.path.join(_INSTANCE_DIR, 'toddler_meals.db')
 # One-time migrate from older CWD-relative DB path if present
-_legacy_db = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'toddler_meals.db')
+_legacy_db = os.path.join(_APP_DIR, 'toddler_meals.db')
 _instance_db = os.path.join(_INSTANCE_DIR, 'toddler_meals.db')
 if os.path.exists(_legacy_db) and not os.path.exists(_instance_db):
     try:

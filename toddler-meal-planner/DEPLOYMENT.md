@@ -183,30 +183,39 @@ Works on DigitalOcean, Linode, Vultr, Lightsail, or any Linux server.
 cd ~/kabirmealplanner && git pull origin main
 cd toddler-meal-planner
 
-# One-time: copy and fill secrets (OPENAI_API_KEY, SECRET_KEY, …)
-cp -n .env.example .env
-# edit .env — put OPENAI_API_KEY=sk-... there (never pass the key on the command line)
+# One-time: persistent secrets next to the DB (survives docker rebuild/rm)
+mkdir -p ~/meal-data
+cp -n .env.example ~/meal-data/.env
+# edit ~/meal-data/.env — set OPENAI_API_KEY=sk-... and SECRET_KEY=...
 
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
 sudo docker run -d --name meal-planner --restart always \
   -p 80:5000 \
   -v ~/meal-data:/app/instance \
-  --env-file .env \
+  --env-file ~/meal-data/.env \
   meal-planner
 ```
 
-Or with Compose (also reads `.env` automatically via `env_file`):
+Or with Compose (mounts `~/meal-data`; app also reads `/app/instance/.env` from that volume):
 
 ```bash
 cd ~/kabirmealplanner/toddler-meal-planner
-cp -n .env.example .env   # then edit OPENAI_API_KEY=...
+mkdir -p ~/meal-data
+cp -n .env.example ~/meal-data/.env   # then edit OPENAI_API_KEY=...
 docker compose up -d --build
 ```
 
 Open `http://YOUR_PUBLIC_IP`.
 
-**Data persistence (important):** The SQLite database is `/app/instance/toddler_meals.db` (users, toddlers, `meal_logs`, preferences, weekly plans). The `-v ~/meal-data:/app/instance` mount keeps that data on the host across rebuilds and redeploys. Do not delete `~/meal-data` unless you want a full wipe. Meal log history is never deleted by plan regeneration or chat plan updates.
+**Data persistence (important):** Keep both the database and secrets under `~/meal-data`:
+
+| Host path | Inside container | Purpose |
+|-----------|------------------|---------|
+| `~/meal-data/toddler_meals.db` | `/app/instance/toddler_meals.db` | Users, toddlers, meal logs, plans |
+| `~/meal-data/.env` | `/app/instance/.env` | `OPENAI_API_KEY`, `SECRET_KEY`, etc. |
+
+The `-v ~/meal-data:/app/instance` mount keeps **all of that** across rebuilds. The app loads `/app/instance/.env` on startup (and `docker run --env-file ~/meal-data/.env` also injects those vars). Do not delete `~/meal-data` unless you want a full wipe.
 
 ---
 
@@ -220,7 +229,7 @@ Open `http://YOUR_PUBLIC_IP`.
 | `USDA_FDC_API_KEY` | Optional USDA lookups | DEMO_KEY |
 | `FLASK_ENV` | Environment mode | production (Docker) |
 
-Put secrets in **`toddler-meal-planner/.env`** and pass them with `--env-file .env` (or Compose `env_file`). Do not put API keys in the `docker run` `-e` flags.
+Put secrets in **`~/meal-data/.env`** (same folder as the DB). Pass them with `--env-file ~/meal-data/.env`, and/or rely on the app loading `/app/instance/.env` from the volume. Do not put API keys in `docker run -e` flags, and do not keep production secrets only inside the git checkout (that can be wiped on a fresh clone).
 
 ---
 
@@ -234,13 +243,13 @@ Push to GitHub → Auto-deploys
 cd ~/kabirmealplanner
 git pull origin main
 cd toddler-meal-planner
-# Ensure .env has OPENAI_API_KEY=... (and other secrets)
+# Secrets live in ~/meal-data/.env (persists across redeploys)
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner && sudo docker rm meal-planner
 sudo docker run -d --name meal-planner --restart always \
   -p 80:5000 \
   -v ~/meal-data:/app/instance \
-  --env-file .env \
+  --env-file ~/meal-data/.env \
   meal-planner
 ```
 ### AWS App Runner:
