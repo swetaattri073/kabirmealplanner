@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Recipes - {{ toddler.name }} | LittleBowl{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-book-open"></i> Recipe ideas</h1>
+    <p class="page-subtitle">Gentle toddler-friendly recipes — ported from LittleBowl's recipe library.</p>
+</div>
+
+<div class="recipe-grid">
+    {% for recipe in recipes %}
+    <article class="recipe-card">
+        <h2>{{ recipe.name }}</h2>
+        <p><strong>Why it may work:</strong> {{ recipe.why }}</p>
+        <p><strong>Cheese tip:</strong> {{ recipe.cheese }}</p>
+        <div class="recipe-steps">
+            <strong>How to make it</strong>
+            <p>{{ recipe.steps }}</p>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}

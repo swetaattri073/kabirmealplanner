@@ -29,6 +29,16 @@ from ai_features import (
     smart_meal_parser, recognize_food_from_image
 )
 from nutrient_lookup import lookup_nutrients, guess_category
+from food_safety import check_food_safety, check_foods_safety, safety_rules_for_prompt
+from chat_assistant import (
+    LOG_FOOD_FEEDBACK_TOOL,
+    build_system_prompt,
+    find_matching_food,
+)
+from chat_service import call_openai_chat, chat_configured, ChatConfigError, ChatRequestError
+from recipes import list_recipes
+from usda_lookup import search_foods as usda_search_foods, get_food as usda_get_food, using_demo_key as usda_using_demo_key
+import json as _json
 
 # Create Flask app
 app = Flask(__name__)
@@ -566,6 +576,17 @@ def preferences_page(toddler_id):
         return redirect(url_for('home'))
     toddlers = get_user_toddlers()
     return render_template('preferences.html', toddler=toddler, toddlers=toddlers)
+
+
+@app.route('/recipes/<int:toddler_id>')
+def recipes_page(toddler_id):
+    """Recipe ideas ported from the React app"""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        flash('You do not have access to this profile.', 'error')
+        return redirect(url_for('home'))
+    toddlers = get_user_toddlers()
+    return render_template('recipes.html', toddler=toddler, toddlers=toddlers, recipes=list_recipes())
 
 
 # ==================== API ROUTES ====================
@@ -2083,6 +2104,248 @@ def get_dashboard_data(toddler_id):
         'alerts': alerts[:3],  # Top 3 alerts
         'suggestions': fallback_suggestions
     })
+
+
+# ==================== REACT-PORTED FEATURES: SAFETY / CHAT / RECIPES / USDA ====================
+
+@app.route('/api/recipes', methods=['GET'])
+def api_recipes():
+    return jsonify({'recipes': list_recipes()})
+
+
+@app.route('/api/food-safety/rules', methods=['GET'])
+def api_food_safety_rules():
+    return jsonify({'rules': safety_rules_for_prompt()})
+
+
+@app.route('/api/food-safety/check', methods=['POST'])
+def api_food_safety_check():
+    data = request.json or {}
+    if data.get('foods'):
+        return jsonify({'flagged': check_foods_safety(data['foods'])})
+    food = data.get('food') or data
+    return jsonify({'warnings': check_food_safety(food)})
+
+
+@app.route('/api/foods/<int:food_id>/safety', methods=['GET'])
+def api_food_safety_by_id(food_id):
+    food = Food.query.get_or_404(food_id)
+    payload = food.to_dict()
+    return jsonify({'food_id': food_id, 'warnings': check_food_safety(payload)})
+
+
+@app.route('/api/nutrition/usda/health', methods=['GET'])
+def api_usda_health():
+    return jsonify({'ok': True, 'usingDemoKey': usda_using_demo_key()})
+
+
+@app.route('/api/nutrition/usda/search', methods=['GET'])
+def api_usda_search():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'error': 'Missing ?q= search term'}), 400
+    try:
+        return jsonify(usda_search_foods(q))
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 502
+
+
+@app.route('/api/nutrition/usda/food/<int:fdc_id>', methods=['GET'])
+def api_usda_food(fdc_id):
+    try:
+        return jsonify(usda_get_food(fdc_id))
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 502
+
+
+@app.route('/api/chat/health', methods=['GET'])
+def api_chat_health():
+    return jsonify({'ok': chat_configured()})
+
+
+def _chat_context_for_toddler(toddler):
+    """Build plan + food list context for the chat system prompt."""
+    today = date.today()
+    planner = MealPlanner(db.session)
+    week_start = today - timedelta(days=today.weekday())
+    weekly = planner.generate_weekly_plan(toddler, week_start, regenerate=False)
+    today_plan = next(
+        (d for d in weekly.get('days', []) if d.get('date') == today.isoformat()),
+        None,
+    )
+    plan_meals = (today_plan or {}).get('meals') or {}
+
+    # Flatten plan meal entries to simple dicts for the prompt
+    flat_plan = {}
+    for slot, entry in plan_meals.items():
+        if isinstance(entry, dict):
+            flat_plan[slot] = {
+                'name': entry.get('name') or entry.get('food_name') or entry.get('meal'),
+                'notes': entry.get('notes') or entry.get('add') or '',
+                'is_exposure': entry.get('is_exposure') or False,
+            }
+        else:
+            flat_plan[slot] = {'name': str(entry)}
+
+    prefs = {
+        p.food_id: p
+        for p in FoodPreference.query.filter_by(toddler_id=toddler.id).all()
+    }
+    foods = []
+    for food in Food.query.limit(120).all():
+        d = food.to_dict()
+        pref = prefs.get(food.id)
+        if pref:
+            d['times_offered'] = pref.times_offered
+            d['times_accepted'] = pref.times_accepted
+            d['exposure_status'] = pref.get_exposure_status()
+        else:
+            d['times_offered'] = 0
+            d['times_accepted'] = 0
+            d['exposure_status'] = 'new'
+        foods.append(d)
+
+    return flat_plan, foods
+
+
+def _apply_chat_food_feedback(toddler, args, foods):
+    """Apply log_food_feedback tool — maps React responses onto Flask MealLog + preferences."""
+    response = (args or {}).get('response') or 'note_only'
+    note = (args or {}).get('note') or ''
+    food_name = (args or {}).get('foodName') or (args or {}).get('food_name') or ''
+    match = find_matching_food(foods, food_name) if food_name else None
+
+    reaction_map = {
+        'accepted': 'loved',
+        'partial': 'neutral',
+        'refused': 'refused',
+        'note_only': None,
+    }
+    reaction = reaction_map.get(response)
+
+    result = {
+        'logged': False,
+        'response': response,
+        'note': note,
+        'matched_food': match.get('name') if match else None,
+    }
+
+    if response == 'note_only' or not match or not reaction:
+        result['message'] = note or 'Noted for future planning.'
+        return result
+
+    food_id = match.get('id')
+    food = Food.query.get(food_id) if food_id else None
+    if not food:
+        result['message'] = note or 'Could not match that food in the database.'
+        return result
+
+    log = MealLog(
+        toddler_id=toddler.id,
+        food_id=food.id,
+        date=date.today(),
+        meal_type='snack',
+        portion_eaten_percent=100 if reaction == 'loved' else (50 if reaction == 'neutral' else 0),
+        toddler_reaction=reaction,
+        notes=note or f'Logged via chat assistant ({response})',
+    )
+    db.session.add(log)
+
+    pref = FoodPreference.query.filter_by(toddler_id=toddler.id, food_id=food.id).first()
+    if not pref:
+        pref = FoodPreference(toddler_id=toddler.id, food_id=food.id)
+        db.session.add(pref)
+    pref.update_from_reaction(reaction)
+    db.session.commit()
+
+    result['logged'] = True
+    result['meal_log_id'] = log.id
+    result['message'] = f"Logged {food.name} as {reaction}."
+    return result
+
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
+    """
+    OpenAI chat assistant for a toddler profile.
+    Body: { toddler_id, messages: [{role, content}, ...] }
+    Handles one optional log_food_feedback tool round-trip server-side.
+    """
+    data = request.json or {}
+    toddler_id = data.get('toddler_id')
+    messages = data.get('messages') or []
+    if not toddler_id:
+        return jsonify({'error': 'toddler_id is required'}), 400
+    if not messages:
+        return jsonify({'error': 'messages array is required'}), 400
+
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+
+    if not chat_configured():
+        return jsonify({
+            'error': 'OPENAI_API_KEY is not set. Add it to .env and restart the app.'
+        }), 501
+
+    plan_meals, foods = _chat_context_for_toddler(toddler)
+    system_prompt = build_system_prompt(
+        toddler_name=toddler.name,
+        age_months=toddler.age_months,
+        today_label=date.today().strftime('%A, %B %d'),
+        plan_meals=plan_meals,
+        foods=foods,
+    )
+
+    api_messages = [{'role': 'system', 'content': system_prompt}]
+    for m in messages:
+        role = m.get('role')
+        content = m.get('content')
+        if role in ('user', 'assistant') and content:
+            api_messages.append({'role': role, 'content': content})
+
+    tool_result = None
+    try:
+        first = call_openai_chat(messages=api_messages, tools=[LOG_FOOD_FEEDBACK_TOOL])
+        choice = (first.get('choices') or [{}])[0]
+        assistant_msg = choice.get('message') or {}
+
+        tool_calls = assistant_msg.get('tool_calls') or []
+        if tool_calls:
+            api_messages.append(assistant_msg)
+            for call in tool_calls:
+                fn = (call.get('function') or {})
+                name = fn.get('name')
+                try:
+                    args = _json.loads(fn.get('arguments') or '{}')
+                except Exception:
+                    args = {}
+                if name == 'log_food_feedback':
+                    tool_result = _apply_chat_food_feedback(toddler, args, foods)
+                    content = _json.dumps(tool_result)
+                else:
+                    content = _json.dumps({'error': f'Unknown tool {name}'})
+                api_messages.append({
+                    'role': 'tool',
+                    'tool_call_id': call.get('id'),
+                    'content': content,
+                })
+            second = call_openai_chat(messages=api_messages, tools=[LOG_FOOD_FEEDBACK_TOOL])
+            choice = (second.get('choices') or [{}])[0]
+            assistant_msg = choice.get('message') or {}
+
+        reply = assistant_msg.get('content') or 'Got it.'
+        return jsonify({
+            'message': {'role': 'assistant', 'content': reply},
+            'tool_result': tool_result,
+        })
+    except ChatConfigError as exc:
+        status = 501 if exc.code == 'NO_API_KEY' else 400
+        return jsonify({'error': str(exc)}), status
+    except ChatRequestError as exc:
+        return jsonify({'error': str(exc)}), exc.status
+    except Exception as exc:
+        return jsonify({'error': f'Chat failed: {exc}'}), 502
 
 
 # ==================== ERROR HANDLERS ====================

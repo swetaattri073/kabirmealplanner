@@ -171,7 +171,7 @@ FOOD_ENHANCEMENTS = {
         'flavor_variations': [
             'Banana smoothie (with milk)',
             'Banana pancakes (with oats)',
-            'Banana mash with honey',
+            'Banana mash with date paste',
             'Frozen banana (ice cream texture)',
             'Banana with nut butter',
         ]
@@ -194,7 +194,7 @@ FOOD_ENHANCEMENTS = {
     'Curd/Yogurt': {
         'boosts': [
             {'method': 'Add fruits', 'benefit': 'Vitamins + fiber', 'how': 'Mash banana/mango into curd'},
-            {'method': 'Add honey/jaggery', 'benefit': 'Iron (jaggery)', 'how': 'Natural sweetener'},
+            {'method': 'Add jaggery or date paste (no honey under 12 months)', 'benefit': 'Iron (jaggery)', 'how': 'Natural sweetener — avoid honey before age 1'},
             {'method': 'Mix with rice', 'benefit': 'Complete meal', 'how': 'Curd rice with salt'},
             {'method': 'Add dry fruits', 'benefit': 'Iron + calories', 'how': 'Chopped dates/raisins'},
         ],

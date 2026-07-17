@@ -21,11 +21,12 @@
     
     <!-- Stylesheets -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat-widget.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body{% if toddler %} data-toddler-id="{{ toddler.id }}" data-toddler-name="{{ toddler.name }}"{% endif %}>
     <div class="app-container">
         <!-- Mobile Header -->
         <header class="mobile-header">
@@ -105,6 +106,12 @@
                     <a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}">
                         <i class="fas fa-heart"></i>
                         <span>Preferences</span>
+                    </a>
+                </li>
+                <li class="nav-item {% if request.endpoint == 'recipes_page' %}active{% endif %}">
+                    <a href="{{ url_for('recipes_page', toddler_id=toddler.id) }}">
+                        <i class="fas fa-book-open"></i>
+                        <span>Recipes</span>
                     </a>
                 </li>
             </ul>
@@ -202,6 +209,15 @@
     
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/a2hs-prompt.js') }}" defer></script>
+    {% if toddler %}
+    <script>
+        window.LITTLEBOWL_CHAT = {
+            toddlerId: {{ toddler.id }},
+            toddlerName: {{ toddler.name|tojson }}
+        };
+    </script>
+    <script src="{{ url_for('static', filename='js/chat-widget.js') }}" defer></script>
+    {% endif %}
     
     <!-- PWA Service Worker Registration -->
     <script>
