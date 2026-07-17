@@ -42,6 +42,20 @@ function escapeHtml(str) {
     }[c]));
 }
 
+/** Local calendar YYYY-MM-DD (avoid UTC skew from toISOString). */
+function localDateISO(d = new Date()) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+/** Parse YYYY-MM-DD as a local Date at noon (stable across DST). */
+function parseLocalDate(iso) {
+    const [y, m, d] = String(iso).split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0);
+}
+
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -340,7 +354,7 @@ async function logMeal(toddlerId) {
         portion_eaten_percent: portionEaten,
         toddler_reaction: selectedReaction,
         notes: notes,
-        date: dateInput || new Date().toISOString().split('T')[0]
+        date: dateInput || localDateISO()
     };
     
     try {
@@ -562,7 +576,7 @@ function renderWeeklyPlan(plan) {
         titleEl.textContent = `${formatDate(plan.week_start)} - ${formatDate(plan.week_end)}`;
     }
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateISO();
     const toddlerId = document.body.dataset.toddlerId;
     
     let html = '';
@@ -617,19 +631,22 @@ function buildRecipeLinks(meal, toddlerId) {
 function navigateWeek(direction) {
     if (!currentWeekStart) return;
     
-    const current = new Date(currentWeekStart);
+    const current = parseLocalDate(currentWeekStart);
     current.setDate(current.getDate() + (direction * 7));
     
     const toddlerId = document.body.dataset.toddlerId;
-    loadWeeklyPlan(toddlerId, current.toISOString().split('T')[0]);
+    loadWeeklyPlan(toddlerId, localDateISO(current));
 }
 
 async function regenerateWeeklyPlan(toddlerId) {
     try {
-        const plan = await apiCall(`/meal-plan/weekly/${toddlerId}?regenerate=true`);
+        const qs = currentWeekStart
+            ? `?week_start=${encodeURIComponent(currentWeekStart)}&regenerate=true`
+            : '?regenerate=true';
+        const plan = await apiCall(`/meal-plan/weekly/${toddlerId}${qs}`);
         currentWeekStart = plan.week_start;
         renderWeeklyPlan(plan);
-        showToast('Weekly plan regenerated!', 'success');
+        showToast('Weekly plan regenerated (past & logged meals kept).', 'success');
     } catch (error) {
         console.error('Failed to regenerate plan:', error);
     }

@@ -630,6 +630,43 @@ class WeeklyPlan(db.Model):
         }
 
 
+class AuditLog(db.Model):
+    """Per-toddler / system audit trail for plan changes and API mutations."""
+    __tablename__ = 'audit_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    toddler_id = db.Column(db.Integer, db.ForeignKey('toddlers.id'), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
+    action = db.Column(db.String(100), nullable=False, index=True)
+    entity_type = db.Column(db.String(50), nullable=True)
+    entity_id = db.Column(db.String(100), nullable=True)
+
+    before_json = db.Column(JSON, nullable=True)
+    after_json = db.Column(JSON, nullable=True)
+    details = db.Column(JSON, nullable=True)
+
+    source = db.Column(db.String(50), default='api')
+    ip_address = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'toddler_id': self.toddler_id,
+            'user_id': self.user_id,
+            'action': self.action,
+            'entity_type': self.entity_type,
+            'entity_id': self.entity_id,
+            'before': self.before_json,
+            'after': self.after_json,
+            'details': self.details,
+            'source': self.source,
+            'ip_address': self.ip_address,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class NutritionAlert(db.Model):
     """Track nutrition alerts and recommendations"""
     __tablename__ = 'nutrition_alerts'

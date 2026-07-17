@@ -86,6 +86,7 @@ class MealPlanner:
             from models import MealLog
             today = date.today()
             kept_map = {}
+            deleted_snapshot = []
             for plan in existing_plans:
                 plan_date = week_start + timedelta(days=plan.day_of_week)
                 if plan_date < today:
@@ -100,10 +101,33 @@ class MealPlanner:
                     if logged:
                         kept_map[(plan.day_of_week, plan.meal_type)] = plan
                         continue
+                deleted_snapshot.append({
+                    'plan_id': plan.id,
+                    'date': plan_date.isoformat(),
+                    'meal_type': plan.meal_type,
+                    'food_id': plan.food_id,
+                    'food': plan.food.name if plan.food else None,
+                    'was_manual': not plan.is_generated,
+                })
                 self.db.delete(plan)
             self.db.commit()
             existing_map = kept_map
             existing_plans = list(kept_map.values())
+            try:
+                from audit_logging import write_audit_log
+                write_audit_log(
+                    action='plan.regenerate',
+                    toddler_id=toddler.id,
+                    entity_type='weekly_plan',
+                    entity_id=week_start.isoformat(),
+                    before={'deleted_slots': deleted_snapshot},
+                    after={'kept_past_or_logged_slots': len(kept_map)},
+                    details={'week_start': week_start.isoformat(), 'regenerate': True},
+                    source='meal_planner',
+                    commit=True,
+                )
+            except Exception:
+                pass
         
         # Get suitable foods
         suitable_foods = self._get_suitable_foods(toddler)
@@ -910,9 +934,15 @@ class MealPlanner:
         """
         from models import WeeklyPlan, Food, MealLog
         from chat_assistant import find_matching_food
+        from sqlalchemy.orm.attributes import flag_modified
 
         if not changes:
-            return {'updated': [], 'skipped': [], 'message': 'No changes requested.'}
+            return {
+                'updated': [],
+                'skipped': [],
+                'success': False,
+                'message': 'No changes requested.',
+            }
 
         today = date.today()
         day_names = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
@@ -921,10 +951,12 @@ class MealPlanner:
             'lunch': 'lunch',
             'dinner': 'dinner',
             'snack': 'evening_snack',
+            'snacks': 'evening_snack',
             'evening snack': 'evening_snack',
             'evening_snack': 'evening_snack',
             'mid morning': 'mid_morning_snack',
             'mid-morning': 'mid_morning_snack',
+            'mid_morning': 'mid_morning_snack',
             'mid_morning_snack': 'mid_morning_snack',
             'mid-morning snack': 'mid_morning_snack',
         }
@@ -932,11 +964,15 @@ class MealPlanner:
         foods = [{'id': f.id, 'name': f.name} for f in Food.query.all()]
         updated = []
         skipped = []
+        before_slots = []
 
         # Ensure current + next week plans exist (fill-only, no wipe)
         for offset in (0, 7):
             ws = today - timedelta(days=today.weekday()) + timedelta(days=offset)
             self.generate_weekly_plan(toddler, ws, regenerate=False)
+
+        schedule = toddler.get_recommended_schedule()
+        default_meal_types = list(schedule.get('meals') or []) + list(schedule.get('snacks') or [])
 
         for change in changes:
             food_name = (change.get('foodName') or change.get('food_name') or '').strip()
@@ -952,13 +988,23 @@ class MealPlanner:
 
             raw_meal = (change.get('mealType') or change.get('meal_type') or '').strip().lower()
             meal_type = meal_aliases.get(raw_meal) if raw_meal else None
+            if raw_meal and not meal_type:
+                skipped.append({
+                    'change': change,
+                    'reason': f'Unknown meal type "{raw_meal}"',
+                })
+                continue
 
             raw_day = (change.get('day') or change.get('dayName') or '').strip().lower()
             target_dows = None
-            if raw_day in day_names:
-                target_dows = [day_names.index(raw_day)]
+            if raw_day:
+                if raw_day in day_names:
+                    target_dows = [day_names.index(raw_day)]
+                else:
+                    skipped.append({'change': change, 'reason': f'Unknown day "{raw_day}"'})
+                    continue
 
-            # Scan current + next week for eligible slots
+            # Scan current + next week for eligible slots; create missing ones if day+meal known
             candidates = []
             for week_offset in (0, 7):
                 week_start = today - timedelta(days=today.weekday()) + timedelta(days=week_offset)
@@ -967,7 +1013,29 @@ class MealPlanner:
                     q = q.filter_by(meal_type=meal_type)
                 if target_dows is not None:
                     q = q.filter(WeeklyPlan.day_of_week.in_(target_dows))
-                for plan in q.all():
+                found = list(q.all())
+
+                # If a specific day+meal was requested but no row exists, create it
+                if not found and meal_type and target_dows is not None:
+                    for dow in target_dows:
+                        plan_date = week_start + timedelta(days=dow)
+                        if plan_date < today:
+                            continue
+                        plan = WeeklyPlan(
+                            toddler_id=toddler.id,
+                            week_start=week_start,
+                            day_of_week=dow,
+                            meal_type=meal_type,
+                            food_id=food.id,
+                            alternatives={},
+                            is_generated=False,
+                            nutrition_reason='Created via chat assistant',
+                        )
+                        self.db.add(plan)
+                        self.db.flush()
+                        found.append(plan)
+
+                for plan in found:
                     plan_date = week_start + timedelta(days=plan.day_of_week)
                     if plan_date < today:
                         continue
@@ -982,50 +1050,138 @@ class MealPlanner:
                             'reason': f'Skipped {plan_date.isoformat()} {plan.meal_type} — already logged',
                         })
                         continue
-                    # Today without log is allowed; past is not
-                    candidates.append((plan_date, plan))
+                    candidates.append((plan_date, plan, week_start))
+
+            if not candidates and meal_type is None and target_dows is not None:
+                # Day specified but no meal type — create lunch slot as a sensible default
+                for week_offset in (0, 7):
+                    week_start = today - timedelta(days=today.weekday()) + timedelta(days=week_offset)
+                    for dow in target_dows:
+                        plan_date = week_start + timedelta(days=dow)
+                        if plan_date < today:
+                            continue
+                        for mt in (default_meal_types or ['lunch']):
+                            existing = WeeklyPlan.query.filter_by(
+                                toddler_id=toddler.id,
+                                week_start=week_start,
+                                day_of_week=dow,
+                                meal_type=mt,
+                            ).first()
+                            if existing:
+                                logged = MealLog.query.filter_by(
+                                    toddler_id=toddler.id,
+                                    date=plan_date,
+                                    meal_type=mt,
+                                ).first()
+                                if not logged:
+                                    candidates.append((plan_date, existing, week_start))
+                                break
 
             if not candidates:
-                skipped.append({'change': change, 'reason': 'No future unlogged plan slots matched'})
+                skipped.append({
+                    'change': change,
+                    'reason': (
+                        'No future unlogged plan slots matched. '
+                        'Try a future weekday, or open Weekly Plan and regenerate first.'
+                    ),
+                })
                 continue
 
-            # If day not specified, update the next few matching future slots (up to 3)
+            # Prefer soonest dates; if day specified apply all matching future days,
+            # otherwise update the next few matching future slots (up to 3)
             candidates.sort(key=lambda x: x[0])
             to_apply = candidates if target_dows is not None else candidates[:3]
 
-            for plan_date, plan in to_apply:
-                plan.food_id = food.id
-                plan.is_generated = False
-                plan.nutrition_reason = (
+            for plan_date, plan, week_start in to_apply:
+                prev = {
+                    'plan_id': plan.id,
+                    'date': plan_date.isoformat(),
+                    'meal_type': plan.meal_type,
+                    'food_id': plan.food_id,
+                    'food': plan.food.name if plan.food else None,
+                    'alternatives': plan.alternatives,
+                }
+                before_slots.append(prev)
+
+                reason = (
                     change.get('note')
                     or f'Updated via chat assistant: {food.name}'
                 )
-                # Clear complete-meal alternatives so UI shows the new main food cleanly
-                if isinstance(plan.alternatives, dict) and 'main' in plan.alternatives:
+                plan.food_id = food.id
+                plan.food = food
+                plan.is_generated = False
+                plan.nutrition_reason = reason
+
+                # Always rewrite alternatives so the weekly UI summary updates
+                # (SQLAlchemy JSON needs a full assign + flag_modified).
+                prev_alt = plan.alternatives if isinstance(plan.alternatives, dict) else {}
+                if plan.meal_type in ('lunch', 'dinner'):
                     plan.alternatives = {
-                        'main': {'food_id': food.id, 'food_name': food.name, 'category': food.category},
-                        'carb': (plan.alternatives or {}).get('carb'),
-                        'side': (plan.alternatives or {}).get('side'),
-                        'add_ins': (plan.alternatives or {}).get('add_ins') or [],
-                        'backup': (plan.alternatives or {}).get('backup'),
-                        'reason': plan.nutrition_reason,
+                        'main': {
+                            'food_id': food.id,
+                            'food_name': food.name,
+                            'category': food.category,
+                        },
+                        'carb': prev_alt.get('carb') if isinstance(prev_alt.get('carb'), dict) else None,
+                        'side': prev_alt.get('side') if isinstance(prev_alt.get('side'), dict) else None,
+                        'add_ins': prev_alt.get('add_ins') or [],
+                        'backup': prev_alt.get('backup'),
+                        'reason': reason,
+                        'chat_updated': True,
                     }
+                else:
+                    plan.alternatives = {
+                        'backup': prev_alt.get('backup'),
+                        'chat_updated': True,
+                    }
+                flag_modified(plan, 'alternatives')
+
                 updated.append({
                     'date': plan_date.isoformat(),
+                    'day_name': day_names[plan.day_of_week].title(),
                     'meal_type': plan.meal_type,
                     'food': food.name,
+                    'food_id': food.id,
                     'plan_id': plan.id,
+                    'week_start': week_start.isoformat(),
+                    'previous_food': prev.get('food'),
                 })
 
         self.db.commit()
-        return {
+
+        success = len(updated) > 0
+        weeks_touched = sorted({u['week_start'] for u in updated})
+        message = (
+            f"Updated {len(updated)} future plan slot(s). "
+            f"Skipped {len(skipped)}. Logged meals were not changed."
+        )
+        if success and weeks_touched:
+            message += f" Changed week(s) starting {', '.join(weeks_touched)}."
+
+        result = {
             'updated': updated,
             'skipped': skipped,
-            'message': (
-                f"Updated {len(updated)} future plan slot(s). "
-                f"Skipped {len(skipped)}. Logged meals were not changed."
-            ),
+            'success': success,
+            'weeks_touched': weeks_touched,
+            'message': message,
         }
+
+        try:
+            from audit_logging import write_audit_log
+            write_audit_log(
+                action='plan.chat_update',
+                toddler_id=toddler.id,
+                entity_type='weekly_plan',
+                before={'slots': before_slots},
+                after={'updated': updated, 'skipped': skipped},
+                details={'changes_requested': changes, 'success': success},
+                source='chat',
+                commit=True,
+            )
+        except Exception:
+            pass
+
+        return result
     
     def _format_meal_summary(self, complete_meal):
         """Create a readable summary of a complete meal"""

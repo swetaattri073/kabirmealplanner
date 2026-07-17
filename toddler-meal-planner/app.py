@@ -24,7 +24,7 @@ os.makedirs(_INSTANCE_DIR, exist_ok=True)
 load_dotenv(os.path.join(_APP_DIR, '.env'))
 load_dotenv(os.path.join(_INSTANCE_DIR, '.env'), override=True)
 
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
 from meal_planner import MealPlanner, update_preferences_from_log
@@ -48,6 +48,7 @@ from chat_assistant import (
 from chat_service import call_openai_chat, chat_configured, ChatConfigError, ChatRequestError
 from recipes import list_recipes, get_recipe, find_recipe_for_food_name
 from usda_lookup import search_foods as usda_search_foods, get_food as usda_get_food, using_demo_key as usda_using_demo_key
+from audit_logging import setup_logging, write_audit_log, app_log, request_payload_snapshot
 import json as _json
 import shutil
 
@@ -95,6 +96,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 # Initialize extensions
 db.init_app(app)
 CORS(app)
+setup_logging(_INSTANCE_DIR)
 
 # Initialize Flask-Login
 login_manager = LoginManager()
@@ -272,6 +274,78 @@ def inject_globals():
         'current_user': current_user,
         'is_authenticated': current_user.is_authenticated if current_user else False
     }
+
+
+# ==================== API / AUDIT REQUEST LOGGING ====================
+
+_MUTATING_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
+_AUDIT_PATH_PREFIXES = ('/api/', '/meal-plan/', '/nutrition/', '/log-meal', '/toddlers')
+
+
+@app.before_request
+def _capture_request_for_audit():
+    path = request.path or ''
+    if not any(path.startswith(p) for p in _AUDIT_PATH_PREFIXES):
+        return
+    g._audit_started = datetime.utcnow()
+    g._audit_payload = request_payload_snapshot()
+
+
+@app.after_request
+def _log_api_request(response):
+    path = request.path or ''
+    if not any(path.startswith(p) for p in _AUDIT_PATH_PREFIXES):
+        return response
+    if path.startswith('/api/audit-logs'):
+        return response
+
+    payload = getattr(g, '_audit_payload', None) or {}
+    toddler_id = None
+    try:
+        if request.view_args and 'toddler_id' in request.view_args:
+            toddler_id = request.view_args.get('toddler_id')
+        elif isinstance(payload.get('json'), dict) and payload['json'].get('toddler_id'):
+            toddler_id = payload['json'].get('toddler_id')
+        elif request.args.get('toddler_id'):
+            toddler_id = int(request.args.get('toddler_id'))
+    except Exception:
+        toddler_id = None
+
+    body_preview = None
+    try:
+        if response.is_json:
+            body_preview = response.get_json(silent=True)
+    except Exception:
+        body_preview = None
+
+    app_log(
+        f'{request.method} {path} -> {response.status_code}',
+        request=payload,
+        response_preview=body_preview if request.method in _MUTATING_METHODS else None,
+        toddler_id=toddler_id,
+    )
+
+    # Persist DB audit rows for mutating calls (and plan regenerates via GET ?regenerate=true)
+    should_db = request.method in _MUTATING_METHODS
+    if path.startswith('/api/meal-plan/weekly/') and request.args.get('regenerate', '').lower() == 'true':
+        should_db = True
+    if should_db:
+        try:
+            write_audit_log(
+                action=f'api.{request.method.lower()}',
+                toddler_id=int(toddler_id) if toddler_id is not None else None,
+                entity_type='http_request',
+                entity_id=path,
+                before=None,
+                after={'status': response.status_code, 'body': body_preview},
+                details=payload,
+                source='http',
+                commit=True,
+            )
+        except Exception as exc:
+            app_log(f'audit write failed: {exc}')
+
+    return response
 
 
 # ==================== AUTHENTICATION ROUTES ====================
@@ -1429,6 +1503,8 @@ def get_weekly_plan(toddler_id):
     week_start_str = request.args.get('week_start')
     if week_start_str:
         week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+        # Normalize to Monday of that week
+        week_start = week_start - timedelta(days=week_start.weekday())
     else:
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
@@ -1442,6 +1518,23 @@ def get_weekly_plan(toddler_id):
         'toddler_id': toddler_id,
         'toddler_name': toddler.name,
         **plan
+    })
+
+
+@app.route('/api/audit-logs/<int:toddler_id>', methods=['GET'])
+def get_audit_logs(toddler_id):
+    """List recent audit log entries for a toddler (plan changes + API mutations)."""
+    Toddler.query.get_or_404(toddler_id)
+    limit = min(int(request.args.get('limit', 100)), 500)
+    action = request.args.get('action')
+    q = AuditLog.query.filter_by(toddler_id=toddler_id).order_by(AuditLog.created_at.desc())
+    if action:
+        q = q.filter(AuditLog.action == action)
+    rows = q.limit(limit).all()
+    return jsonify({
+        'toddler_id': toddler_id,
+        'count': len(rows),
+        'logs': [r.to_dict() for r in rows],
     })
 
 
@@ -2389,6 +2482,12 @@ def api_chat():
                     result = planner.apply_future_plan_updates(toddler, args.get('changes') or [])
                     tool_results.append({'tool': name, 'result': result})
                     content = _json.dumps(result)
+                    app_log(
+                        'chat update_weekly_plan',
+                        toddler_id=toddler.id,
+                        args=args,
+                        result=result,
+                    )
                 else:
                     content = _json.dumps({'error': f'Unknown tool {name}'})
                 api_messages.append({
