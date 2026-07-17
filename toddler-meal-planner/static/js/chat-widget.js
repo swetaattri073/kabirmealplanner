@@ -156,6 +156,10 @@
       if (!res.ok) throw new Error(data.error || `Chat failed (${res.status})`);
       const reply = (data.message && data.message.content) || "Got it.";
       messages.push({ role: "assistant", content: reply });
+      const planUpdated = (data.tool_results || []).some((t) => t.tool === "update_weekly_plan");
+      if (planUpdated && typeof showToast === "function") {
+        showToast("Weekly plan updated for future meals (logged history kept).", "success");
+      }
     } catch (err) {
       messages.push({ role: "assistant", content: err.message || "Something went wrong." });
     } finally {

@@ -4,21 +4,62 @@
 
 {% block content %}
 <div class="page-header">
-    <h1><i class="fas fa-book-open"></i> Recipe ideas</h1>
-    <p class="page-subtitle">Gentle toddler-friendly recipes — ported from LittleBowl's recipe library.</p>
+    <h1><i class="fas fa-book-open"></i> Recipes</h1>
+    <p class="page-subtitle">Toddler-friendly recipes for every food in LittleBowl — open any meal from the weekly plan to jump here.</p>
 </div>
+
+<form class="recipe-filters" method="get" action="{{ url_for('recipes_page', toddler_id=toddler.id) }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search recipes or foods…" aria-label="Search recipes">
+    <select name="category" aria-label="Filter by category">
+        <option value="">All categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat | title }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+</form>
+
+<p class="recipe-count">{{ recipes|length }} recipes</p>
 
 <div class="recipe-grid">
     {% for recipe in recipes %}
-    <article class="recipe-card">
+    <article class="recipe-card {% if highlight and recipe.slug == highlight %}is-highlighted{% endif %}" id="{{ recipe.slug }}">
+        <div class="recipe-card-top">
+            <span class="recipe-category">{{ recipe.category | title }}</span>
+            {% if recipe.source == 'curated' %}
+            <span class="recipe-badge">Featured</span>
+            {% endif %}
+        </div>
         <h2>{{ recipe.name }}</h2>
+        {% if recipe.why %}
         <p><strong>Why it may work:</strong> {{ recipe.why }}</p>
+        {% endif %}
+        {% if recipe.cheese %}
         <p><strong>Cheese tip:</strong> {{ recipe.cheese }}</p>
+        {% endif %}
         <div class="recipe-steps">
             <strong>How to make it</strong>
             <p>{{ recipe.steps }}</p>
         </div>
+        {% if recipe.suitable_from_months %}
+        <p class="recipe-meta">Suitable from {{ recipe.suitable_from_months }} months</p>
+        {% endif %}
     </article>
+    {% else %}
+    <p>No recipes matched your search.</p>
     {% endfor %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const highlight = {{ highlight|tojson }};
+  if (!highlight) return;
+  const el = document.getElementById(highlight);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+})();
+</script>
 {% endblock %}

@@ -22,9 +22,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create non-root user for security
-RUN useradd --create-home appuser && chown -R appuser:appuser /app
+# Create non-root user for security and ensure instance/ exists for SQLite volume
+RUN useradd --create-home appuser \
+    && mkdir -p /app/instance \
+    && chown -R appuser:appuser /app
 USER appuser
+
+# Persist SQLite + uploads via bind mount to /app/instance
+# Example: -v ~/meal-data:/app/instance
+ENV DATABASE_URL=sqlite:////app/instance/toddler_meals.db
 
 # Expose port
 EXPOSE 5000
