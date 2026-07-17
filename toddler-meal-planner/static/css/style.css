@@ -158,12 +158,14 @@ input, select, textarea {
     top: 0;
     width: var(--sidebar-width);
     height: 100vh;
+    height: 100dvh;
     background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     z-index: 100;
     box-shadow: var(--shadow-md);
+    overflow: hidden;
 }
 
 .sidebar-header {
@@ -284,6 +286,9 @@ input, select, textarea {
     list-style: none;
     padding: 1.25rem;
     flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .nav-item {
@@ -345,6 +350,10 @@ input, select, textarea {
 .sidebar-footer {
     padding: 1.25rem;
     border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
+    position: relative;
+    z-index: 2;
 }
 
 .add-toddler-btn {
@@ -1539,6 +1548,16 @@ input, select, textarea {
     box-shadow: var(--shadow-sm);
 }
 
+a.mobile-avatar-link {
+    text-decoration: none;
+    color: white;
+    flex-shrink: 0;
+}
+
+a.mobile-avatar-link:active {
+    transform: scale(0.96);
+}
+
 .sidebar-overlay {
     display: none;
     position: fixed;
@@ -1573,6 +1592,17 @@ input, select, textarea {
     
     .sidebar.open {
         left: 0;
+        z-index: 220; /* above mobile bottom nav so Account is tappable */
+    }
+
+    .sidebar-overlay.active {
+        z-index: 210;
+        pointer-events: auto;
+    }
+
+    .sidebar-footer {
+        /* Keep account row clear of the fixed bottom nav */
+        padding-bottom: calc(1.25rem + 72px + env(safe-area-inset-bottom, 0px));
     }
     
     .sidebar-overlay {
@@ -2082,10 +2112,19 @@ input, select, textarea {
     text-decoration: none;
     color: var(--text-primary);
     transition: all var(--transition-fast);
+    cursor: pointer;
+    position: relative;
+    z-index: 3;
+    -webkit-tap-highlight-color: rgba(107, 143, 60, 0.2);
 }
 
 .auth-profile-link:hover {
     background: var(--bg-secondary);
+}
+
+.auth-profile-link:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
 .auth-avatar {
@@ -2099,6 +2138,12 @@ input, select, textarea {
     justify-content: center;
     font-weight: 700;
     font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.auth-chevron {
+    color: var(--text-muted);
+    font-size: 0.75rem;
     flex-shrink: 0;
 }
 
