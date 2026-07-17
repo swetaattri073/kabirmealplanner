@@ -6,7 +6,44 @@ Generates personalized meal plans based on preferences, nutrition, and variety
 from datetime import date, timedelta
 from collections import defaultdict
 import random
+import re
 from nutrition_engine import NutritionEngine, RDA_BY_AGE, PRIORITY_NUTRIENTS
+
+
+# Animal-protein detection (name-based — food DB has few non-veg entries)
+_MEAT_KEYWORDS = (
+    "chicken", "fish", "meat", "mutton", "prawn", "shrimp", "keema",
+    "murgh", "lamb", "beef", "pork", "turkey", "seafood", "shellfish",
+)
+_EGG_NAME_RE = re.compile(r"\begg\b|omelette|omlette|bhurji", re.IGNORECASE)
+
+
+def _is_egg_food(food_or_name) -> bool:
+    name = (food_or_name.name if hasattr(food_or_name, "name") else food_or_name) or ""
+    lower = name.lower()
+    # Avoid false positive on Brinjal/Eggplant
+    if "eggplant" in lower or "brinjal" in lower:
+        return False
+    return bool(_EGG_NAME_RE.search(lower))
+
+
+def _is_meat_food(food_or_name) -> bool:
+    name = (food_or_name.name if hasattr(food_or_name, "name") else food_or_name) or ""
+    lower = name.lower()
+    return any(k in lower for k in _MEAT_KEYWORDS)
+
+
+def _is_animal_protein(food_or_name) -> bool:
+    return _is_meat_food(food_or_name) or _is_egg_food(food_or_name)
+
+
+def _normalize_diet(preference) -> str:
+    raw = (preference or "vegetarian").strip().lower().replace("_", "-")
+    if raw in ("non-vegetarian", "nonvegetarian", "non veg", "non-veg"):
+        return "non-vegetarian"
+    if raw in ("eggetarian", "eggitarian", "ovo-vegetarian"):
+        return "eggetarian"
+    return "vegetarian"
 
 
 class MealPlanner:
@@ -164,37 +201,40 @@ class MealPlanner:
         return self._format_weekly_plan(all_plans, week_start)
     
     def _get_suitable_foods(self, toddler):
-        """Get all foods suitable for this toddler"""
+        """
+        Get foods suitable for this toddler.
+
+        Allergies: hard exclude — if any toddler allergy appears in food.allergens, skip it.
+
+        Dietary preference:
+        - vegetarian: exclude meat/fish AND eggs
+        - eggetarian: exclude meat/fish (eggs allowed)
+        - non-vegetarian: allow everything (animal proteins are later boosted in scoring
+          so they actually appear — otherwise ~5 non-veg foods lose to ~180 veg ones)
+        """
         from models import Food
         
         foods = Food.query.filter(
             Food.suitable_from_months <= toddler.age_months
         ).all()
+
+        diet = _normalize_diet(toddler.dietary_preference)
+        allergies = {a.lower() for a in (toddler.allergies or []) if a}
         
-        # Filter by dietary preference and allergens
         suitable = []
         for food in foods:
-            # Check allergens
-            has_allergen = False
-            for allergen in (toddler.allergies or []):
-                if allergen in (food.allergens or []):
-                    has_allergen = True
-                    break
-            if has_allergen:
+            food_allergens = {a.lower() for a in (food.allergens or []) if a}
+            if allergies and food_allergens.intersection(allergies):
                 continue
-            
-            # Check dietary preference
-            if toddler.dietary_preference == 'vegetarian':
-                if food.category == 'protein':
-                    food_name_lower = food.name.lower()
-                    if any(x in food_name_lower for x in ['chicken', 'fish', 'meat', 'mutton']):
-                        continue
-            elif toddler.dietary_preference == 'eggetarian':
-                if food.category == 'protein':
-                    food_name_lower = food.name.lower()
-                    if any(x in food_name_lower for x in ['chicken', 'fish', 'meat', 'mutton']):
-                        continue
-            
+
+            if diet == "vegetarian":
+                if _is_animal_protein(food):
+                    continue
+            elif diet == "eggetarian":
+                if _is_meat_food(food):
+                    continue
+            # non-vegetarian: no dietary exclusions
+
             suitable.append(food)
         
         return suitable
@@ -379,6 +419,19 @@ class MealPlanner:
             
             score += balance_score * 0.15
             
+            # 5. Dietary preference boost
+            # Non-veg pool is tiny vs veg DB — without a boost, chicken/egg/fish almost never win.
+            diet = _normalize_diet(toddler.dietary_preference)
+            if diet == "non-vegetarian" and _is_animal_protein(food):
+                score += 8
+                if _is_meat_food(food):
+                    reasons.append("Matches non-veg preference")
+                else:
+                    reasons.append("Egg protein (non-veg preference)")
+            elif diet == "eggetarian" and _is_egg_food(food):
+                score += 6
+                reasons.append("Matches eggetarian preference")
+            
             # Add randomness for variety (small factor)
             score += random.uniform(0, 1)
             
@@ -472,6 +525,8 @@ class MealPlanner:
                     break
         
         # Score and select each component
+        diet = _normalize_diet(toddler.dietary_preference)
+
         def score_food(food):
             score = 0
             pref_score = preferences.get(food.id, 0)
@@ -490,18 +545,43 @@ class MealPlanner:
             # Variety penalty
             times_used = used_foods.get(food.id, 0) + recent_foods.get(food.id, 0)
             score -= times_used * 2  # Penalty for repetition
+
+            # Dietary preference boost for animal proteins
+            if diet == "non-vegetarian" and _is_animal_protein(food):
+                score += 10
+            elif diet == "eggetarian" and _is_egg_food(food):
+                score += 8
             
             # Random factor for variety
             score += random.uniform(0, 1)
             
             return score
         
-        # Select best main dish
+        # Select best main dish — for non-veg, force animal protein on ~40% of lunch/dinner slots
         if main_dishes:
-            main_dishes_scored = [(f, score_food(f)) for f in main_dishes]
+            animal_mains = [f for f in main_dishes if _is_animal_protein(f)]
+            egg_mains = [f for f in main_dishes if _is_egg_food(f)]
+            pool = main_dishes
+
+            if diet == "non-vegetarian" and animal_mains:
+                # ~3 of 7 days get a forced animal-protein main for this meal slot
+                if day_of_week in (0, 2, 4) or random.random() < 0.25:
+                    pool = animal_mains
+            elif diet == "eggetarian" and egg_mains:
+                if day_of_week in (1, 4) or random.random() < 0.2:
+                    pool = egg_mains
+
+            main_dishes_scored = [(f, score_food(f)) for f in pool]
             main_dishes_scored.sort(key=lambda x: x[1], reverse=True)
             selected_main = main_dishes_scored[0][0]
-            backup_main = main_dishes_scored[1][0] if len(main_dishes_scored) > 1 else None
+            # Backup from full main list when possible
+            full_scored = [(f, score_food(f)) for f in main_dishes]
+            full_scored.sort(key=lambda x: x[1], reverse=True)
+            backup_main = None
+            for f, _ in full_scored:
+                if f.id != selected_main.id:
+                    backup_main = f
+                    break
         else:
             return None
         
