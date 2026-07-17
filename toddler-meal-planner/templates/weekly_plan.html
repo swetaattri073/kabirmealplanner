@@ -33,8 +33,10 @@
         </div>
         <div class="card-footer">
             <p style="font-size: 0.9rem; color: var(--text-secondary);">
-                💡 <strong>Tip:</strong> The meal plan adapts based on {{ toddler.name }}'s preferences and nutritional needs. 
-                Foods that are liked appear more often, and meals are balanced to fill any nutrition gaps.
+                💡 <strong>Tip:</strong> Plans respect {{ toddler.name }}'s dietary preference
+                (<strong>{{ toddler.dietary_preference or 'vegetarian' }}</strong>) and allergies
+                {% if toddler.allergies %}(<strong>{{ toddler.allergies | join(', ') }}</strong>){% else %}(none set){% endif %}.
+                After changing diet or allergies in the profile, click <strong>Regenerate Plan</strong> — existing weeks are not auto-updated.
             </p>
         </div>
     </div>
