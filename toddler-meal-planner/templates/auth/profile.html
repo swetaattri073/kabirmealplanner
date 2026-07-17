@@ -101,6 +101,11 @@
                     <li><i class="fas fa-check"></i> Detailed nutrition reports</li>
                     <li><i class="fas fa-check"></i> Priority support</li>
                 </ul>
+                <div class="premium-coming-soon">
+                    <span class="coming-soon-pill">Coming soon</span>
+                    <h4><i class="fas fa-comments"></i> AI Chat Assistant</h4>
+                    <p>Ask about meals, food safety, and update your weekly plan in one place — included with your Premium plan when we turn it on.</p>
+                </div>
             {% else %}
                 <div class="subscription-status free">
                     <i class="fas fa-gift"></i>
@@ -119,6 +124,13 @@
                         <li><i class="fas fa-check"></i> Export meal plans to PDF</li>
                         <li><i class="fas fa-check"></i> Priority support</li>
                     </ul>
+
+                    <div class="premium-coming-soon">
+                        <span class="coming-soon-pill">Coming soon for Premium</span>
+                        <h4><i class="fas fa-comments"></i> AI Chat Assistant</h4>
+                        <p>A floating helper for diet questions, food safety, and weekly plan updates — reserved for Premium subscribers.</p>
+                    </div>
+
                     <button class="btn btn-primary btn-block" disabled style="opacity: 0.7;">
                         <i class="fas fa-crown"></i> Coming Soon
                     </button>
@@ -357,6 +369,44 @@
     .upgrade-promo h4 {
         margin: 0 0 1rem;
         color: var(--primary-dark);
+    }
+
+    .premium-coming-soon {
+        margin-top: 1rem;
+        padding: 1rem 1.1rem;
+        border-radius: var(--radius-md);
+        border: 1px dashed #f59e0b;
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    }
+
+    .premium-coming-soon .coming-soon-pill {
+        display: inline-block;
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #92400e;
+        background: #fde68a;
+        border-radius: 999px;
+        padding: 0.2rem 0.55rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .premium-coming-soon h4 {
+        margin: 0 0 0.35rem;
+        font-size: 1rem;
+        color: #78350f;
+    }
+
+    .premium-coming-soon h4 i {
+        margin-right: 0.35rem;
+    }
+
+    .premium-coming-soon p {
+        margin: 0;
+        font-size: 0.88rem;
+        color: #92400e;
+        line-height: 1.4;
     }
     
     .privacy-item {

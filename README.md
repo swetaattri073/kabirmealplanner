@@ -6,7 +6,7 @@ This repository contains **one production app** and an optional React prototype 
 
 | Path | What it is | Deploy this? |
 |------|------------|--------------|
-| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): email/password auth, meal logging, weekly plans, NLP/photo, recipes, food-safety, floating OpenAI chat with session memory, USDA lookups, audit logs | **Yes — production** |
+| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): email/password auth, meal logging, weekly plans, NLP/photo, recipes, food-safety, USDA lookups, audit logs; AI chat is Premium / coming soon | **Yes — production** |
 | Repo root (`src/`, `server/`) | Earlier React prototype — features ported into Flask. Reference only | Optional / local |
 
 **Full docs:**  

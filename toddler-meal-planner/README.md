@@ -14,7 +14,7 @@ The React app at the repo root is an optional prototype; features live here in F
 | Backend | Python 3.8+, **Flask 3**, Flask-Login, Flask-CORS |
 | ORM / DB | **SQLAlchemy** + **SQLite** by default (`instance/toddler_meals.db`); optional **PostgreSQL** via `DATABASE_URL` |
 | Auth | Email/password (**bcrypt**) — social login removed for now |
-| AI chat | **OpenAI** Chat Completions (`gpt-4o-mini` by default) |
+| AI chat | **OpenAI** — Premium-only, behind `FEATURE_CHAT_ENABLED` (default off) |
 | Nutrition extras | **USDA FoodData Central** API (optional), Open Food Facts enrichment |
 | Frontend | Server-rendered **Jinja2** templates, HTML/CSS, vanilla JS, **PWA** (installable) |
 | Deploy | **Docker** / Compose, **gunicorn**; also Render, Railway, Fly, Lightsail |
@@ -44,10 +44,11 @@ The React app at the repo root is an optional prototype; features live here in F
 - Recipe cards for foods; plan meals link into Recipes
 
 ### Chat assistant
-- Floating OpenAI assistant (tips + Q&A + plan tools + food feedback)
-- **Session memory:** last **10** messages in `sessionStorage`; older turns summarized
-- History wiped when the **browser session ends** or after **15 minutes** of site inactivity
-- Needs `OPENAI_API_KEY`
+- **Premium-only**, behind `FEATURE_CHAT_ENABLED` (default **off** — not shown in the free app)
+- Floating OpenAI assistant (tips + Q&A + plan tools + food feedback) when the flag is on for Premium users
+- Account page lists AI Chat as **Coming soon** for Premium / subscription
+- Session memory (last 10 messages + summary) when enabled
+- Needs `OPENAI_API_KEY` when the feature is turned on
 
 ### Safety & extras
 - Food-safety rules (honey, choking hazards, etc.)
@@ -125,14 +126,15 @@ Put these in **`~/meal-data/.env`** in production (or `toddler-meal-planner/.env
 | Variable | Required? | Purpose |
 |----------|-----------|---------|
 | `SECRET_KEY` | **Yes** (prod) | Flask sessions / cookies |
-| `OPENAI_API_KEY` | For chat | OpenAI chat + summarization |
+| `FEATURE_CHAT_ENABLED` | No | `true` to enable Premium chat (default off) |
+| `OPENAI_API_KEY` | For Premium chat | OpenAI chat + summarization |
 | `OPENAI_CHAT_MODEL` | No | Default `gpt-4o-mini` |
 | `DATABASE_URL` | No | Default SQLite under `instance/` |
 | `USDA_FDC_API_KEY` | No | Better USDA rate limits |
 | `SESSION_COOKIE_SECURE` | No | Set `true` only behind HTTPS |
 | `FLASK_ENV` | No | `production` in Docker |
 
-Auth is **email/password only** (social login removed for now).
+Auth is **email/password only** (social login removed for now). AI chat stays hidden until `FEATURE_CHAT_ENABLED=true` and the user has an active Premium subscription.
 
 ---
 
