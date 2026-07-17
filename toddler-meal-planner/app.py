@@ -45,7 +45,7 @@ from chat_assistant import (
     build_system_prompt,
     find_matching_food,
 )
-from chat_service import call_openai_chat, chat_configured, ChatConfigError, ChatRequestError
+from chat_service import call_openai_chat, chat_configured, ChatConfigError, ChatRequestError, summarize_chat_history
 from recipes import list_recipes, get_recipe, find_recipe_for_food_name
 from usda_lookup import search_foods as usda_search_foods, get_food as usda_get_food, using_demo_key as usda_using_demo_key
 import json as _json
@@ -2328,12 +2328,17 @@ def _apply_chat_food_feedback(toddler, args, foods):
 def api_chat():
     """
     OpenAI chat assistant for a toddler profile.
-    Body: { toddler_id, messages: [{role, content}, ...] }
-    Handles one optional log_food_feedback tool round-trip server-side.
+    Body: {
+      toddler_id,
+      messages: [{role, content}, ...],   # typically last ≤10 turns
+      summary: optional rolling summary of older turns
+    }
+    Handles one optional tool round-trip server-side.
     """
     data = request.json or {}
     toddler_id = data.get('toddler_id')
     messages = data.get('messages') or []
+    summary = (data.get('summary') or '').strip()
     if not toddler_id:
         return jsonify({'error': 'toddler_id is required'}), 400
     if not messages:
@@ -2356,6 +2361,12 @@ def api_chat():
         plan_meals=plan_meals,
         foods=foods,
     )
+    if summary:
+        system_prompt += (
+            "\n\nSession memory (earlier messages in this visit, summarized):\n"
+            f"{summary}\n"
+            "Use this memory for continuity; prefer the latest explicit user messages if they conflict."
+        )
 
     api_messages = [{'role': 'system', 'content': system_prompt}]
     for m in messages:
@@ -2413,6 +2424,35 @@ def api_chat():
         return jsonify({'error': str(exc)}), exc.status
     except Exception as exc:
         return jsonify({'error': f'Chat failed: {exc}'}), 502
+
+
+@app.route('/api/chat/summarize', methods=['POST'])
+def api_chat_summarize():
+    """
+    Fold older chat turns into a rolling session summary.
+    Body: { toddler_id, messages: [...], prior_summary?: string }
+    """
+    data = request.json or {}
+    toddler_id = data.get('toddler_id')
+    messages = data.get('messages') or []
+    prior_summary = data.get('prior_summary') or data.get('summary') or ''
+
+    if not toddler_id:
+        return jsonify({'error': 'toddler_id is required'}), 400
+
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+
+    if not messages and not (prior_summary or '').strip():
+        return jsonify({'summary': ''})
+
+    summary = summarize_chat_history(
+        messages=messages,
+        prior_summary=prior_summary,
+        toddler_name=toddler.name,
+    )
+    return jsonify({'summary': summary})
 
 
 # ==================== ERROR HANDLERS ====================
