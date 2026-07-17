@@ -1,0 +1,28 @@
+{
+  "name": "LittleBowl",
+  "short_name": "LittleBowl",
+  "description": "Little meals, big growth. Personalized meal planning for Indian toddlers with nutrition tracking",
+  "start_url": "/home",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fffaf0",
+  "theme_color": "#6b8f3c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "food", "lifestyle"],
+  "lang": "en",
+  "dir": "ltr"
+}

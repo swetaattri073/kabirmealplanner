@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Toddler Meal Planner - One-click deployment on AWS Lightsail'
+
+Parameters:
+  InstanceName:
+    Type: String
+    Default: toddler-meal-planner
+    Description: Name for your Lightsail instance
+  
+  BlueprintId:
+    Type: String
+    Default: amazon_linux_2023
+    Description: Lightsail blueprint (OS)
+  
+  BundleId:
+    Type: String
+    Default: nano_3_0
+    AllowedValues:
+      - nano_3_0
+      - micro_3_0
+      - small_3_0
+    Description: Instance size (nano=$3.50/mo, micro=$5/mo, small=$10/mo)
+
+Resources:
+  MealPlannerInstance:
+    Type: AWS::Lightsail::Instance
+    Properties:
+      InstanceName: !Ref InstanceName
+      AvailabilityZone: !Select [0, !GetAZs '']
+      BlueprintId: !Ref BlueprintId
+      BundleId: !Ref BundleId
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        
+        # Update system
+        yum update -y
+        
+        # Install Docker
+        yum install -y docker git
+        systemctl start docker
+        systemctl enable docker
+        
+        # Install Docker Compose
+        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        
+        # Clone the repository
+        cd /home/ec2-user
+        git clone https://github.com/swetaattri073/kabirmealplanner.git
+        cd kabirmealplanner/toddler-meal-planner
+        
+        # Create data directory for persistence
+        mkdir -p /home/ec2-user/meal-planner-data
+        
+        # Create production docker-compose override
+        cat > docker-compose.prod.yml << 'EOF'
+        version: '3.8'
+        services:
+          web:
+            build: .
+            ports:
+              - "80:5000"
+            environment:
+              - FLASK_ENV=production
+              - SECRET_KEY=your-production-secret-key-change-this
+            volumes:
+              - /home/ec2-user/meal-planner-data:/app/data
+            restart: always
+        EOF
+        
+        # Build and run
+        docker-compose -f docker-compose.prod.yml up -d --build
+        
+        # Set permissions
+        chown -R ec2-user:ec2-user /home/ec2-user/kabirmealplanner
+        chown -R ec2-user:ec2-user /home/ec2-user/meal-planner-data
+      Tags:
+        - Key: Application
+          Value: ToddlerMealPlanner
+
+  MealPlannerStaticIp:
+    Type: AWS::Lightsail::StaticIp
+    Properties:
+      StaticIpName: !Sub '${InstanceName}-ip'
+      AttachedTo: !Ref MealPlannerInstance
+
+  MealPlannerFirewall:
+    Type: AWS::Lightsail::Instance
+    DependsOn: MealPlannerInstance
+    Properties:
+      InstanceName: !Ref InstanceName
+      Networking:
+        Ports:
+          - FromPort: 80
+            ToPort: 80
+            Protocol: tcp
+          - FromPort: 443
+            ToPort: 443
+            Protocol: tcp
+          - FromPort: 22
+            ToPort: 22
+            Protocol: tcp
+
+Outputs:
+  InstancePublicIp:
+    Description: Public IP of your Meal Planner
+    Value: !GetAtt MealPlannerStaticIp.IpAddress
+  
+  ApplicationURL:
+    Description: URL to access your Meal Planner (wait 5 min after deployment)
+    Value: !Sub 'http://${MealPlannerStaticIp.IpAddress}'
+  
+  SSHCommand:
+    Description: SSH into your instance
+    Value: !Sub 'ssh ec2-user@${MealPlannerStaticIp.IpAddress}'

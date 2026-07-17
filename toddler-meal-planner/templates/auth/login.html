@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - LittleBowl</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--gradient-bg);
+            padding: 1rem;
+        }
+        
+        .auth-container {
+            width: 100%;
+            max-width: 420px;
+        }
+        
+        .auth-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-xl);
+            overflow: hidden;
+        }
+        
+        .auth-header {
+            background: var(--gradient-primary);
+            padding: 2rem;
+            text-align: center;
+            color: white;
+        }
+        
+        .auth-header .logo {
+            margin-bottom: 0.75rem;
+        }
+        .auth-header .logo img {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #fffaf0;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        .auth-header .brand-name {
+            margin: 0.35rem 0 0;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+        .auth-header .brand-little { color: #e8f5c8; }
+        .auth-header .brand-bowl { color: #ffd4a8; }
+        .auth-header .brand-tagline {
+            margin: 0.25rem 0 0.5rem;
+            font-size: 0.85rem;
+            opacity: 0.9;
+            font-weight: 600;
+        }
+        
+        .auth-header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .auth-header p {
+            margin: 0.5rem 0 0;
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        
+        .auth-body {
+            padding: 2rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            border: 2px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            font-size: 1rem;
+            transition: all var(--transition-fast);
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .remember-me input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+        
+        .forgot-link {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .forgot-link:hover {
+            text-decoration: underline;
+        }
+        
+        .auth-btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            border-radius: var(--radius-lg);
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+        
+        .auth-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            margin: 1.5rem 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-light);
+        }
+        
+        .auth-divider span {
+            padding: 0 1rem;
+        }
+        
+        .auth-footer {
+            text-align: center;
+            color: var(--text-secondary);
+        }
+        
+        .auth-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .skip-link {
+            display: block;
+            text-align: center;
+            margin-top: 1.5rem;
+            padding: 0.75rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border: 2px dashed var(--border-light);
+            border-radius: var(--radius-lg);
+            transition: all var(--transition-fast);
+        }
+        
+        .skip-link:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+        
+        .skip-link i {
+            margin-right: 0.5rem;
+        }
+        
+        .alert {
+            padding: 0.875rem 1rem;
+            border-radius: var(--radius-md);
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .alert-error {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+        }
+        
+        .alert-success {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+        }
+        
+        .alert-info {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+        
+        .benefits-note {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 1px solid #bae6fd;
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+        }
+        
+        .benefits-note h4 {
+            margin: 0 0 0.5rem;
+            color: var(--primary-dark);
+            font-size: 0.9rem;
+        }
+        
+        .benefits-note ul {
+            margin: 0;
+            padding-left: 1.25rem;
+            color: var(--text-secondary);
+        }
+        
+        .benefits-note li {
+            margin-bottom: 0.25rem;
+        }
+        
+        .social-login {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .social-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            border-radius: var(--radius-lg);
+            font-weight: 700;
+            text-decoration: none;
+            border: 2px solid var(--border-light);
+            transition: all var(--transition-fast);
+            background: white;
+            color: var(--text-primary);
+        }
+        
+        .social-btn:hover:not(.disabled) {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .social-btn.disabled {
+            opacity: 0.55;
+            pointer-events: none;
+        }
+        
+        .social-google i { color: #ea4335; }
+        .social-facebook i { color: #1877f2; }
+        
+        .social-note {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+        
+        .social-note.config-hint {
+            color: #b45309;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="logo">
+                    <img src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="LittleBowl" width="96" height="96">
+                </div>
+                <p class="brand-name"><span class="brand-little">Little</span><span class="brand-bowl">Bowl</span></p>
+                <p class="brand-tagline">Little meals, big growth.</p>
+                <h1>Welcome Back!</h1>
+                <p>Sign in to access your meal plans</p>
+            </div>
+            
+            <div class="auth-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <div class="benefits-note">
+                    <h4><i class="fas fa-star"></i> Why sign in?</h4>
+                    <ul>
+                        <li>Save your data permanently across devices</li>
+                        <li>Access meal history & personalized plans</li>
+                        <li>Track nutrition trends over time</li>
+                    </ul>
+                </div>
+                
+                {% set providers = providers if providers is defined else {} %}
+                <div class="social-login">
+                    <a href="{{ url_for('login_google') }}" class="social-btn social-google {% if not providers.get('google') %}disabled{% endif %}">
+                        <i class="fab fa-google"></i> Continue with Google
+                    </a>
+                    <a href="{{ url_for('login_facebook') }}" class="social-btn social-facebook {% if not providers.get('facebook') %}disabled{% endif %}">
+                        <i class="fab fa-facebook-f"></i> Continue with Facebook
+                    </a>
+                    <p class="social-note">Instagram sign-in uses Facebook Login (Meta)</p>
+                    {% if not providers.get('google') and not providers.get('facebook') %}
+                    <p class="social-note config-hint">Social login needs GOOGLE_CLIENT_ID / FACEBOOK_CLIENT_ID env vars.</p>
+                    {% endif %}
+                </div>
+                
+                <div class="auth-divider"><span>or use email</span></div>
+                
+                <form method="POST" action="{{ url_for('login') }}">
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" name="email" 
+                               value="{{ email if email else '' }}" 
+                               placeholder="you@example.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" 
+                               placeholder="Enter your password" required>
+                    </div>
+                    
+                    <div class="form-options">
+                        <label class="remember-me">
+                            <input type="checkbox" name="remember" value="1">
+                            <span>Remember me</span>
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="auth-btn">
+                        <i class="fas fa-sign-in-alt"></i> Sign In
+                    </button>
+                </form>
+                
+                <div class="auth-divider"><span>or</span></div>
+                
+                <div class="auth-footer">
+                    <p>Don't have an account? <a href="{{ url_for('signup') }}">Create one</a></p>
+                </div>
+                
+                <a href="{{ url_for('home') }}" class="skip-link">
+                    <i class="fas fa-arrow-right"></i> Continue without signing in
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+
+{% block title %}My Account - LittleBowl{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-user-circle"></i> My Account</h1>
+    <p>Manage your profile and subscription</p>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Account Info Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-id-card"></i> Account Information</h2>
+        </div>
+        <div class="card-body">
+            <div class="profile-info">
+                <div class="profile-avatar">
+                    {{ current_user.name[0] | upper if current_user.name else current_user.email[0] | upper }}
+                </div>
+                <div class="profile-details">
+                    <h3>{{ current_user.name or 'User' }}</h3>
+                    <p>{{ current_user.email }}</p>
+                    <span class="badge badge-{{ 'success' if current_user.is_premium() else 'secondary' }}">
+                        {{ current_user.subscription_tier | title }} Plan
+                    </span>
+                </div>
+            </div>
+            
+            <div class="info-grid" style="margin-top: 1.5rem;">
+                <div class="info-item">
+                    <span class="info-label">Member since</span>
+                    <span class="info-value">{{ current_user.created_at.strftime('%B %Y') if current_user.created_at else 'N/A' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Last login</span>
+                    <span class="info-value">{{ current_user.last_login.strftime('%b %d, %Y') if current_user.last_login else 'Now' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Toddler profiles</span>
+                    <span class="info-value">{{ toddlers | length }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toddler Profiles Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-baby"></i> Toddler Profiles</h2>
+            <a href="{{ url_for('onboarding') }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus"></i> Add
+            </a>
+        </div>
+        <div class="card-body">
+            {% if toddlers %}
+                <div class="toddler-list">
+                    {% for t in toddlers %}
+                    <div class="toddler-list-item">
+                        <div class="toddler-list-avatar">{{ t.name[0] | upper }}</div>
+                        <div class="toddler-list-info">
+                            <strong>{{ t.name }}</strong>
+                            <span>{{ t.age_months }} months old</span>
+                        </div>
+                        <a href="{{ url_for('dashboard', toddler_id=t.id) }}" class="btn btn-sm btn-outline">
+                            View <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-baby" style="font-size: 2.5rem; color: var(--text-muted);"></i>
+                    <p>No toddler profiles yet</p>
+                    <a href="{{ url_for('onboarding') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create Profile
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Subscription Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-crown"></i> Subscription</h2>
+        </div>
+        <div class="card-body">
+            {% if current_user.is_premium() %}
+                <div class="subscription-status premium">
+                    <i class="fas fa-crown"></i>
+                    <div>
+                        <strong>{{ current_user.subscription_tier | title }} Plan</strong>
+                        <p>Active until {{ current_user.subscription_expires.strftime('%B %d, %Y') if current_user.subscription_expires else 'Forever' }}</p>
+                    </div>
+                </div>
+                <ul class="feature-list">
+                    <li><i class="fas fa-check"></i> Unlimited toddler profiles</li>
+                    <li><i class="fas fa-check"></i> Advanced meal planning AI</li>
+                    <li><i class="fas fa-check"></i> Detailed nutrition reports</li>
+                    <li><i class="fas fa-check"></i> Priority support</li>
+                </ul>
+            {% else %}
+                <div class="subscription-status free">
+                    <i class="fas fa-gift"></i>
+                    <div>
+                        <strong>Free Plan</strong>
+                        <p>Basic features included</p>
+                    </div>
+                </div>
+                
+                <div class="upgrade-promo">
+                    <h4>Upgrade to Premium</h4>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Unlimited toddler profiles</li>
+                        <li><i class="fas fa-check"></i> Advanced meal planning AI</li>
+                        <li><i class="fas fa-check"></i> Detailed nutrition reports</li>
+                        <li><i class="fas fa-check"></i> Export meal plans to PDF</li>
+                        <li><i class="fas fa-check"></i> Priority support</li>
+                    </ul>
+                    <button class="btn btn-primary btn-block" disabled style="opacity: 0.7;">
+                        <i class="fas fa-crown"></i> Coming Soon
+                    </button>
+                    <p class="text-muted text-center" style="margin-top: 0.5rem; font-size: 0.8rem;">
+                        Premium subscriptions launching soon!
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Data & Privacy Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-shield-alt"></i> Data & Privacy</h2>
+        </div>
+        <div class="card-body">
+            <div class="privacy-info">
+                <div class="privacy-item">
+                    <i class="fas fa-lock"></i>
+                    <div>
+                        <strong>Your data is secure</strong>
+                        <p>All data is encrypted and stored securely</p>
+                    </div>
+                </div>
+                <div class="privacy-item">
+                    <i class="fas fa-user-shield"></i>
+                    <div>
+                        <strong>Privacy first</strong>
+                        <p>We never share your personal information</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="data-actions" style="margin-top: 1.5rem;">
+                <button class="btn btn-outline btn-block" onclick="alert('Export feature coming soon!')">
+                    <i class="fas fa-download"></i> Export My Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sign Out Button -->
+<div style="text-align: center; margin-top: 2rem;">
+    <a href="{{ url_for('logout') }}" class="btn btn-outline" style="color: var(--danger);">
+        <i class="fas fa-sign-out-alt"></i> Sign Out
+    </a>
+</div>
+
+<style>
+    .profile-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .profile-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: var(--gradient-primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    .profile-details h3 {
+        margin: 0 0 0.25rem;
+    }
+    
+    .profile-details p {
+        margin: 0 0 0.5rem;
+        color: var(--text-secondary);
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .badge-success {
+        background: #dcfce7;
+        color: #15803d;
+    }
+    
+    .badge-secondary {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+    
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+    
+    .info-item {
+        text-align: center;
+        padding: 0.75rem;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-md);
+    }
+    
+    .info-label {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-bottom: 0.25rem;
+    }
+    
+    .info-value {
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .toddler-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .toddler-list-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-md);
+    }
+    
+    .toddler-list-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--gradient-secondary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+    }
+    
+    .toddler-list-info {
+        flex: 1;
+    }
+    
+    .toddler-list-info strong {
+        display: block;
+    }
+    
+    .toddler-list-info span {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+    }
+    
+    .empty-state p {
+        margin: 1rem 0;
+        color: var(--text-muted);
+    }
+    
+    .subscription-status {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: var(--radius-md);
+        margin-bottom: 1rem;
+    }
+    
+    .subscription-status.premium {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    }
+    
+    .subscription-status.premium i {
+        color: #d97706;
+        font-size: 1.5rem;
+    }
+    
+    .subscription-status.free {
+        background: var(--bg-secondary);
+    }
+    
+    .subscription-status.free i {
+        color: var(--text-muted);
+        font-size: 1.5rem;
+    }
+    
+    .subscription-status strong {
+        display: block;
+    }
+    
+    .subscription-status p {
+        margin: 0.25rem 0 0;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+    
+    .feature-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .feature-list li {
+        padding: 0.5rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--text-secondary);
+    }
+    
+    .feature-list li i {
+        color: var(--success);
+    }
+    
+    .upgrade-promo {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border: 1px solid #bae6fd;
+        border-radius: var(--radius-md);
+        padding: 1.25rem;
+        margin-top: 1rem;
+    }
+    
+    .upgrade-promo h4 {
+        margin: 0 0 1rem;
+        color: var(--primary-dark);
+    }
+    
+    .privacy-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 0.75rem 0;
+    }
+    
+    .privacy-item i {
+        color: var(--success);
+        font-size: 1.25rem;
+        margin-top: 0.1rem;
+    }
+    
+    .privacy-item strong {
+        display: block;
+        margin-bottom: 0.25rem;
+    }
+    
+    .privacy-item p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+    
+    @media (max-width: 768px) {
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}

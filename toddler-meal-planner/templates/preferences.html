@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Food Preferences - {{ toddler.name }} | LittleBowl{% endblock %}
+
+{% block content %}
+<body data-page="preferences" data-toddler-id="{{ toddler.id }}">
+    <div class="page-header">
+        <h1>❤️ Food Preferences</h1>
+        <p>Track what {{ toddler.name }} loves and doesn't like</p>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h2>😋 Loved Foods</h2>
+        </div>
+        <div class="card-body">
+            <div id="liked-foods">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>😐 Neutral Foods</h2>
+        </div>
+        <div class="card-body">
+            <div id="neutral-foods">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>🔄 Needs More Exposure</h2>
+        </div>
+        <div class="card-body">
+            <div class="alert info" style="margin-bottom: 1rem;">
+                <div class="alert-icon">💡</div>
+                <div class="alert-content">
+                    <h4>Don't Give Up!</h4>
+                    <p>Research shows toddlers need <strong>10-15 exposures</strong> to accept a new food. These foods have been refused but need more tries - keep offering them alongside favorites!</p>
+                </div>
+            </div>
+            <div id="needs-exposure-foods">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>🙅 Challenging Foods</h2>
+        </div>
+        <div class="card-body">
+            <div id="disliked-foods">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>💡 Tips for Picky Eaters</h2>
+        </div>
+        <div class="card-body">
+            <div class="dashboard-grid">
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">🔄 Keep Trying</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        It can take 10-15 exposures for a toddler to accept a new food. 
+                        Don't give up after a few refusals!
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">🎨 Make it Fun</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Cut foods into fun shapes, arrange colorfully on the plate, 
+                        or let them help in the kitchen.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">🍲 Mix with Favorites</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Hide vegetables in dal, paratha, or khichdi. 
+                        Blend spinach into paneer dishes.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">👨‍👩‍👧 Eat Together</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Toddlers learn by watching. Eat the same foods together 
+                        and show enthusiasm.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">⏰ Timing Matters</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Introduce new foods when hungry but not starving. 
+                        Mid-morning or early afternoon works well.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem;">🚫 No Pressure</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Avoid forcing or bribing. Let them explore at their own pace. 
+                        Praise trying, not finishing.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

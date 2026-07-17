@@ -1,0 +1,1191 @@
+{% extends "base.html" %}
+
+{% block title %}Log Meal - {{ toddler.name }} | LittleBowl{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>🍽️ Log Today's Meals</h1>
+    <p>Start with what we recommended for {{ toddler.name }}, then tell us how it went</p>
+</div>
+
+{# ==================== TODAY'S RECOMMENDED PLAN ==================== #}
+<div class="card full-width" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <h2>📋 Today's Recommended Plan</h2>
+        <a href="{{ url_for('weekly_plan_page', toddler_id=toddler.id) }}" class="btn btn-sm btn-outline">
+            View full week
+        </a>
+    </div>
+    <div class="card-body">
+        {% if today_plan and today_plan.meals %}
+            <p style="color: var(--text-secondary); margin-bottom: 1.25rem;">
+                Confirm how much {{ toddler.name }} ate from each planned meal. 
+                Only switch to a different food if they ate something else.
+            </p>
+            
+            <div class="today-plan-list">
+            {% for meal_type in meal_order %}
+                {% if meal_type in today_plan.meals %}
+                {% set meal = today_plan.meals[meal_type] %}
+                {% set already_logged = meal_type in logged_by_meal %}
+                {% set food = meal.food if meal.food else (meal.main.food if meal.main else none) %}
+                {% set display_name = meal.summary if meal.is_complete_meal and meal.summary else (food.name if food else 'Planned meal') %}
+                {% set food_id = food.id if food else none %}
+                
+                <div class="plan-meal-card {% if already_logged %}logged{% endif %}" 
+                     id="plan-meal-{{ meal_type }}"
+                     data-meal-type="{{ meal_type }}"
+                     data-plan-id="{{ meal.id }}"
+                     data-food-id="{{ food_id or '' }}">
+                    
+                    <div class="plan-meal-header">
+                        <div>
+                            <span class="plan-meal-type">{{ meal_labels.get(meal_type, meal_type) }}</span>
+                            {% if already_logged %}
+                            <span class="badge badge-success">✓ Logged</span>
+                            {% else %}
+                            <span class="badge badge-primary">Recommended</span>
+                            {% endif %}
+                        </div>
+                        {% if meal.backup and meal.backup.food_name %}
+                        <span class="plan-backup">Backup: {{ meal.backup.food_name }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <h3 class="plan-meal-name">{{ display_name }}</h3>
+                    
+                    {% if food and food.toddler_friendly_version %}
+                    <p class="plan-meal-tip">{{ food.toddler_friendly_version }}</p>
+                    {% elif meal.is_complete_meal and meal.main %}
+                    <p class="plan-meal-tip">Complete thali-style meal — main + carb + side</p>
+                    {% endif %}
+                    
+                    {% if meal.reason %}
+                    <p class="plan-meal-reason"><i class="fas fa-lightbulb"></i> {{ meal.reason }}</p>
+                    {% endif %}
+                    
+                    {% if already_logged %}
+                    <div class="logged-summary" id="logged-summary-{{ meal_type }}">
+                        {% for log in logged_by_meal[meal_type] %}
+                        <p>
+                            Ate {{ log.portion_eaten_percent }}%
+                            {% if log.toddler_reaction %} · {{ log.toddler_reaction }}{% endif %}
+                            {% if log.food %} · {{ log.food.name }}{% elif log.custom_food_name %} · {{ log.custom_food_name }}{% endif %}
+                        </p>
+                        {% endfor %}
+                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="showEditLoggedMeal('{{ meal_type }}')">
+                                <i class="fas fa-pen"></i> Edit logged meal
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                                Log a different meal instead
+                            </button>
+                        </div>
+                    </div>
+                    <div class="plan-feedback" id="edit-logged-{{ meal_type }}" style="display:none;">
+                        <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                            Update portion and reaction for each logged food. Remove an item if it was logged by mistake.
+                        </p>
+                        <div id="edit-items-{{ meal_type }}" class="meal-items-panel"></div>
+                        <div class="form-group" style="margin: 0.75rem 0;">
+                            <label class="form-label">Notes <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+                            <input type="text" class="form-input" id="edit-notes-{{ meal_type }}"
+                                   placeholder="E.g., ate more roti than usual">
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
+                            <button type="button" class="btn btn-primary" onclick="saveEditedMealLogs({{ toddler.id }}, '{{ meal_type }}')">
+                                <i class="fas fa-save"></i> Save changes
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="hideEditLoggedMeal('{{ meal_type }}')">
+                                Cancel
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                                Replace with different meal
+                            </button>
+                        </div>
+                    </div>
+                    {% else %}
+                    {# ---- Default: per-item feedback on recommended meal ---- #}
+                    <div class="plan-feedback" id="feedback-{{ meal_type }}">
+                        <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                            Rate <strong>each item</strong> {{ toddler.name }} ate — combos are split into separate foods.
+                        </p>
+                        <div id="plan-items-{{ meal_type }}" class="meal-items-panel"></div>
+                        
+                        <div class="form-group" style="margin: 0.75rem 0;">
+                            <label class="form-label">Anything refused / notes? <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+                            <input type="text" class="form-input" id="notes-{{ meal_type }}"
+                                   placeholder="E.g., ate roti but refused dal / spit out salad">
+                        </div>
+                        
+                        <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
+                            <button type="button" class="btn btn-primary" onclick="logPlannedMeal({{ toddler.id }}, '{{ meal_type }}')">
+                                <i class="fas fa-check"></i> Save feedback
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                                Ate something else instead
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {# ---- Alternate meal form: Search | Describe | Photo ---- #}
+                    <div class="alternate-meal-form" id="alternate-{{ meal_type }}" style="display:none;">
+                        <div class="alternate-header">
+                            <strong>Log a different meal</strong>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="hideAlternateForm('{{ meal_type }}')">Cancel</button>
+                        </div>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                            Pick a food, describe what they ate, or snap a photo. This replaces today's plan for {{ meal_labels.get(meal_type, meal_type) }}.
+                        </p>
+
+                        <div class="alt-tabs" role="tablist">
+                            <button type="button" class="alt-tab active" data-tab="search" onclick="switchAltTab('{{ meal_type }}', 'search')">
+                                <i class="fas fa-search"></i> Pick food
+                            </button>
+                            <button type="button" class="alt-tab" data-tab="nlp" onclick="switchAltTab('{{ meal_type }}', 'nlp')">
+                                <i class="fas fa-comment"></i> Describe
+                            </button>
+                            <button type="button" class="alt-tab" data-tab="photo" onclick="switchAltTab('{{ meal_type }}', 'photo')">
+                                <i class="fas fa-camera"></i> Photo
+                            </button>
+                        </div>
+
+                        {# Search tab #}
+                        <div class="alt-panel" id="alt-panel-search-{{ meal_type }}">
+                            <div class="form-group">
+                                <input type="text" class="form-input alt-food-search" id="alt-search-{{ meal_type }}"
+                                       placeholder="Search or type a new food to add…" data-meal="{{ meal_type }}"
+                                       oninput="filterAltFoods('{{ meal_type }}', this.value)">
+                            </div>
+                            <div class="food-list alt-food-list" id="alt-list-{{ meal_type }}" style="max-height:180px;"></div>
+                        </div>
+
+                        {# NLP / describe tab #}
+                        <div class="alt-panel" id="alt-panel-nlp-{{ meal_type }}" style="display:none;">
+                            <div class="form-group">
+                                <label class="form-label">What did they eat instead?</label>
+                                <textarea class="form-input form-textarea" id="alt-nlp-{{ meal_type }}" rows="2"
+                                          placeholder="E.g., ate only roti and cucumber, refused dal"></textarea>
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="parseAltNlp({{ toddler.id }}, '{{ meal_type }}')">
+                                <i class="fas fa-magic"></i> Find matching foods
+                            </button>
+                            <div class="food-list alt-food-list" id="alt-nlp-list-{{ meal_type }}" style="max-height:180px;margin-top:0.75rem;"></div>
+                        </div>
+
+                        {# Photo tab #}
+                        <div class="alt-panel" id="alt-panel-photo-{{ meal_type }}" style="display:none;">
+                            <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                                Take or upload a plate photo. Add a short caption if you can — we'll match foods and save the picture with the log.
+                            </p>
+                            <div class="photo-capture-row">
+                                <label class="btn btn-outline btn-sm photo-file-btn">
+                                    <i class="fas fa-camera"></i> Camera / upload
+                                    <input type="file" accept="image/*" capture="environment"
+                                           id="alt-photo-input-{{ meal_type }}"
+                                           style="display:none;"
+                                           onchange="onAltPhotoSelected('{{ meal_type }}', this)">
+                                </label>
+                                <button type="button" class="btn btn-sm btn-outline" id="alt-photo-clear-{{ meal_type }}"
+                                        style="display:none;" onclick="clearAltPhoto('{{ meal_type }}')">Clear photo</button>
+                            </div>
+                            <div id="alt-photo-preview-wrap-{{ meal_type }}" class="photo-preview-wrap" style="display:none;">
+                                <img id="alt-photo-preview-{{ meal_type }}" class="photo-preview" alt="Meal photo preview">
+                            </div>
+                            <div class="form-group" style="margin-top:0.75rem;">
+                                <label class="form-label">Caption <span style="font-weight:400;color:var(--text-muted)">(optional but helpful)</span></label>
+                                <input type="text" class="form-input" id="alt-photo-caption-{{ meal_type }}"
+                                       placeholder="E.g., khichdi with curd">
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="recognizeAltPhoto({{ toddler.id }}, '{{ meal_type }}')">
+                                <i class="fas fa-images"></i> Suggest foods from photo
+                            </button>
+                            <div class="food-list alt-food-list" id="alt-photo-list-{{ meal_type }}" style="max-height:180px;margin-top:0.75rem;"></div>
+                        </div>
+
+                        <div id="alt-items-{{ meal_type }}" class="meal-items-panel" style="margin-top:0.75rem;"></div>
+                        <p id="alt-items-hint-{{ meal_type }}" style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;">
+                            No foods selected yet — tap items above. Combos like “Lobia with Roti” split into separate rows.
+                        </p>
+                        
+                        <button type="button" class="btn btn-primary" style="margin-top:0.75rem;" onclick="logAlternateMeal({{ toddler.id }}, '{{ meal_type }}')">
+                            <i class="fas fa-sync"></i> Log & update weekly plan
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state" style="padding:2rem;text-align:center;">
+                <p>No plan for today yet.</p>
+                <a href="{{ url_for('weekly_plan_page', toddler_id=toddler.id) }}" class="btn btn-primary">Generate weekly plan</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ==================== SECONDARY: Family + freeform ==================== #}
+<div class="dashboard-grid">
+    <div class="card full-width">
+        <div class="card-header" style="cursor:pointer;" onclick="toggleSection('family-section')">
+            <h2>👨‍👩‍👧 Eating with Family Instead?</h2>
+            <i class="fas fa-chevron-down" id="family-section-icon"></i>
+        </div>
+        <div class="card-body" id="family-section" style="display:none;">
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                Describe the adult meal — we'll adapt it for {{ toddler.name }} and can replace today's plan.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;">
+                <textarea id="adult-meal-input" class="form-input form-textarea"
+                          placeholder="E.g., Lobia with roti, Rajma Chawal…"></textarea>
+                <select id="adult-meal-type" class="form-select" style="width: 150px;">
+                    <option value="lunch">🍱 Lunch</option>
+                    <option value="dinner">🌙 Dinner</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }}, false)">
+                    <i class="fas fa-magic"></i> Show Adaptations
+                </button>
+                <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.id }}, true)">
+                    <i class="fas fa-plus-circle"></i> Adapt & Replace Today's Plan
+                </button>
+            </div>
+            <div id="adaptation-results" style="display: none; margin-top: 1.5rem;"></div>
+        </div>
+    </div>
+    
+    <div class="card full-width">
+        <div class="card-header" style="cursor:pointer;" onclick="toggleSection('nl-section')">
+            <h2>🎤 Freeform / Extra Log</h2>
+            <i class="fas fa-chevron-down" id="nl-section-icon"></i>
+        </div>
+        <div class="card-body" id="nl-section" style="display:none;">
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                Use this for snacks or meals outside the plan. Prefer the recommended cards above when possible.
+            </p>
+            <textarea id="natural-language-input" class="form-input form-textarea"
+                      placeholder="E.g., He had banana and dahi for evening snack, loved the banana"></textarea>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                <button class="btn btn-secondary" onclick="parseAndPreview({{ toddler.id }})" style="flex:1;">
+                    <i class="fas fa-magic"></i> Parse & Preview
+                </button>
+                <button class="btn btn-primary" onclick="quickLog({{ toddler.id }})" style="flex:1;">
+                    <i class="fas fa-bolt"></i> Quick Log
+                </button>
+            </div>
+            <div id="parse-preview" style="display: none; margin-top: 1rem;"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.today-plan-list { display: flex; flex-direction: column; gap: 1.25rem; }
+.plan-meal-card {
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    background: var(--card-bg, white);
+    transition: border-color 0.2s;
+}
+.plan-meal-card:not(.logged) { border-color: rgba(99,102,241,0.35); }
+.plan-meal-card.logged { opacity: 0.92; background: var(--bg-secondary); }
+.plan-meal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;
+}
+.plan-meal-type { font-weight: 700; font-size: 0.95rem; }
+.plan-backup { font-size: 0.8rem; color: var(--text-muted); }
+.plan-meal-name { margin: 0.25rem 0 0.5rem; font-size: 1.25rem; }
+.plan-meal-tip { color: var(--text-secondary); margin: 0 0 0.5rem; font-size: 0.95rem; }
+.plan-meal-reason { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; }
+.badge {
+    display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700; margin-left: 0.5rem;
+}
+.badge-primary { background: rgba(99,102,241,0.15); color: var(--primary-dark, #4f46e5); }
+.badge-success { background: #dcfce7; color: #15803d; }
+.reaction-buttons.compact { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.reaction-buttons.compact .reaction-btn { padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+.alternate-meal-form {
+    margin-top: 1rem; padding-top: 1rem;
+    border-top: 1px dashed var(--border-color);
+}
+.alternate-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem;
+}
+.logged-summary p { margin: 0.25rem 0 0.75rem; color: var(--text-secondary); }
+.alt-tabs {
+    display: flex; flex-wrap: wrap; gap: 0.4rem;
+    margin-bottom: 0.9rem;
+}
+.alt-tab {
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary, #f8fafc);
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    padding: 0.45rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.alt-tab.active {
+    background: rgba(99,102,241,0.12);
+    border-color: rgba(99,102,241,0.45);
+    color: var(--primary-dark, #4f46e5);
+}
+.photo-capture-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.photo-preview-wrap {
+    margin-top: 0.75rem;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    max-width: 280px;
+    border: 1px solid var(--border-color);
+}
+.photo-preview { display: block; width: 100%; height: auto; max-height: 200px; object-fit: cover; }
+.suggestion-meta { font-size: 0.75rem; color: var(--text-muted); }
+.add-food-item {
+    border: 1px dashed rgba(99,102,241,0.45) !important;
+    background: rgba(99,102,241,0.06);
+}
+.add-food-item .food-item-name { color: var(--primary-dark, #4f46e5); }
+.food-item.selected { border-color: rgba(99,102,241,0.55) !important; background: rgba(99,102,241,0.08); }
+.meal-items-panel { display: flex; flex-direction: column; gap: 0.85rem; }
+.meal-item-row {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+    background: var(--bg-secondary, #f8fafc);
+}
+.meal-item-row .meal-item-name { font-weight: 700; margin-bottom: 0.5rem; }
+.meal-item-row .item-portion-label { text-align: center; font-weight: 700; font-size: 0.9rem; margin-top: 0.25rem; }
+</style>
+
+<script>
+const allFoods = {{ foods_data | tojson }};
+const todayPlanMeals = {{ (today_plan.meals if today_plan else {}) | tojson }};
+const loggedByMeal = {{ logged_by_meal | tojson }};
+const planItemState = {};
+const altItemState = {};
+const editItemState = {};
+const altPhotos = {};
+const editNotesSeed = {};
+
+const REACTIONS = [
+    { id: 'loved', label: '😍 Loved', short: '😍' },
+    { id: 'liked', label: '😊 Liked', short: '😊' },
+    { id: 'neutral', label: '😐 Okay', short: '😐' },
+    { id: 'disliked', label: '😕 Disliked', short: '😕' },
+    { id: 'refused', label: '🙅 Refused', short: '🙅' },
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    Object.keys(todayPlanMeals).forEach(initPlanItems);
+    Object.keys(loggedByMeal).forEach(initEditItems);
+    const urlParams = new URLSearchParams(window.location.search);
+    const mealType = urlParams.get('meal');
+    if (mealType) {
+        const el = document.getElementById('plan-meal-' + mealType);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.35)';
+        }
+        if (urlParams.get('edit') === '1' && loggedByMeal[mealType]) {
+            showEditLoggedMeal(mealType);
+        }
+    }
+});
+
+function resolveFoodByName(name) {
+    const n = (name || '').toLowerCase().trim();
+    if (!n) return null;
+    let f = allFoods.find(x => x.name.toLowerCase() === n);
+    if (f) return f;
+    f = allFoods.find(x => x.name.toLowerCase().startsWith(n) || n.startsWith(x.name.toLowerCase()));
+    if (f) return f;
+    if (n.includes('roti') || n === 'chapati') {
+        return allFoods.find(x => /roti|chapati/i.test(x.name)) || null;
+    }
+    if (n.includes('lobia') || n.includes('lobhiya')) {
+        return allFoods.find(x => /lobia/i.test(x.name) && x.category !== 'combo') || null;
+    }
+    return allFoods.find(x => x.name.toLowerCase().includes(n) && x.category !== 'combo') || null;
+}
+
+function expandComboFood(food) {
+    if (!food) return [];
+    const name = food.name || '';
+    if ((food.category === 'combo' || /\s+with\s+/i.test(name)) && /\s+with\s+/i.test(name)) {
+        const parts = name.split(/\s+with\s+/i);
+        const expanded = [];
+        for (const part of parts) {
+            const m = resolveFoodByName(part.trim());
+            if (m && !expanded.some(e => e.food_id === m.id)) {
+                expanded.push({ food_id: m.id, name: m.name, portion: 100, reaction: null });
+            }
+        }
+        if (expanded.length >= 2) return expanded;
+    }
+    return [{ food_id: food.id, name: food.name, portion: 100, reaction: null }];
+}
+
+function initPlanItems(mealType) {
+    const meal = todayPlanMeals[mealType];
+    if (!meal) return;
+    let items = (meal.log_components || []).map(c => ({
+        food_id: c.food_id,
+        name: c.name,
+        portion: 100,
+        reaction: null,
+        role: c.role || null,
+    }));
+    if (!items.length && meal.food) {
+        const f = allFoods.find(x => x.id === meal.food.id) || meal.food;
+        items = expandComboFood(f);
+    }
+    planItemState[mealType] = items;
+    renderItemRows(mealType, 'plan');
+}
+
+function initEditItems(mealType) {
+    const logs = loggedByMeal[mealType] || [];
+    editItemState[mealType] = logs.map(log => ({
+        log_id: log.id,
+        food_id: log.food_id,
+        name: (log.food && log.food.name) || log.custom_food_name || 'Food',
+        portion: log.portion_eaten_percent != null ? log.portion_eaten_percent : 100,
+        reaction: log.toddler_reaction || null,
+    }));
+    const note = logs.map(l => l.notes).find(Boolean) || '';
+    editNotesSeed[mealType] = note;
+}
+
+function getItemState(mealType, mode) {
+    if (mode === 'plan') return planItemState[mealType] || [];
+    if (mode === 'edit') return editItemState[mealType] || [];
+    return altItemState[mealType] || [];
+}
+
+function setItemState(mealType, mode, items) {
+    if (mode === 'plan') planItemState[mealType] = items;
+    else if (mode === 'edit') editItemState[mealType] = items;
+    else altItemState[mealType] = items;
+}
+
+function renderItemRows(mealType, mode) {
+    const containerId = mode === 'plan' ? 'plan-items-' + mealType
+        : (mode === 'edit' ? 'edit-items-' + mealType : 'alt-items-' + mealType);
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const items = getItemState(mealType, mode);
+    if (!items.length) {
+        container.innerHTML = mode === 'edit'
+            ? '<p style="color:var(--text-muted);font-size:0.9rem;">No items left — save to clear this meal log, or cancel.</p>'
+            : (mode === 'plan'
+                ? '<p style="color:var(--text-muted);font-size:0.9rem;">No planned items found.</p>'
+                : '');
+        const hint = document.getElementById('alt-items-hint-' + mealType);
+        if (hint) hint.style.display = mode === 'alt' ? 'block' : 'none';
+        return;
+    }
+    const hint = document.getElementById('alt-items-hint-' + mealType);
+    if (hint) hint.style.display = 'none';
+    container.innerHTML = items.map((item, idx) => {
+        const prefix = `${mode}-${mealType}-${idx}`;
+        const reactionBtns = REACTIONS.map(r => `
+            <button type="button" class="reaction-btn ${r.id} ${item.reaction === r.id ? 'selected' : ''}"
+                    data-reaction="${r.id}"
+                    onclick="pickItemReaction('${mealType}', '${mode}', ${idx}, '${r.id}')">${r.short}</button>
+        `).join('');
+        const canRemove = mode === 'alt' || mode === 'edit';
+        return `
+        <div class="meal-item-row" data-food-id="${item.food_id || ''}" data-log-id="${item.log_id || ''}">
+            <div class="meal-item-name">${escapeHtml(item.name)}${item.role ? ` <span class="suggestion-meta">(${escapeHtml(item.role)})</span>` : ''}</div>
+            <label class="form-label" style="font-size:0.85rem;">Portion eaten</label>
+            <input type="range" class="portion-slider item-portion" min="0" max="100" step="25" value="${item.portion}"
+                   oninput="setItemPortion('${mealType}', '${mode}', ${idx}, parseInt(this.value, 10))">
+            <p class="item-portion-label" id="portion-label-${prefix}">Ate: ${item.portion}%</p>
+            <label class="form-label" style="font-size:0.85rem;margin-top:0.35rem;">Reaction</label>
+            <div class="reaction-buttons compact">${reactionBtns}</div>
+            ${canRemove ? `<button type="button" class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="removeItemRow('${mealType}', '${mode}', ${idx})">Remove</button>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function removeItemRow(mealType, mode, idx) {
+    const items = getItemState(mealType, mode);
+    if (!items[idx]) return;
+    items.splice(idx, 1);
+    setItemState(mealType, mode, items);
+    renderItemRows(mealType, mode);
+    if (mode === 'alt') {
+        const q = document.getElementById('alt-search-' + mealType)?.value || '';
+        filterAltFoods(mealType, q);
+    }
+}
+
+function showEditLoggedMeal(mealType) {
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
+    const alt = document.getElementById('alternate-' + mealType);
+    if (alt) alt.style.display = 'none';
+    if (summary) summary.style.display = 'none';
+    if (edit) {
+        edit.style.display = 'block';
+        // Reset from original logs each time edit opens
+        initEditItems(mealType);
+        const notes = document.getElementById('edit-notes-' + mealType);
+        if (notes) notes.value = editNotesSeed[mealType] || '';
+        renderItemRows(mealType, 'edit');
+    }
+}
+
+function hideEditLoggedMeal(mealType) {
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
+    if (edit) edit.style.display = 'none';
+    if (summary) summary.style.display = 'block';
+}
+
+async function saveEditedMealLogs(toddlerId, mealType) {
+    const items = getItemState(mealType, 'edit');
+    const original = loggedByMeal[mealType] || [];
+    const notes = document.getElementById('edit-notes-' + mealType)?.value || '';
+
+    if (!items.length) {
+        // Delete all remaining original logs
+        try {
+            for (const log of original) {
+                await apiCall('/meal-logs/' + log.id, 'DELETE');
+            }
+            showToast('Cleared logged meal', 'success');
+            setTimeout(() => location.reload(), 700);
+        } catch (e) {
+            console.error(e);
+        }
+        return;
+    }
+
+    const missing = items.filter(i => !i.reaction);
+    if (missing.length) {
+        showToast('Please set a reaction for each food (' + missing.map(m => m.name).join(', ') + ')', 'error');
+        return;
+    }
+
+    const keepIds = new Set(items.map(i => i.log_id).filter(Boolean));
+    const toDelete = original.filter(l => !keepIds.has(l.id));
+
+    try {
+        for (const log of toDelete) {
+            await apiCall('/meal-logs/' + log.id, 'DELETE');
+        }
+        const payload = {
+            items: items.map(i => ({
+                id: i.log_id,
+                food_id: i.food_id,
+                portion_eaten_percent: i.portion,
+                toddler_reaction: i.reaction,
+                notes: notes,
+            })),
+        };
+        await apiCall('/meal-logs/batch', 'PUT', payload);
+        showToast('Updated logged meal', 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function pickItemReaction(mealType, mode, idx, reaction) {
+    const items = getItemState(mealType, mode);
+    if (!items[idx]) return;
+    items[idx].reaction = reaction;
+    // Refused meals contribute 0% to nutrition — keep portion in sync
+    if (reaction === 'refused') {
+        items[idx].portion = 0;
+    } else if (items[idx].portion === 0) {
+        items[idx].portion = 100;
+    }
+    setItemState(mealType, mode, items);
+    renderItemRows(mealType, mode);
+}
+
+function setItemPortion(mealType, mode, idx, portion) {
+    const items = getItemState(mealType, mode);
+    if (!items[idx]) return;
+    items[idx].portion = portion;
+    // Zero portion implies refused for nutrition purposes
+    if (portion === 0 && items[idx].reaction !== 'refused') {
+        items[idx].reaction = 'refused';
+    } else if (portion > 0 && items[idx].reaction === 'refused') {
+        items[idx].reaction = 'neutral';
+    }
+    setItemState(mealType, mode, items);
+    renderItemRows(mealType, mode);
+}
+
+function lookupReaction(reactionsMap, itemName, foodName) {
+    if (!reactionsMap) return null;
+    const tryNames = [itemName, foodName].filter(Boolean);
+    for (const n of tryNames) {
+        if (reactionsMap[n]) return reactionsMap[n];
+        const lower = n.toLowerCase();
+        for (const [k, v] of Object.entries(reactionsMap)) {
+            const kl = k.toLowerCase();
+            if (kl === lower || kl.includes(lower) || lower.includes(kl)) return v;
+        }
+    }
+    return null;
+}
+
+function addAltItems(mealType, foods, reactionsMap) {
+    if (!altItemState[mealType]) altItemState[mealType] = [];
+    for (const food of foods) {
+        const expanded = expandComboFood(food);
+        for (const item of expanded) {
+            const reaction = lookupReaction(reactionsMap, item.name, food.name);
+            const existing = altItemState[mealType].find(i => i.food_id === item.food_id);
+            if (existing) {
+                if (reaction && !existing.reaction) existing.reaction = reaction;
+                continue;
+            }
+            altItemState[mealType].push({ ...item, reaction });
+        }
+    }
+    renderItemRows(mealType, 'alt');
+}
+
+function toggleAltFood(mealType, foodId) {
+    const food = allFoods.find(f => f.id === foodId);
+    if (!food) return;
+    if (!altItemState[mealType]) altItemState[mealType] = [];
+    const expanded = expandComboFood(food);
+    const allSelected = expanded.every(e => altItemState[mealType].some(i => i.food_id === e.food_id));
+    if (allSelected) {
+        const ids = new Set(expanded.map(e => e.food_id));
+        altItemState[mealType] = altItemState[mealType].filter(i => !ids.has(i.food_id));
+    } else {
+        addAltItems(mealType, [food], null);
+    }
+    const q = document.getElementById('alt-search-' + mealType)?.value || '';
+    filterAltFoods(mealType, q);
+    renderItemRows(mealType, 'alt');
+}
+
+function removeAltItem(mealType, idx) {
+    if (!altItemState[mealType]) return;
+    altItemState[mealType].splice(idx, 1);
+    renderItemRows(mealType, 'alt');
+    const q = document.getElementById('alt-search-' + mealType)?.value || '';
+    filterAltFoods(mealType, q);
+}
+
+function collectItemsFromState(mealType, mode) {
+    const items = getItemState(mealType, mode);
+    const missing = items.filter(i => !i.reaction);
+    if (missing.length) {
+        showToast('Please set a reaction for each food (' + missing.map(m => m.name).join(', ') + ')', 'error');
+        return null;
+    }
+    return items.map(i => ({
+        food_id: i.food_id,
+        name: i.name,
+        portion_eaten_percent: i.portion,
+        toddler_reaction: i.reaction,
+    }));
+}
+
+async function submitMealLogs(toddlerId, mealType, items, options) {
+    const payload = {
+        toddler_id: toddlerId,
+        meal_type: mealType,
+        items: items,
+        date: {{ today|tojson }},
+        notes: options.notes || '',
+        update_plan: !!options.update_plan,
+        plan_food_id: options.plan_food_id || items[0]?.food_id,
+        plan_reason: options.plan_reason || '',
+        replace_existing: !!options.replace_existing,
+    };
+    if (options.photo_data) payload.photo_data = options.photo_data;
+    return apiCall('/meal-logs', 'POST', payload);
+}
+
+function toggleSection(id) {
+    const el = document.getElementById(id);
+    const icon = document.getElementById(id + '-icon');
+    if (!el) return;
+    const open = el.style.display !== 'none';
+    el.style.display = open ? 'none' : 'block';
+    if (icon) icon.className = open ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
+}
+
+function showAlternateForm(mealType) {
+    const feedback = document.getElementById('feedback-' + mealType);
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
+    const alt = document.getElementById('alternate-' + mealType);
+    if (feedback) feedback.style.display = 'none';
+    if (summary) summary.style.display = 'none';
+    if (edit) edit.style.display = 'none';
+    if (alt) {
+        alt.style.display = 'block';
+        switchAltTab(mealType, 'search');
+        filterAltFoods(mealType, '');
+    }
+}
+
+function hideAlternateForm(mealType) {
+    const feedback = document.getElementById('feedback-' + mealType);
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
+    const alt = document.getElementById('alternate-' + mealType);
+    if (alt) alt.style.display = 'none';
+    if (loggedByMeal[mealType]) {
+        if (summary) summary.style.display = 'block';
+        if (edit) edit.style.display = 'none';
+    } else if (feedback) {
+        feedback.style.display = 'block';
+    }
+}
+
+function switchAltTab(mealType, tab) {
+    const form = document.getElementById('alternate-' + mealType);
+    if (!form) return;
+    form.querySelectorAll('.alt-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    ['search', 'nlp', 'photo'].forEach(name => {
+        const panel = document.getElementById('alt-panel-' + name + '-' + mealType);
+        if (panel) panel.style.display = name === tab ? 'block' : 'none';
+    });
+    if (tab === 'search') filterAltFoods(mealType, document.getElementById('alt-search-' + mealType)?.value || '');
+}
+
+function filterAltFoods(mealType, query) {
+    const list = document.getElementById('alt-list-' + mealType);
+    if (!list) return;
+    const q = (query || '').toLowerCase().trim();
+    const matches = allFoods.filter(f =>
+        !q || f.name.toLowerCase().includes(q) || (f.name_hindi || '').toLowerCase().includes(q)
+    ).slice(0, 40);
+
+    const exact = q && allFoods.some(f => f.name.toLowerCase() === q);
+    const selectedIds = new Set((altItemState[mealType] || []).map(i => i.food_id));
+    let html = matches.map(f => {
+        const isSelected = selectedIds.has(f.id);
+        return `
+        <div class="food-item ${isSelected ? 'selected' : ''}" data-food-id="${f.id}" onclick="toggleAltFood('${mealType}', ${f.id})">
+            <div class="food-item-info">
+                <div class="food-item-name">${isSelected ? '✓ ' : ''}${escapeHtml(f.name)}</div>
+                ${f.name_hindi ? `<div class="food-item-hindi">${escapeHtml(f.name_hindi)}</div>` : ''}
+                ${f.nutrition_pending ? '<div class="suggestion-meta">Nutrients updating…</div>' : ''}
+            </div>
+            <span class="food-item-category">${escapeHtml(f.category)}${f.is_user_added ? ' · custom' : ''}</span>
+        </div>`;
+    }).join('');
+
+    if (q && !exact && looksLikeFoodName(q)) {
+        html += renderAddFoodButton(mealType, query.trim());
+    } else if (q && !exact && !looksLikeFoodName(q)) {
+        html += `<p class="suggestion-meta" style="padding:0.75rem;">Type a short food name (e.g. “methi thepla”), then add it.</p>`;
+    }
+
+    list.innerHTML = html || '<p style="padding:0.75rem;color:var(--text-muted);">Type a food name to search or add</p>';
+}
+
+function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+/** Avoid offering to save full sentences / long phrases as a food name. */
+function looksLikeFoodName(name) {
+    const t = (name || '').trim();
+    if (t.length < 2 || t.length > 60) return false;
+    const words = t.split(/\s+/).filter(Boolean);
+    if (words.length > 6) return false;
+    // Skip obvious sentence patterns
+    if (/\b(ate|eaten|refused|loved|liked|for breakfast|for lunch|for dinner|he |she |they )\b/i.test(t)) {
+        return words.length <= 3; // allow "ate banana"
+    }
+    return true;
+}
+
+function renderAddFoodButton(mealType, foodName, hint) {
+    const label = foodName.trim();
+    return `
+        <div class="food-item add-food-item" role="button"
+             data-meal-type="${escapeHtml(mealType)}"
+             data-add-name="${encodeURIComponent(label)}"
+             onclick="addCustomFoodFromBtn(this)">
+            <div class="food-item-info">
+                <div class="food-item-name"><i class="fas fa-plus-circle"></i> Add “${escapeHtml(label)}” to database</div>
+                <div class="suggestion-meta">${escapeHtml(hint || "We'll look up nutrients in the background for nutrition stats")}</div>
+            </div>
+        </div>`;
+}
+
+function addCustomFoodFromBtn(el) {
+    if (!el) return;
+    const mealType = el.getAttribute('data-meal-type');
+    const name = decodeURIComponent(el.getAttribute('data-add-name') || '');
+    return addCustomFood(mealType, name);
+}
+
+async function addCustomFood(mealType, name, options = {}) {
+    const foodName = (name || '').trim();
+    if (!foodName) {
+        showToast('Enter a food name to add', 'error');
+        return null;
+    }
+    if (!looksLikeFoodName(foodName)) {
+        showToast('Use a short food name (not a full sentence)', 'error');
+        return null;
+    }
+    try {
+        const payload = {
+            name: foodName,
+            enrich: true
+        };
+        if (options && options.category) payload.category = options.category;
+
+        const result = await apiCall('/foods', 'POST', payload);
+        const existingIdx = allFoods.findIndex(f => f.id === result.id);
+        if (existingIdx >= 0) allFoods[existingIdx] = result;
+        else allFoods.push(result);
+        allFoods.sort((a, b) => a.name.localeCompare(b.name));
+
+        addAltItems(mealType, [result], null);
+        const searchInput = document.getElementById('alt-search-' + mealType);
+        if (searchInput) {
+            searchInput.value = result.name;
+            filterAltFoods(mealType, result.name);
+        }
+        showToast(result.message || `Added ${result.name}`, 'success');
+        return result;
+    } catch (e) {
+        console.error(e);
+        return null;
+    }
+}
+
+/** Local fallback: match description words against the food list when API returns nothing. */
+function matchFoodsFromText(text) {
+    const t = (text || '').toLowerCase();
+    if (!t.trim()) return [];
+    const scored = [];
+    for (const f of allFoods) {
+        const name = (f.name || '').toLowerCase();
+        const hindi = (f.name_hindi || '').toLowerCase();
+        let score = 0;
+        if (name && t.includes(name)) score = Math.max(score, 0.95);
+        if (hindi && t.includes(hindi)) score = Math.max(score, 0.9);
+        const tokens = name.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+        for (const tok of tokens) {
+            if (t.includes(tok)) score = Math.max(score, 0.7);
+        }
+        if (score > 0) {
+            scored.push({
+                food_id: f.id,
+                name: f.name,
+                name_hindi: f.name_hindi,
+                category: f.category,
+                confidence: score,
+                source: 'local-match'
+            });
+        }
+    }
+    scored.sort((a, b) => b.confidence - a.confidence);
+    const seen = new Set();
+    return scored.filter(s => {
+        if (seen.has(s.food_id)) return false;
+        seen.add(s.food_id);
+        return true;
+    }).slice(0, 12);
+}
+
+function renderSuggestionList(listId, mealType, suggestions, rawQuery) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    const items = suggestions || [];
+    const selectedIds = new Set((altItemState[mealType] || []).map(i => i.food_id));
+    if (!items.length) {
+        const q = (rawQuery || '').trim();
+        list.innerHTML = `
+            <p style="padding:0.5rem 0.75rem;color:var(--text-muted);">
+                No foods detected in that description. Try “ate roti and dal”, or add a short food name below.
+            </p>
+            <div class="form-group" style="margin:0.5rem 0;">
+                <input type="text" class="form-input" id="alt-nlp-add-${mealType}"
+                       placeholder="Food name to add, e.g. methi thepla"
+                       value="">
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm"
+                    onclick="addCustomFood('${mealType}', document.getElementById('alt-nlp-add-${mealType}').value)">
+                <i class="fas fa-plus"></i> Add food to database
+            </button>`;
+        return;
+    }
+    list.innerHTML = items.map(s => {
+        const fid = s.food_id || s.id;
+        const name = s.name || s.db_name || s.label;
+        const conf = s.confidence != null ? Math.round(s.confidence * 100) + '%' : '';
+        const src = s.source ? ` · ${s.source}` : '';
+        if (!fid) {
+            if (!looksLikeFoodName(name)) return '';
+            return renderAddFoodButton(mealType, name, 'Detected but not in database — add & enrich nutrients');
+        }
+        const isSelected = selectedIds.has(fid);
+        return `
+        <div class="food-item ${isSelected ? 'selected' : ''}" onclick="toggleAltFood('${mealType}', ${fid})">
+            <div class="food-item-info">
+                <div class="food-item-name">${isSelected ? '✓ ' : ''}${escapeHtml(name)}</div>
+                ${s.name_hindi ? `<div class="food-item-hindi">${escapeHtml(s.name_hindi)}</div>` : ''}
+                <div class="suggestion-meta">${escapeHtml((conf + src).trim())}</div>
+            </div>
+            <span class="food-item-category">${escapeHtml(s.category || '')}</span>
+        </div>`;
+    }).join('') || `<p style="padding:0.75rem;color:var(--text-muted);">No usable matches.</p>`;
+}
+
+async function parseAltNlp(toddlerId, mealType) {
+    const text = document.getElementById('alt-nlp-' + mealType)?.value || '';
+    if (!text.trim()) {
+        showToast('Describe what they ate', 'error');
+        return;
+    }
+    try {
+        const result = await apiCall('/parse-meal', 'POST', { text });
+        let suggestions = (result.foods || []).map(f => ({
+            food_id: f.food_id || f.id || null,
+            name: f.db_name || f.name,
+            confidence: f.confidence,
+            source: 'describe'
+        }));
+        if (!suggestions.length) suggestions = matchFoodsFromText(text);
+        suggestions.forEach(s => {
+            if (!s.food_id) return;
+            const full = allFoods.find(f => f.id === s.food_id);
+            if (full) {
+                s.name_hindi = full.name_hindi;
+                s.category = full.category;
+                if (!s.name) s.name = full.name;
+            }
+        });
+        renderSuggestionList('alt-nlp-list-' + mealType, mealType, suggestions, text);
+        const foods = suggestions.filter(s => s.food_id).map(s => allFoods.find(f => f.id === s.food_id) || { id: s.food_id, name: s.name });
+        if (foods.length) {
+            addAltItems(mealType, foods, result.food_reactions || {});
+            if (result.overall_reaction && altItemState[mealType]?.length) {
+                altItemState[mealType].forEach(item => {
+                    if (!item.reaction) item.reaction = result.overall_reaction;
+                });
+                renderItemRows(mealType, 'alt');
+            }
+        } else {
+            showToast('No foods detected — add a short food name below', 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        const local = matchFoodsFromText(text);
+        renderSuggestionList('alt-nlp-list-' + mealType, mealType, local, text);
+        const foods = local.map(s => allFoods.find(f => f.id === s.food_id)).filter(Boolean);
+        if (foods.length) addAltItems(mealType, foods, null);
+    }
+}
+
+function onAltPhotoSelected(mealType, input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+        showToast('Photo must be under 4MB', 'error');
+        input.value = '';
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const dataUrl = e.target.result;
+        altPhotos[mealType] = dataUrl;
+        const wrap = document.getElementById('alt-photo-preview-wrap-' + mealType);
+        const img = document.getElementById('alt-photo-preview-' + mealType);
+        const clearBtn = document.getElementById('alt-photo-clear-' + mealType);
+        if (img) img.src = dataUrl;
+        if (wrap) wrap.style.display = 'block';
+        if (clearBtn) clearBtn.style.display = 'inline-flex';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearAltPhoto(mealType) {
+    delete altPhotos[mealType];
+    const input = document.getElementById('alt-photo-input-' + mealType);
+    const wrap = document.getElementById('alt-photo-preview-wrap-' + mealType);
+    const img = document.getElementById('alt-photo-preview-' + mealType);
+    const clearBtn = document.getElementById('alt-photo-clear-' + mealType);
+    if (input) input.value = '';
+    if (img) img.src = '';
+    if (wrap) wrap.style.display = 'none';
+    if (clearBtn) clearBtn.style.display = 'none';
+}
+
+async function recognizeAltPhoto(toddlerId, mealType) {
+    const photo = altPhotos[mealType];
+    const caption = document.getElementById('alt-photo-caption-' + mealType)?.value || '';
+    if (!photo && !caption.trim()) {
+        showToast('Add a photo or a caption first', 'error');
+        return;
+    }
+    try {
+        const result = await apiCall('/recognize-food', 'POST', {
+            toddler_id: toddlerId,
+            meal_type: mealType,
+            image: photo || null,
+            caption: caption
+        });
+        const suggestions = result.suggestions || result.detected_foods || [];
+        renderSuggestionList('alt-photo-list-' + mealType, mealType, suggestions);
+        const foods = suggestions
+            .filter(s => s.food_id)
+            .map(s => allFoods.find(f => f.id === s.food_id) || { id: s.food_id, name: s.name || s.db_name });
+        if (foods.length) addAltItems(mealType, foods, null);
+        if (result.message) {
+            showToast(result.message, 'success');
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function logPlannedMeal(toddlerId, mealType) {
+    const items = collectItemsFromState(mealType, 'plan');
+    if (!items || !items.length) {
+        showToast('No recommended foods found for this meal', 'error');
+        return;
+    }
+    const card = document.getElementById('plan-meal-' + mealType);
+    const notes = document.getElementById('notes-' + mealType)?.value || '';
+    const planName = card?.querySelector('.plan-meal-name')?.textContent || '';
+
+    try {
+        await submitMealLogs(toddlerId, mealType, items, {
+            notes: notes || `Logged planned meal: ${planName}`,
+            update_plan: false,
+        });
+        showToast('Saved feedback for recommended meal!', 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function logAlternateMeal(toddlerId, mealType) {
+    const items = collectItemsFromState(mealType, 'alt');
+    if (!items || !items.length) {
+        showToast('Please select at least one food they ate', 'error');
+        return;
+    }
+
+    const nlpNote = document.getElementById('alt-nlp-' + mealType)?.value || '';
+    const caption = document.getElementById('alt-photo-caption-' + mealType)?.value || '';
+    const extra = [nlpNote, caption].filter(Boolean).join(' · ');
+    const names = items.map(i => i.name).join(', ');
+
+    try {
+        const result = await submitMealLogs(toddlerId, mealType, items, {
+            notes: `Different from plan; weekly plan updated to ${names}` + (extra ? ` · ${extra}` : ''),
+            update_plan: true,
+            plan_food_id: items[0].food_id,
+            plan_reason: `Logged different meal: ${names}`,
+            photo_data: altPhotos[mealType] || null,
+            replace_existing: !!(loggedByMeal[mealType] && loggedByMeal[mealType].length),
+        });
+
+        const swaps = result.plan_updated?.future_plans_adjusted || 0;
+        const photoMsg = result.photo_path ? ' Photo saved.' : '';
+        const count = result.count || items.length;
+        showToast(
+            swaps > 0
+                ? `Logged ${count} item(s). Weekly plan updated (${swaps} future meal(s) adjusted).${photoMsg}`
+                : `Logged ${count} item(s) and updated today's plan.${photoMsg}`,
+            'success'
+        );
+        setTimeout(() => location.reload(), 900);
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function parseAndPreview(toddlerId) {
+    const text = document.getElementById('natural-language-input').value;
+    if (!text.trim()) {
+        showToast('Please enter what the toddler ate', 'error');
+        return;
+    }
+    try {
+        const result = await apiCall('/parse-meal', 'POST', { text });
+        renderParsePreview(result);
+    } catch (error) {
+        console.error('Parse error:', error);
+    }
+}
+
+function renderParsePreview(result) {
+    const container = document.getElementById('parse-preview');
+    if (!container) return;
+    let html = `<div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md);"><h4 style="margin-bottom: 0.75rem;">📝 Parsed Result:</h4>`;
+    if (result.foods?.length) {
+        html += `<p><strong>Foods detected:</strong></p><ul style="margin: 0.5rem 0; padding-left: 1.5rem;">`;
+        result.foods.forEach(food => {
+            html += `<li>${food.name} ${food.db_name ? '✓' : ''} <small>(${Math.round(food.confidence * 100)}%)</small></li>`;
+        });
+        html += `</ul>`;
+    } else {
+        html += `<p style="color: var(--warning);">No foods detected.</p>`;
+    }
+    if (result.meal_type) html += `<p><strong>Meal type:</strong> ${result.meal_type.replace('_', ' ')}</p>`;
+    if (result.portion) html += `<p><strong>Portion:</strong> ${result.portion.value}${result.portion.type === 'percentage' ? '%' : ''}</p>`;
+    if (result.overall_reaction) html += `<p><strong>Reaction:</strong> ${result.overall_reaction}</p>`;
+    if (Object.keys(result.food_reactions || {}).length) {
+        html += `<p><strong>Per-food:</strong></p><ul style="padding-left:1.5rem;">`;
+        for (const [food, reaction] of Object.entries(result.food_reactions)) {
+            html += `<li>${food}: ${reaction}</li>`;
+        }
+        html += `</ul>`;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+    container.style.display = 'block';
+}
+
+async function quickLog(toddlerId) {
+    const text = document.getElementById('natural-language-input').value;
+    if (!text.trim()) {
+        showToast('Please enter what the toddler ate', 'error');
+        return;
+    }
+    try {
+        const result = await apiCall('/smart-log', 'POST', { toddler_id: toddlerId, text });
+        showToast(result.message, 'success');
+        const preview = document.getElementById('parse-preview');
+        if (preview) {
+            preview.innerHTML = `
+                <div style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--success);">
+                    <h4 style="color: var(--success);">✅ Logged!</h4>
+                    <ul>${(result.created_logs || []).map(log =>
+                        `<li>${log.food?.name || log.custom_food_name} — ${log.portion_eaten_percent}% ${log.toddler_reaction || ''}</li>`
+                    ).join('')}</ul>
+                </div>`;
+            preview.style.display = 'block';
+        }
+        document.getElementById('natural-language-input').value = '';
+    } catch (error) {
+        console.error('Quick log error:', error);
+    }
+}
+</script>
+{% endblock %}
