@@ -80,12 +80,19 @@ python3 app.py
 #### Option 1: Docker
 
 ```bash
-# Build and run with Docker Compose
-docker-compose up -d
+cp -n .env.example .env
+# edit .env — set OPENAI_API_KEY=... and SECRET_KEY=...
 
-# Or build manually
-docker build -t toddler-meal-planner .
-docker run -p 5000:5000 toddler-meal-planner
+# Compose (reads .env via env_file)
+docker compose up -d --build
+
+# Or manually
+docker build -t meal-planner .
+docker run -d --name meal-planner --restart always \
+  -p 80:5000 \
+  -v ~/meal-data:/app/instance \
+  --env-file .env \
+  meal-planner
 ```
 
 #### Option 2: Heroku
