@@ -1,20 +1,19 @@
 /**
  * LittleBowl — Add to Home Screen prompt
- * Shows after 1 minute of activity; Ignore or Save to home screen.
+ *
+ * First show after 1 minute on site, then again after 15 min, 30 min, 45 min…
+ * (15 × n minutes after the nth show) until the user installs. Stops when
+ * running as an installed PWA / standalone.
  */
 (function () {
   const STORAGE_KEY = 'littlebowl_a2hs_pref';
-  const ACTIVITY_MS = 60 * 1000;
+  const FIRST_DELAY_MS = 60 * 1000;
+  const REPEAT_STEP_MS = 15 * 60 * 1000;
   const APP_NAME = 'LittleBowl';
 
   let deferredPrompt = null;
-  let shown = false;
   let activityStarted = Date.now();
   let timerId = null;
-
-  function prefersReducedMotion() {
-    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
 
   function isStandalone() {
     return (
@@ -26,40 +25,41 @@
 
   function getPref() {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || {};
     } catch (e) {
-      return null;
+      return {};
     }
   }
 
   function setPref(value) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...getPref(),
         ...value,
         at: Date.now(),
       }));
     } catch (e) { /* ignore */ }
   }
 
+  function timesShown() {
+    return Math.max(0, Number(getPref().timesShown) || 0);
+  }
+
+  /** Delay until the next offer, given how many times we've already shown. */
+  function delayAfterShows(shownCount) {
+    if (shownCount <= 0) return FIRST_DELAY_MS;
+    return shownCount * REPEAT_STEP_MS; // 15m, 30m, 45m, …
+  }
+
   function shouldOffer() {
     if (isStandalone()) return false;
-    const pref = getPref();
-    if (!pref) return true;
-    if (pref.action === 'installed') return false;
-    if (pref.action === 'ignored') {
-      // Soft ask again after 7 days
-      return Date.now() - (pref.at || 0) > 7 * 24 * 60 * 60 * 1000;
-    }
+    if (getPref().action === 'installed') return false;
     return true;
   }
 
   function isIos() {
     return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  }
-
-  function isSafari() {
-    return /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios|chrome|android/i.test(navigator.userAgent);
   }
 
   function ensureStyles() {
@@ -138,6 +138,18 @@
     if (el) el.remove();
   }
 
+  function dismissAndReschedule() {
+    hidePrompt();
+    const shown = timesShown();
+    const delay = delayAfterShows(shown);
+    setPref({
+      action: 'dismissed',
+      timesShown: shown,
+      nextAt: Date.now() + delay,
+    });
+    schedulePrompt();
+  }
+
   async function installOrGuide() {
     const primary = document.getElementById('lb-a2hs-install');
     if (primary) {
@@ -145,18 +157,17 @@
       primary.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening…';
     }
 
-    // Chromium / Android / desktop install API
     if (deferredPrompt) {
       try {
         deferredPrompt.prompt();
         const choice = await deferredPrompt.userChoice;
         deferredPrompt = null;
         if (choice.outcome === 'accepted') {
-          setPref({ action: 'installed' });
+          setPref({ action: 'installed', nextAt: null });
           hidePrompt();
+          clearTimeout(timerId);
           return;
         }
-        // User dismissed native sheet — keep our card so they can Ignore
         if (primary) {
           primary.disabled = false;
           primary.innerHTML = '<i class="fas fa-mobile-alt"></i> Save to home screen';
@@ -167,7 +178,6 @@
       }
     }
 
-    // iOS Safari (no beforeinstallprompt): show Share → Add to Home Screen steps
     if (isIos()) {
       const tip = document.getElementById('lb-a2hs-ios-tip');
       if (tip) tip.classList.add('visible');
@@ -178,7 +188,6 @@
       return;
     }
 
-    // Fallback: open instructions
     const tip = document.getElementById('lb-a2hs-ios-tip');
     if (tip) {
       tip.innerHTML = 'Use your browser menu → <strong>Install app</strong> or <strong>Add to Home screen</strong>. The app will appear as <strong>LittleBowl</strong>.';
@@ -191,8 +200,16 @@
   }
 
   function showPrompt() {
-    if (shown || !shouldOffer()) return;
-    shown = true;
+    if (!shouldOffer()) return;
+    if (document.getElementById('lb-a2hs-prompt')) return;
+
+    const nextCount = timesShown() + 1;
+    setPref({
+      action: 'prompted',
+      timesShown: nextCount,
+      nextAt: null,
+    });
+
     ensureStyles();
 
     const iosTip = isIos()
@@ -238,60 +255,70 @@
     }
 
     document.getElementById('lb-a2hs-ignore')?.addEventListener('click', () => {
-      setPref({ action: 'ignored' });
-      hidePrompt();
+      dismissAndReschedule();
     });
     document.getElementById('lb-a2hs-install')?.addEventListener('click', () => {
       installOrGuide();
     });
     wrap.addEventListener('click', (e) => {
       if (e.target === wrap) {
-        // Backdrop tap = ignore for this visit only (not persisted)
-        hidePrompt();
+        dismissAndReschedule();
       }
     });
   }
 
-  function markActivity() {
-    // Keep activity clock ticking while user interacts
-    // (timer already scheduled from first load)
+  function runWhenVisible(fn) {
+    if (document.visibilityState === 'visible') {
+      fn();
+      return;
+    }
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        document.removeEventListener('visibilitychange', onVis);
+        setTimeout(fn, 1500);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
   }
 
   function schedulePrompt() {
-    if (!shouldOffer()) return;
+    if (!shouldOffer()) {
+      clearTimeout(timerId);
+      return;
+    }
     clearTimeout(timerId);
-    const elapsed = Date.now() - activityStarted;
-    const wait = Math.max(0, ACTIVITY_MS - elapsed);
+
+    const pref = getPref();
+    let wait;
+    if (pref.nextAt && Number(pref.nextAt) > Date.now()) {
+      wait = Number(pref.nextAt) - Date.now();
+    } else if (timesShown() > 0 && pref.nextAt && Number(pref.nextAt) <= Date.now()) {
+      // Due from a previous visit — show shortly
+      wait = 1500;
+    } else if (timesShown() > 0) {
+      // Shown before but no nextAt (legacy) — use step from show count
+      wait = delayAfterShows(timesShown());
+      setPref({ nextAt: Date.now() + wait, action: pref.action || 'dismissed' });
+    } else {
+      // First offer: 1 minute from this page activity start
+      wait = Math.max(0, FIRST_DELAY_MS - (Date.now() - activityStarted));
+    }
+
     timerId = setTimeout(() => {
-      if (document.visibilityState === 'hidden') {
-        // Wait until they come back, then show shortly
-        const onVis = () => {
-          if (document.visibilityState === 'visible') {
-            document.removeEventListener('visibilitychange', onVis);
-            setTimeout(showPrompt, 1500);
-          }
-        };
-        document.addEventListener('visibilitychange', onVis);
-        return;
-      }
-      showPrompt();
+      runWhenVisible(showPrompt);
     }, wait);
   }
 
-  // Capture install prompt when browser fires it
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
   });
 
   window.addEventListener('appinstalled', () => {
-    setPref({ action: 'installed' });
+    setPref({ action: 'installed', nextAt: null });
     hidePrompt();
     deferredPrompt = null;
-  });
-
-  ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach((evt) => {
-    window.addEventListener(evt, markActivity, { passive: true, once: false });
+    clearTimeout(timerId);
   });
 
   if (document.readyState === 'loading') {
