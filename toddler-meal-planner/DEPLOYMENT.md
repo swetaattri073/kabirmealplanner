@@ -1,4 +1,7 @@
-# Deployment Guide - Toddler Meal Planner
+# Deployment Guide - LittleBowl (Flask)
+
+> **Production app lives in this folder.** Deploy from `toddler-meal-planner/`.
+> The React app at the repo root is optional and is not required for production.
 
 ## Quick Comparison
 
@@ -172,25 +175,31 @@ Now every push to `main` will auto-deploy!
 
 ---
 
-## Option 4: Docker on Any VPS
+## Option 4: Docker on Any VPS (recommended)
 
-Works on DigitalOcean, Linode, Vultr, or any Linux server.
+Works on DigitalOcean, Linode, Vultr, Lightsail, or any Linux server.
 
 ```bash
-# Clone repository
-git clone https://github.com/swetaattri073/kabirmealplanner.git
-cd kabirmealplanner/toddler-meal-planner
+cd ~/kabirmealplanner && git pull origin main
+cd toddler-meal-planner
 
-# Create environment file
-cp .env.example .env
-# Edit .env with your settings
-
-# Deploy with Docker Compose
-docker-compose up -d --build
-
-# View logs
-docker-compose logs -f
+sudo docker build -t meal-planner .
+sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
+sudo docker run -d --name meal-planner --restart always \
+  -p 80:5000 \
+  -v ~/meal-data:/app/instance \
+  meal-planner
 ```
+
+Or with Compose:
+
+```bash
+cd ~/kabirmealplanner/toddler-meal-planner
+cp .env.example .env   # optional
+docker compose up -d --build
+```
+
+Open `http://YOUR_PUBLIC_IP`. Data persists in `~/meal-data`.
 
 ---
 
@@ -209,14 +218,16 @@ docker-compose logs -f
 ### Render/Railway:
 Push to GitHub → Auto-deploys
 
-### AWS Lightsail/EC2:
+### AWS Lightsail/EC2 / any Docker host:
 ```bash
 cd ~/kabirmealplanner
 git pull origin main
 cd toddler-meal-planner
-sudo docker-compose up -d --build
+sudo docker build -t meal-planner .
+sudo docker stop meal-planner && sudo docker rm meal-planner
+sudo docker run -d --name meal-planner --restart always \
+  -p 80:5000 -v ~/meal-data:/app/instance meal-planner
 ```
-
 ### AWS App Runner:
 Push to GitHub → GitHub Actions auto-deploys
 
