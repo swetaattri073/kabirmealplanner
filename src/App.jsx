@@ -1,220 +1,299 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  DAYS,
+  DEFAULT_MEAL_SLOTS,
+  FOOD_CATEGORIES,
+  ADVENTUROUSNESS_PRESETS,
+  createFood,
+  generateWeekPlan,
+  logResponse,
+  addParentNote,
+  getTip,
+} from "./foodEngine";
+import { createExampleProfile, createBlankProfile, createInfantStarterProfile, recipes } from "./defaultProfile";
+import { fetchNutritionForFood, refreshAllNutrition, checkNutritionProxyHealth } from "./nutritionApi";
+import { checkProfileSafety } from "./foodSafety";
+import { checkChatHealth, sendChatTurn } from "./chatApi";
+import { buildSystemPrompt, findMatchingFood, LOG_FOOD_FEEDBACK_TOOL } from "./chatAssistant";
 
-const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const mealSlots = ["Breakfast", "Mid-Morning", "Lunch", "Evening Snack", "Dinner"];
+// JS Date.getDay() is 0=Sunday..6=Saturday; DAYS is Monday-first.
+function todayName() {
+  const jsDay = new Date().getDay();
+  return DAYS[(jsDay + 6) % 7];
+}
 
-const basePlan = {
-  Monday: {
-    Breakfast: { meal: "Apple pancake", add: "Add nut powder + chia/flax powder + little banana mash." },
-    "Mid-Morning": { meal: "Watermelon", add: "Good summer hydration. Add papaya cubes if accepted." },
-    Lunch: { meal: "Paneer paratha + dahi", add: "Add spinach in dough and sesame powder in dahi." },
-    "Evening Snack": { meal: "French toast", add: "Cook in ghee. Add mashed banana or cinnamon if accepted." },
-    Dinner: { meal: "Cold khichdi fingers", add: "Use moong dal + tiny grated carrot hidden." },
-  },
-  Tuesday: {
-    Breakfast: { meal: "Idli + ghee", add: "Add grated carrot in batter only if color change is tolerated." },
-    "Mid-Morning": { meal: "Papaya", add: "Serve chilled in small cubes." },
-    Lunch: { meal: "White rice + ghee + curd", add: "Keep rice white. Add only jeera/ghee/curd." },
-    "Evening Snack": { meal: "Avocado toast", add: "Add a very thin cheese or paneer spread if accepted." },
-    Dinner: { meal: "Pasta with hidden paneer sauce", add: "Blend paneer + milk + pumpkin/carrot + butter." },
-  },
-  Wednesday: {
-    Breakfast: { meal: "Besan paneer cheela", add: "Add spinach puree very lightly so color change is mild." },
-    "Mid-Morning": { meal: "Mango", add: "Pair with curd if he accepts mango yogurt." },
-    Lunch: { meal: "Aloo sandwich", add: "Add cheese. Keep texture simple and predictable." },
-    "Evening Snack": { meal: "Curd + crushed banana", add: "Add roasted nut powder or dates powder." },
-    Dinner: { meal: "Ghee roti + dahi", add: "Keep cucumber/onion on side as no-pressure exposure." },
-  },
-  Thursday: {
-    Breakfast: { meal: "Ragi banana pancake", add: "Add nut powder + dates powder for iron and energy." },
-    "Mid-Morning": { meal: "Apple slices", add: "Offer with thin curd dip if accepted." },
-    Lunch: { meal: "Paneer paratha + jeera curd", add: "Add grated lauki/carrot inside paratha only in tiny amounts." },
-    "Evening Snack": { meal: "Mango yogurt popsicle", add: "Use full-fat curd + mango + tiny nut powder." },
-    Dinner: { meal: "Macroni with hidden veggie sauce", add: "Paneer + pumpkin/carrot puree + butter/ghee." },
-  },
-  Friday: {
-    Breakfast: { meal: "Idli with curd", add: "Add ghee on idli; keep curd plain." },
-    "Mid-Morning": { meal: "Papaya + watermelon", add: "Hydration combo for summer." },
-    Lunch: { meal: "White rice + ghee", add: "Keep dal separately nearby. Do not mix with rice." },
-    "Evening Snack": { meal: "Cheese toast fingers", add: "Use whole wheat bread if accepted." },
-    Dinner: { meal: "Khichdi finger pieces", add: "Moong dal + tiny spinach puree hidden." },
-  },
-  Saturday: {
-    Breakfast: { meal: "French toast", add: "Egg + milk + ghee. Serve fruit on side." },
-    "Mid-Morning": { meal: "Mango", add: "Serve chilled." },
-    Lunch: { meal: "Besan paneer cheela + dahi", add: "Add grated carrot only in tiny amounts." },
-    "Evening Snack": { meal: "Boiled potato with butter/ghee", add: "Sprinkle sesame powder if accepted." },
-    Dinner: { meal: "Pasta", add: "Hidden paneer + carrot/pumpkin sauce." },
-  },
-  Sunday: {
-    Breakfast: { meal: "Suji pancake / dosa", add: "Add curd in batter + nut powder if taste allows." },
-    "Mid-Morning": { meal: "Mixed fruits", add: "Use accepted fruits: mango, apple, papaya, watermelon." },
-    Lunch: { meal: "Paratha + dahi", add: "Cucumber/onion on side for exposure." },
-    "Evening Snack": { meal: "Banana peanut butter mini sandwich", add: "Use thin peanut butter layer. Avoid chunks." },
-    Dinner: { meal: "White rice + curd + ghee", add: "Simple safe meal day." },
-  },
-};
+const STORAGE_KEY = "toddlerMealPlanner.profiles.v2";
+const ACTIVE_KEY = "toddlerMealPlanner.activeProfileId.v2";
 
-const exposureFoods = {
-  Monday: {
-    food: "1 tiny carrot stick or grated carrot",
-    pairWith: "Paneer paratha / dahi",
-    goal: "Only touch, smell, lick, or keep on plate. Eating is optional.",
-  },
-  Wednesday: {
-    food: "1 boiled pea or tiny mashed pea dot",
-    pairWith: "Aloo sandwich",
-    goal: "Keep it separate, not mixed. Let Kabir decide whether to touch it.",
-  },
-  Friday: {
-    food: "1 tiny dal drop in a separate spoon/bowl",
-    pairWith: "White rice + ghee",
-    goal: "Do not mix with rice. Just keep nearby without pressure.",
-  },
-  Sunday: {
-    food: "1 soft lauki/pumpkin cube",
-    pairWith: "Paratha + dahi",
-    goal: "No pressure. Parent can eat it casually in front of him.",
-  },
-};
+function loadProfiles() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    if (Array.isArray(saved) && saved.length) return saved;
+  } catch {
+    /* fall through to seed */
+  }
+  return [createExampleProfile("Kabir")];
+}
 
-const recipes = [
-  {
-    name: "Paneer Pasta",
-    why: "He already accepts pasta, so this is the easiest nutrition carrier.",
-    cheese: "Use Amul/Britannia cheese cube or no cheese. Paneer is the main protein here.",
-    steps: "Blend paneer + milk + tiny boiled pumpkin/carrot + butter. Mix with pasta. Keep sauce light in color.",
-  },
-  {
-    name: "Cheese Corn Paratha",
-    why: "Similar to paneer paratha, mild and familiar.",
-    cheese: "Use cheese slice or grated mozzarella. Avoid too much processed cheese daily.",
-    steps: "Mash boiled corn + potato + cheese. Stuff lightly in paratha. Serve with dahi.",
-  },
-  {
-    name: "Curd Rice Balls",
-    why: "Uses his safe foods: white rice, curd, ghee, and finger-food format.",
-    cheese: "No cheese needed.",
-    steps: "Mix cold rice + curd + ghee. Make small balls. Keep them white; avoid adding colored dal/sabji.",
-  },
-  {
-    name: "Mini Pizza Toast",
-    why: "Looks fun and can hide a little veggie sauce.",
-    cheese: "Use mozzarella or grated cheese cube. Keep layer thin.",
-    steps: "Bread + very light hidden pumpkin/carrot sauce + cheese. Toast and cut into fingers.",
-  },
-  {
-    name: "Paneer Dosa",
-    why: "Close to idli/dosa family, which he already accepts.",
-    cheese: "Optional cheese spread. Paneer mash is enough.",
-    steps: "Make plain dosa. Add paneer mash + ghee. Fold and cut into strips.",
-  },
-  {
-    name: "Ragi Banana Pancake",
-    why: "Similar to pancake, but adds iron.",
-    cheese: "No cheese needed.",
-    steps: "Mix banana + ragi flour + milk/egg + nut powder. Cook small pancakes in ghee.",
-  },
-  {
-    name: "Cheese Toast Fingers",
-    why: "Good snack when he wants something dry and predictable.",
-    cheese: "Use cheese slice for easiest melting or grated cheese cube.",
-    steps: "Toast bread with thin cheese layer. Cut into long fingers. Offer cucumber on side.",
-  },
-  {
-    name: "Stuffed Idli",
-    why: "Uses accepted idli format with hidden protein.",
-    cheese: "Optional tiny grated cheese cube. Paneer stuffing works better nutritionally.",
-    steps: "Add idli batter, then tiny paneer mash, then batter again. Steam as usual.",
-  },
+function loadActiveId(profiles) {
+  const saved = localStorage.getItem(ACTIVE_KEY);
+  if (saved && profiles.some((p) => p.id === saved)) return saved;
+  return profiles[0].id;
+}
+
+const RESPONSE_BUTTONS = [
+  { key: "accepted", label: "😊 Ate it" },
+  { key: "partial", label: "🙂 Tried a little" },
+  { key: "refused", label: "😐 Refused" },
 ];
-
-const safeFoods = [
-  "Pasta", "Macroni", "Paneer paratha", "Apple pancake", "Avocado toast", "Ghee roti",
-  "White rice", "Cold khichdi", "Watermelon", "Papaya", "Apple", "Mango", "Besan cheela",
-  "Curd", "French toast", "Idli", "Cucumber", "Onion salad", "Aloo sandwich sometimes"
-];
-
-function clone(obj) {
-  return JSON.parse(JSON.stringify(obj));
-}
-
-function adjustPlan(plan, changes) {
-  const adjusted = clone(plan);
-
-  changes.forEach((change) => {
-    if (!adjusted[change.day]) return;
-    adjusted[change.day][change.slot] = {
-      meal: change.meal,
-      add: change.note || "Saved by you. Keep it safe and add nutrition gently.",
-      changed: true,
-    };
-
-    const text = `${change.meal} ${change.note}`.toLowerCase();
-    const startDay = days.indexOf(change.day);
-    const startSlot = mealSlots.indexOf(change.slot);
-
-    for (let d = startDay; d < days.length; d++) {
-      for (let s = 0; s < mealSlots.length; s++) {
-        if (d === startDay && s <= startSlot) continue;
-        const item = adjusted[days[d]][mealSlots[s]];
-        if (!item || item.changed) continue;
-
-        if (text.includes("rice") && item.meal.toLowerCase().includes("rice")) {
-          item.add = "Keep rice white. Use only ghee/jeera/curd. Keep dal/sabji separately nearby.";
-        }
-        if ((text.includes("pasta") || text.includes("macroni")) && item.meal.toLowerCase().includes("pasta")) {
-          item.add = "Use hidden paneer + light pumpkin/carrot sauce for protein and vitamins.";
-        }
-      }
-    }
-  });
-
-  return adjusted;
-}
-
-function getTip(changes) {
-  if (!changes.length) return "Start with Kabir’s safe foods. Add nutrition in tiny amounts without changing color/texture too much.";
-  const last = changes[changes.length - 1];
-  const text = `${last.meal} ${last.note}`.toLowerCase();
-  if (text.includes("rice")) return "Rice is sensitive for Kabir. Keep it white and put dal/sabji separately as exposure.";
-  if (text.includes("pasta")) return "Pasta works well for Kabir. Use paneer + light hidden veggie sauce.";
-  if (text.includes("reject") || text.includes("refuse") || text.includes("did not eat")) return "After rejection, avoid pressure. Offer one safe food and one tiny exposure food.";
-  return "Good change. Balance the next meal with protein + fruit/curd + one safe carb.";
-}
 
 export default function App() {
+  const [profiles, setProfiles] = useState(loadProfiles);
+  const [activeProfileId, setActiveProfileId] = useState(() => loadActiveId(loadProfiles()));
   const [tab, setTab] = useState("day");
   const [selectedDay, setSelectedDay] = useState("Monday");
-  const [changes, setChanges] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("kabirMealChanges") || "[]");
-    } catch {
-      return [];
-    }
+  const [addingProfile, setAddingProfile] = useState(false);
+  const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileTemplate, setNewProfileTemplate] = useState("blank");
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [foodForm, setFoodForm] = useState({
+    name: "",
+    category: "carb",
+    status: "safe",
+    suitableSlots: [],
+    addNote: "",
+    exposureGoal: "",
+    ingredientsText: "",
   });
-  const [day, setDay] = useState("Monday");
-  const [slot, setSlot] = useState("Breakfast");
-  const [meal, setMeal] = useState("");
-  const [note, setNote] = useState("");
+  const [nutritionStatus, setNutritionStatus] = useState(null); // { ok, usingDemoKey, error }
+  const [lookupInFlight, setLookupInFlight] = useState({}); // foodId -> true while fetching
+  const [bulkRefresh, setBulkRefresh] = useState(null); // { done, total } while a "refresh all" pass runs
+  const [chatStatus, setChatStatus] = useState(null); // { ok, error }
+  const [chatMessages, setChatMessages] = useState([]); // [{ role: "user"|"assistant", content }]
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState("");
 
   useEffect(() => {
-    localStorage.setItem("kabirMealChanges", JSON.stringify(changes));
-  }, [changes]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
+  }, [profiles]);
 
-  const plan = useMemo(() => adjustPlan(basePlan, changes), [changes]);
+  useEffect(() => {
+    localStorage.setItem(ACTIVE_KEY, activeProfileId);
+  }, [activeProfileId]);
 
-  function saveChange() {
-    if (!meal.trim()) return;
-    setChanges([...changes, { id: Date.now(), day, slot, meal: meal.trim(), note: note.trim() }]);
-    setSelectedDay(day);
-    setTab("day");
-    setMeal("");
-    setNote("");
+  useEffect(() => {
+    checkNutritionProxyHealth().then(setNutritionStatus);
+    checkChatHealth().then(setChatStatus);
+  }, []);
+
+  const activeProfile = profiles.find((p) => p.id === activeProfileId) || profiles[0];
+  const mealSlots = activeProfile.mealSlots && activeProfile.mealSlots.length ? activeProfile.mealSlots : DEFAULT_MEAL_SLOTS;
+  const plan = useMemo(() => generateWeekPlan(activeProfile), [activeProfile]);
+  const tip = useMemo(() => getTip(activeProfile), [activeProfile]);
+  const safetyFlags = useMemo(() => checkProfileSafety(activeProfile.foods), [activeProfile]);
+  const safetyByFoodId = useMemo(() => {
+    const map = {};
+    safetyFlags.forEach(({ food, warnings }) => { map[food.id] = warnings; });
+    return map;
+  }, [safetyFlags]);
+
+  function updateProfile(next) {
+    setProfiles((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   }
 
-  function deleteChange(id) {
-    setChanges(changes.filter((c) => c.id !== id));
+  function handleLog(day, slot, foodId, response) {
+    if (!foodId) return;
+    updateProfile(logResponse(activeProfile, { day, slot, foodId, response }));
+  }
+
+  function handleAddProfile() {
+    const name = newProfileName.trim();
+    if (!name) return;
+    const profile =
+      newProfileTemplate === "infant6mo" ? createInfantStarterProfile(name)
+      : newProfileTemplate === "toddlerExample" ? createExampleProfile(name)
+      : createBlankProfile(name);
+    setProfiles((prev) => [...prev, profile]);
+    setActiveProfileId(profile.id);
+    setNewProfileName("");
+    setNewProfileTemplate("blank");
+    setAddingProfile(false);
+  }
+
+  function handleRenameProfile() {
+    const name = renameValue.trim();
+    if (!name) return;
+    updateProfile({ ...activeProfile, name });
+    setRenaming(false);
+  }
+
+  function handleDeleteProfile() {
+    if (profiles.length <= 1) return;
+    if (!window.confirm(`Delete ${activeProfile.name}'s profile? This cannot be undone.`)) return;
+    const remaining = profiles.filter((p) => p.id !== activeProfile.id);
+    setProfiles(remaining);
+    setActiveProfileId(remaining[0].id);
+  }
+
+  function toggleSlotInForm(slot) {
+    setFoodForm((f) => ({
+      ...f,
+      suitableSlots: f.suitableSlots.includes(slot) ? f.suitableSlots.filter((s) => s !== slot) : [...f.suitableSlots, slot],
+    }));
+  }
+
+  // Parses "rice, white, cooked:100; ghee:5" into [{name, grams}, ...] so a
+  // parent can add real ingredients for a new food without a lot of UI.
+  function parseIngredientsText(text) {
+    return text
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const idx = part.lastIndexOf(":");
+        if (idx === -1) return { name: part.trim(), grams: 50 };
+        const name = part.slice(0, idx).trim();
+        const grams = Number(part.slice(idx + 1).trim()) || 50;
+        return { name, grams };
+      });
+  }
+
+  function handleAddFood() {
+    if (!foodForm.name.trim() || !foodForm.suitableSlots.length) return;
+    const food = createFood({
+      name: foodForm.name.trim(),
+      category: foodForm.category,
+      suitableSlots: foodForm.suitableSlots,
+      status: foodForm.status,
+      addNote: foodForm.addNote.trim(),
+      exposureGoal: foodForm.exposureGoal.trim(),
+      ingredients: parseIngredientsText(foodForm.ingredientsText),
+    });
+    updateProfile({ ...activeProfile, foods: [...activeProfile.foods, food] });
+    setFoodForm({ name: "", category: "carb", status: "safe", suitableSlots: [], addNote: "", exposureGoal: "", ingredientsText: "" });
+  }
+
+  function retireFood(foodId) {
+    updateProfile({
+      ...activeProfile,
+      foods: activeProfile.foods.map((f) => (f.id === foodId ? { ...f, status: "retired", retiredFrom: f.status } : f)),
+    });
+  }
+
+  function reinstateFood(foodId) {
+    updateProfile({
+      ...activeProfile,
+      foods: activeProfile.foods.map((f) => (f.id === foodId ? { ...f, status: f.retiredFrom || "safe" } : f)),
+    });
+  }
+
+  async function lookupNutrition(food) {
+    setLookupInFlight((prev) => ({ ...prev, [food.id]: true }));
+    try {
+      const nutrition = await fetchNutritionForFood(food);
+      updateProfile({
+        ...activeProfile,
+        foods: activeProfile.foods.map((f) => (f.id === food.id ? { ...f, nutrition } : f)),
+      });
+    } catch (err) {
+      updateProfile({
+        ...activeProfile,
+        foods: activeProfile.foods.map((f) => (f.id === food.id ? { ...f, nutrition: { perServing: {}, matchedIngredients: [], unmatched: [`Lookup failed: ${err.message}`], fetchedAt: new Date().toISOString() } } : f)),
+      });
+    } finally {
+      setLookupInFlight((prev) => ({ ...prev, [food.id]: false }));
+    }
+  }
+
+  async function refreshAllFoodsNutrition() {
+    const foods = activeProfile.foods;
+    if (!foods.length) return;
+    setBulkRefresh({ done: 0, total: foods.length });
+    const results = await refreshAllNutrition(foods, {
+      onProgress: (done, total) => setBulkRefresh({ done, total }),
+    });
+    updateProfile({
+      ...activeProfile,
+      foods: activeProfile.foods.map((f) => (results[f.id] ? { ...f, nutrition: results[f.id] } : f)),
+    });
+    setBulkRefresh(null);
+  }
+
+  async function handleSendChat() {
+    const text = chatInput.trim();
+    if (!text || chatBusy) return;
+    setChatError("");
+    setChatInput("");
+    const userMessage = { role: "user", content: text };
+    const historyForDisplay = [...chatMessages, userMessage];
+    setChatMessages(historyForDisplay);
+    setChatBusy(true);
+
+    try {
+      const systemMessage = { role: "system", content: buildSystemPrompt({ profile: activeProfile, plan, today: todayName() }) };
+      let apiMessages = [systemMessage, ...historyForDisplay];
+
+      let assistantMsg = await sendChatTurn(apiMessages, { tools: [LOG_FOOD_FEEDBACK_TOOL] });
+
+      if (assistantMsg.tool_calls && assistantMsg.tool_calls.length) {
+        const call = assistantMsg.tool_calls[0];
+        let args = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}");
+        } catch {
+          /* leave args empty if the model sent malformed JSON */
+        }
+
+        const match = findMatchingFood(activeProfile.foods, args.foodName);
+        let updatedProfile;
+        if (args.response === "note_only" || !match) {
+          const notePrefix = !match && args.foodName ? `(no exact food match for "${args.foodName}") ` : "";
+          updatedProfile = addParentNote(activeProfile, { foodId: match ? match.id : null, note: `${notePrefix}${args.note || ""}`.trim() });
+        } else {
+          updatedProfile = logResponse(activeProfile, {
+            day: todayName(),
+            slot: match.suitableSlots[0] || "Chat",
+            foodId: match.id,
+            response: args.response,
+            note: args.note || "",
+          });
+        }
+        updateProfile(updatedProfile);
+
+        const toolResultMessage = {
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify({ applied: true, matchedFood: match ? match.name : null }),
+        };
+        apiMessages = [...apiMessages, assistantMsg, toolResultMessage];
+        assistantMsg = await sendChatTurn(apiMessages, { tools: [LOG_FOOD_FEEDBACK_TOOL] });
+      }
+
+      setChatMessages([...historyForDisplay, { role: "assistant", content: assistantMsg.content || "Got it." }]);
+    } catch (err) {
+      setChatError(err.message);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  function clearChat() {
+    setChatMessages([]);
+    setChatError("");
+  }
+
+  function updateSettings(partial) {
+    updateProfile({ ...activeProfile, settings: { ...activeProfile.settings, ...partial } });
+  }
+
+  function applyAdventurousness(level) {
+    updateSettings({ adventurousness: level, ...ADVENTUROUSNESS_PRESETS[level] });
+  }
+
+  function clearHistory() {
+    updateProfile({ ...activeProfile, log: [] });
   }
 
   return (
@@ -222,61 +301,102 @@ export default function App() {
       <div style={styles.app}>
         <header style={styles.header}>
           <div>
-            <h1 style={styles.title}>Kabir’s Meal Planner</h1>
-            <p style={styles.subtitle}>Weekly toddler meal plan, nutrition tips, recipes, and gentle new-food exposure.</p>
+            <h1 style={styles.title}>{activeProfile.name}’s Meal Planner</h1>
+            <p style={styles.subtitle}>Weekly toddler meal plan, nutrition tips, recipes, and gentle new-food exposure — built to adapt to any toddler.</p>
           </div>
           <div style={styles.icon}>👶</div>
         </header>
 
+        <section style={styles.card}>
+          <div style={styles.spaceBetween}>
+            <select style={styles.input} value={activeProfileId} onChange={(e) => setActiveProfileId(e.target.value)}>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <div style={styles.profileActions}>
+              <button style={styles.smallButton} onClick={() => { setRenaming(true); setRenameValue(activeProfile.name); }}>Rename</button>
+              <button style={styles.smallButton} onClick={() => setAddingProfile(true)}>+ Add toddler</button>
+              {profiles.length > 1 && <button style={styles.deleteButton} onClick={handleDeleteProfile}>Delete</button>}
+            </div>
+          </div>
+
+          {renaming && (
+            <div style={styles.row}>
+              <input style={styles.inputFull} value={renameValue} onChange={(e) => setRenameValue(e.target.value)} placeholder="Toddler's name" />
+              <button style={styles.primaryButton} onClick={handleRenameProfile}>Save name</button>
+            </div>
+          )}
+
+          {addingProfile && (
+            <div>
+              <input style={styles.inputFull} value={newProfileName} onChange={(e) => setNewProfileName(e.target.value)} placeholder="New toddler's name" />
+              <p style={styles.label}>Starting point</p>
+              <select style={styles.input} value={newProfileTemplate} onChange={(e) => setNewProfileTemplate(e.target.value)}>
+                <option value="blank">Blank - I'll add foods myself</option>
+                <option value="infant6mo">6 months+ starter (mashed foods & purees)</option>
+                <option value="toddlerExample">Toddler example (finger foods, exposure)</option>
+              </select>
+              <button style={styles.primaryButton} onClick={handleAddProfile}>Create profile</button>
+            </div>
+          )}
+        </section>
+
         <div style={styles.tipBox}>
           <strong>Smart tip:</strong>
-          <p style={styles.tipText}>{getTip(changes)}</p>
+          <p style={styles.tipText}>{tip}</p>
         </div>
 
-        <div style={styles.tabs}>
-          <button style={tab === "day" ? styles.activeTab : styles.tab} onClick={() => setTab("day")}>Day</button>
-          <button style={tab === "week" ? styles.activeTab : styles.tab} onClick={() => setTab("week")}>Week</button>
-          <button style={tab === "recipes" ? styles.activeTab : styles.tab} onClick={() => setTab("recipes")}>Recipes</button>
+        <div style={styles.tabsWrap}>
+          {["day", "week", "foods", "chat", "settings", "recipes"].map((t) => (
+            <button key={t} style={tab === t ? styles.activeTab : styles.tab} onClick={() => setTab(t)}>
+              {t[0].toUpperCase() + t.slice(1)}
+            </button>
+          ))}
         </div>
-
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>Update a meal</h2>
-          <div style={styles.row}>
-            <select style={styles.input} value={day} onChange={(e) => setDay(e.target.value)}>
-              {days.map((d) => <option key={d}>{d}</option>)}
-            </select>
-            <select style={styles.input} value={slot} onChange={(e) => setSlot(e.target.value)}>
-              {mealSlots.map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <input style={styles.inputFull} placeholder="Example: White rice + ghee" value={meal} onChange={(e) => setMeal(e.target.value)} />
-          <textarea style={styles.textarea} placeholder="Notes: ate well / rejected / added paneer / keep rice white" value={note} onChange={(e) => setNote(e.target.value)} />
-          <button style={styles.primaryButton} onClick={saveChange}>Save & adjust future plan</button>
-        </section>
 
         {tab === "day" && (
           <section>
             <select style={styles.daySelect} value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)}>
-              {days.map((d) => <option key={d}>{d}</option>)}
+              {DAYS.map((d) => <option key={d}>{d}</option>)}
             </select>
 
-            {exposureFoods[selectedDay] && (
-              <div style={styles.exposureCard}>
-                <p style={styles.label}>New food exposure today</p>
-                <h3 style={styles.cardTitle}>{exposureFoods[selectedDay].food}</h3>
-                <p><strong>Pair with:</strong> {exposureFoods[selectedDay].pairWith}</p>
-                <p style={styles.small}>{exposureFoods[selectedDay].goal}</p>
-              </div>
-            )}
-
-            {mealSlots.map((s) => {
-              const item = plan[selectedDay][s];
+            {mealSlots.map((slot) => {
+              const item = plan[selectedDay][slot];
+              const foodNutrition = activeProfile.foods.find((f) => f.id === item.foodId)?.nutrition?.perServing;
+              const warnings = item.foodId ? safetyByFoodId[item.foodId] : null;
               return (
-                <div key={s} style={styles.mealCard}>
-                  <p style={styles.label}>{s}</p>
+                <div key={slot} style={styles.mealCard}>
+                  <p style={styles.label}>{slot}</p>
                   <h3 style={styles.cardTitle}>{item.meal}</h3>
-                  <div style={styles.nutritionBox}><strong>Nutrition add-on:</strong> {item.add}</div>
-                  {item.changed && <span style={styles.badge}>Changed by you</span>}
+                  {item.isExposure && <span style={styles.exposureBadge}>New food exposure</span>}
+                  <div style={styles.nutritionBox}><strong>{item.isExposure ? "Exposure goal" : "Nutrition add-on"}:</strong> {item.add}</div>
+                  {item.exposureProgress && <p style={styles.small}>{item.exposureProgress}</p>}
+                  {warnings && warnings.map((w) => (
+                    <div key={w.id} style={w.severity === "avoid" ? styles.safetyAvoid : styles.safetyModify}>
+                      <strong>⚠ {w.label}:</strong> {w.reason} <em>{w.recommendation}</em>
+                      {w.alternative && <><br /><strong>Try instead:</strong> {w.alternative}</>}
+                    </div>
+                  ))}
+                  {foodNutrition && Object.keys(foodNutrition).length > 0 && (
+                    <p style={styles.small}>
+                      Real data (USDA): {foodNutrition.calories != null ? `${foodNutrition.calories} kcal` : "?"}
+                      {foodNutrition.protein_g != null ? ` · ${foodNutrition.protein_g}g protein` : ""}
+                      {foodNutrition.iron_mg != null ? ` · ${foodNutrition.iron_mg}mg iron` : ""} per serving
+                    </p>
+                  )}
+
+                  {item.foodId ? (
+                    <div style={styles.responseRow}>
+                      {RESPONSE_BUTTONS.map((b) => (
+                        <button key={b.key} style={styles.responseButton} onClick={() => handleLog(selectedDay, slot, item.foodId, b.key)}>
+                          {b.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={styles.small}>Add a food for this slot in the Foods tab to start planning it.</p>
+                  )}
                 </div>
               );
             })}
@@ -285,24 +405,262 @@ export default function App() {
 
         {tab === "week" && (
           <section>
-            {days.map((d) => (
+            {DAYS.map((d) => (
               <div key={d} style={styles.card}>
                 <h2 style={styles.sectionTitle}>{d}</h2>
-                {exposureFoods[d] && (
-                  <div style={styles.exposureMini}>
-                    <strong>New food:</strong> {exposureFoods[d].food}<br />
-                    <span>Pair with: {exposureFoods[d].pairWith}</span>
-                  </div>
-                )}
-                {mealSlots.map((s) => (
-                  <div key={s} style={styles.weekMeal}>
-                    <strong>{s}</strong>
-                    <p>{plan[d][s].meal}</p>
-                    <small>+ {plan[d][s].add}</small>
-                  </div>
-                ))}
+                {mealSlots.map((slot) => {
+                  const item = plan[d][slot];
+                  const warnings = item.foodId ? safetyByFoodId[item.foodId] : null;
+                  return (
+                    <div key={slot} style={styles.weekMeal}>
+                      <strong>{slot}</strong> {item.isExposure && <span style={styles.exposureBadge}>New food</span>}
+                      {warnings && warnings.length > 0 && <span style={styles.safetyBadgeMini}>⚠ {warnings.length} note{warnings.length > 1 ? "s" : ""}</span>}
+                      <p>{item.meal}</p>
+                      <small>+ {item.add}</small>
+                    </div>
+                  );
+                })}
               </div>
             ))}
+          </section>
+        )}
+
+        {tab === "foods" && (
+          <section>
+            <section style={styles.card}>
+              <h2 style={styles.sectionTitle}>Add a food</h2>
+              <input style={styles.inputFull} placeholder="Food name" value={foodForm.name} onChange={(e) => setFoodForm({ ...foodForm, name: e.target.value })} />
+              <div style={styles.row}>
+                <select style={styles.input} value={foodForm.category} onChange={(e) => setFoodForm({ ...foodForm, category: e.target.value })}>
+                  {FOOD_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select style={styles.input} value={foodForm.status} onChange={(e) => setFoodForm({ ...foodForm, status: e.target.value })}>
+                  <option value="safe">Safe food</option>
+                  <option value="exposure">New / exposure food</option>
+                </select>
+              </div>
+              <p style={styles.label}>Which meals fit this food?</p>
+              <div style={styles.chips}>
+                {mealSlots.map((slot) => (
+                  <button
+                    key={slot}
+                    style={foodForm.suitableSlots.includes(slot) ? styles.chipActive : styles.chip}
+                    onClick={() => toggleSlotInForm(slot)}
+                  >
+                    {slot}
+                  </button>
+                ))}
+              </div>
+              {foodForm.status === "safe" ? (
+                <textarea style={styles.textarea} placeholder="Nutrition add-on note (optional): e.g. add nut powder" value={foodForm.addNote} onChange={(e) => setFoodForm({ ...foodForm, addNote: e.target.value })} />
+              ) : (
+                <textarea style={styles.textarea} placeholder="Exposure goal (optional): e.g. touch, smell, or lick only - eating is optional" value={foodForm.exposureGoal} onChange={(e) => setFoodForm({ ...foodForm, exposureGoal: e.target.value })} />
+              )}
+              <textarea
+                style={styles.textarea}
+                placeholder="Ingredients for real nutrition data (optional): rice, white, cooked:100; ghee:5"
+                value={foodForm.ingredientsText}
+                onChange={(e) => setFoodForm({ ...foodForm, ingredientsText: e.target.value })}
+              />
+              <p style={styles.small}>Format: ingredient name : grams, separated by semicolons. Use plain USDA-style names (e.g. "banana, raw") for the best match.</p>
+              <button style={styles.primaryButton} onClick={handleAddFood}>Add food</button>
+            </section>
+
+            <section style={styles.card}>
+              <p style={styles.small}>
+                Foods are never deleted just for being refused - toddlers often need 10-15 tries before accepting something new.
+                Use “Retire” only for foods you want to fully stop offering (e.g. an allergy).
+              </p>
+              {nutritionStatus && !nutritionStatus.ok && (
+                <p style={styles.warningText}>
+                  Nutrition lookups aren't available right now ({nutritionStatus.error || "proxy unreachable"}). Run <code>npm run server</code> in a separate terminal (see README) and reload.
+                </p>
+              )}
+              {nutritionStatus && nutritionStatus.ok && nutritionStatus.usingDemoKey && (
+                <p style={styles.warningText}>
+                  Using USDA's shared DEMO_KEY (30 requests/hour, 50/day) - fine for trying things out, but get your own free key at fdc.nal.usda.gov/api-key-signup for real use.
+                </p>
+              )}
+              <div style={styles.spaceBetween}>
+                <span style={styles.small}>Nutrition data comes from USDA FoodData Central, resolved per ingredient.</span>
+                <button style={styles.smallButton} onClick={refreshAllFoodsNutrition} disabled={!!bulkRefresh}>
+                  {bulkRefresh ? `Refreshing ${bulkRefresh.done}/${bulkRefresh.total}...` : "Refresh nutrition for all foods"}
+                </button>
+              </div>
+            </section>
+
+            {safetyFlags.length > 0 && (
+              <section style={styles.card}>
+                <h2 style={styles.sectionTitle}>⚠ Safety notes ({safetyFlags.length} food{safetyFlags.length > 1 ? "s" : ""})</h2>
+                <p style={styles.small}>
+                  General infant/toddler feeding guidance (choking hazards, botulism risk, food safety) - not a medical assessment of your child. Check with your pediatrician for anything specific to them.
+                </p>
+                {safetyFlags.map(({ food, warnings }) => (
+                  <div key={food.id} style={styles.foodRow}>
+                    <div>
+                      <strong>{food.name}</strong>
+                      {warnings.map((w) => (
+                        <div key={w.id} style={w.severity === "avoid" ? styles.safetyAvoid : w.severity === "limit" ? styles.safetyLimit : styles.safetyModify}>
+                          <strong>{w.severity === "avoid" ? "Avoid: " : w.severity === "limit" ? "Limit: " : "Modify: "}{w.label}.</strong> {w.reason} <em>{w.recommendation}</em>
+                          {w.alternative && <><br /><strong>Try instead:</strong> {w.alternative}</>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {FOOD_CATEGORIES.map((cat) => {
+              const items = activeProfile.foods.filter((f) => f.category === cat);
+              if (!items.length) return null;
+              return (
+                <section key={cat} style={styles.card}>
+                  <h2 style={styles.sectionTitle}>{cat[0].toUpperCase() + cat.slice(1)}</h2>
+                  {items.map((f) => {
+                    const n = f.nutrition?.perServing;
+                    return (
+                      <div key={f.id} style={styles.foodRow}>
+                        <div>
+                          <strong>{f.name}</strong>{" "}
+                          <span style={f.status === "safe" ? styles.badge : f.status === "exposure" ? styles.exposureBadge : styles.retiredBadge}>
+                            {f.status}
+                          </span>
+                          {safetyByFoodId[f.id] && <span style={styles.safetyBadgeMini}>⚠ {safetyByFoodId[f.id].length} safety note{safetyByFoodId[f.id].length > 1 ? "s" : ""}</span>}
+                          <p style={styles.small}>
+                            Slots: {f.suitableSlots.join(", ")} · Offered {f.timesOffered}x · Accepted {f.timesAccepted}x · Refused {f.timesRejected}x
+                          </p>
+                          {n && Object.keys(n).length > 0 && (
+                            <p style={styles.small}>
+                              Per serving: {n.calories != null ? `${n.calories} kcal` : "?"} · {n.protein_g != null ? `${n.protein_g}g protein` : ""} · {n.iron_mg != null ? `${n.iron_mg}mg iron` : ""}
+                              {f.nutrition.unmatched?.length ? ` · no match for: ${f.nutrition.unmatched.join(", ")}` : ""}
+                            </p>
+                          )}
+                          {!f.ingredients?.length && <p style={styles.small}>No ingredients set - add some to enable a nutrition lookup.</p>}
+                        </div>
+                        <div style={styles.profileActions}>
+                          {!!f.ingredients?.length && (
+                            <button style={styles.smallButton} onClick={() => lookupNutrition(f)} disabled={!!lookupInFlight[f.id]}>
+                              {lookupInFlight[f.id] ? "Looking up..." : n ? "Refresh" : "Look up nutrition"}
+                            </button>
+                          )}
+                          {f.status === "retired" ? (
+                            <button style={styles.smallButton} onClick={() => reinstateFood(f.id)}>Reinstate</button>
+                          ) : (
+                            <button style={styles.smallButton} onClick={() => retireFood(f.id)}>Retire</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </section>
+              );
+            })}
+            {!activeProfile.foods.length && <p style={styles.small}>No foods yet - add a few above to start generating a plan for {activeProfile.name}.</p>}
+          </section>
+        )}
+
+        {tab === "chat" && (
+          <section style={styles.card}>
+            <div style={styles.spaceBetween}>
+              <h2 style={styles.sectionTitle}>Ask about {activeProfile.name}'s food</h2>
+              {chatMessages.length > 0 && <button style={styles.smallButton} onClick={clearChat}>Clear chat</button>}
+            </div>
+            <p style={styles.small}>
+              Ask what's on today's plan, whether a food is a good idea for a toddler/infant, or just tell it things like "he doesn't eat carrots" or "she's been picky all week" - it'll note that for future planning.
+            </p>
+            {chatStatus && !chatStatus.ok && (
+              <p style={styles.warningText}>
+                Chat isn't available yet ({chatStatus.error || "OPENAI_API_KEY not set"}). Add an OpenAI API key to your <code>.env</code> file and restart <code>npm run server</code> (see README).
+              </p>
+            )}
+
+            <div style={styles.chatWindow}>
+              {!chatMessages.length && <p style={styles.small}>No messages yet - try "what's the plan for today?"</p>}
+              {chatMessages.map((m, i) => (
+                <div key={i} style={m.role === "user" ? styles.chatBubbleUser : styles.chatBubbleAssistant}>
+                  {m.content}
+                </div>
+              ))}
+              {chatBusy && <div style={styles.chatBubbleAssistant}>Thinking...</div>}
+            </div>
+            {chatError && <p style={styles.warningText}>{chatError}</p>}
+
+            <div style={styles.row}>
+              <input
+                style={styles.inputFull}
+                placeholder="e.g. What's today's plan?"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSendChat(); }}
+                disabled={!!(chatStatus && !chatStatus.ok)}
+              />
+            </div>
+            <button style={styles.primaryButton} onClick={handleSendChat} disabled={chatBusy || (chatStatus && !chatStatus.ok)}>
+              {chatBusy ? "Sending..." : "Send"}
+            </button>
+          </section>
+        )}
+
+        {tab === "settings" && (
+          <section style={styles.card}>
+            <h2 style={styles.sectionTitle}>Plan settings for {activeProfile.name}</h2>
+            <p style={styles.label}>Adventurousness</p>
+            <div style={styles.chips}>
+              {Object.keys(ADVENTUROUSNESS_PRESETS).map((level) => (
+                <button
+                  key={level}
+                  style={activeProfile.settings.adventurousness === level ? styles.chipActive : styles.chip}
+                  onClick={() => applyAdventurousness(level)}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+            <p style={styles.small}>Controls how many meal slots per week are used for new-food exposure, and the default variety pace.</p>
+
+            <div style={styles.row}>
+              <label style={styles.settingsField}>
+                Exposure slots / week
+                <input
+                  type="number"
+                  min="0"
+                  style={styles.input}
+                  value={activeProfile.settings.exposureTargetPerWeek}
+                  onChange={(e) => updateSettings({ exposureTargetPerWeek: Math.max(0, Number(e.target.value) || 0) })}
+                />
+              </label>
+              <label style={styles.settingsField}>
+                Repeat gap (days)
+                <input
+                  type="number"
+                  min="1"
+                  style={styles.input}
+                  value={activeProfile.settings.repeatGapDays}
+                  onChange={(e) => updateSettings({ repeatGapDays: Math.max(1, Number(e.target.value) || 1) })}
+                />
+              </label>
+            </div>
+
+            {activeProfile.log.length > 0 && (
+              <>
+                <div style={styles.spaceBetween}>
+                  <p style={styles.label}>Recent history</p>
+                  <button style={styles.smallButton} onClick={clearHistory}>Clear history</button>
+                </div>
+                {[...activeProfile.log].slice(-10).reverse().map((entry) => {
+                  const food = activeProfile.foods.find((f) => f.id === entry.foodId);
+                  return (
+                    <div key={entry.id} style={styles.changeRow}>
+                      <div>
+                        <strong>{entry.day} · {entry.slot}</strong>
+                        <p>{food ? food.name : "Unknown food"} — {entry.response}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </section>
         )}
 
@@ -319,31 +677,7 @@ export default function App() {
           </section>
         )}
 
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>Kabir’s safe foods</h2>
-          <div style={styles.chips}>{safeFoods.map((f) => <span key={f} style={styles.chip}>{f}</span>)}</div>
-        </section>
-
-        {changes.length > 0 && (
-          <section style={styles.card}>
-            <div style={styles.spaceBetween}>
-              <h2 style={styles.sectionTitle}>Saved changes</h2>
-              <button style={styles.smallButton} onClick={() => setChanges([])}>Reset</button>
-            </div>
-            {changes.map((c) => (
-              <div key={c.id} style={styles.changeRow}>
-                <div>
-                  <strong>{c.day} · {c.slot}</strong>
-                  <p>{c.meal}</p>
-                  {c.note && <small>{c.note}</small>}
-                </div>
-                <button style={styles.deleteButton} onClick={() => deleteChange(c.id)}>Delete</button>
-              </div>
-            ))}
-          </section>
-        )}
-
-        <footer style={styles.footer}>Goal: safe foods + hidden nutrition + no-pressure exposure. Eating new foods is optional at this age.</footer>
+        <footer style={styles.footer}>Goal: safe foods + hidden nutrition + no-pressure exposure, at whatever pace fits your toddler. Rejected foods stay in rotation — repetition, not removal, builds acceptance.</footer>
       </div>
     </div>
   );
@@ -359,36 +693,50 @@ const styles = {
   },
   app: { maxWidth: 480, margin: "0 auto", paddingBottom: 40 },
   header: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 14 },
-  title: { fontSize: 28, lineHeight: 1.1, margin: 0, fontWeight: 800 },
+  title: { fontSize: 26, lineHeight: 1.1, margin: 0, fontWeight: 800 },
   subtitle: { margin: "6px 0 0", color: "#64748b", fontSize: 14, lineHeight: 1.4 },
   icon: { background: "#fff", padding: 12, borderRadius: 22, fontSize: 28, boxShadow: "0 6px 18px rgba(0,0,0,0.06)" },
   tipBox: { background: "#fffbeb", borderRadius: 22, padding: 14, marginBottom: 12, boxShadow: "0 4px 14px rgba(0,0,0,0.04)" },
   tipText: { margin: "6px 0 0", fontSize: 14, color: "#475569" },
-  tabs: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 },
-  tab: { border: 0, background: "#fff", padding: "13px 8px", borderRadius: 18, fontWeight: 700, color: "#475569", boxShadow: "0 3px 10px rgba(0,0,0,0.04)" },
-  activeTab: { border: 0, background: "#111827", color: "#fff", padding: "13px 8px", borderRadius: 18, fontWeight: 700, boxShadow: "0 3px 10px rgba(0,0,0,0.08)" },
+  tabsWrap: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  tab: { border: 0, background: "#fff", padding: "10px 12px", borderRadius: 18, fontWeight: 700, color: "#475569", boxShadow: "0 3px 10px rgba(0,0,0,0.04)", fontSize: 13 },
+  activeTab: { border: 0, background: "#111827", color: "#fff", padding: "10px 12px", borderRadius: 18, fontWeight: 700, boxShadow: "0 3px 10px rgba(0,0,0,0.08)", fontSize: 13 },
   card: { background: "#fff", borderRadius: 24, padding: 14, marginBottom: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.06)" },
   sectionTitle: { margin: "0 0 10px", fontSize: 18 },
-  row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 },
+  row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 },
   input: { width: "100%", height: 44, borderRadius: 16, border: "1px solid #e5e7eb", padding: "0 10px", fontSize: 14, boxSizing: "border-box", background: "#fff" },
   inputFull: { width: "100%", height: 44, borderRadius: 16, border: "1px solid #e5e7eb", padding: "0 12px", fontSize: 14, marginTop: 8, boxSizing: "border-box" },
-  textarea: { width: "100%", minHeight: 80, borderRadius: 16, border: "1px solid #e5e7eb", padding: 12, fontSize: 14, marginTop: 8, boxSizing: "border-box", fontFamily: "Arial" },
+  textarea: { width: "100%", minHeight: 70, borderRadius: 16, border: "1px solid #e5e7eb", padding: 12, fontSize: 14, marginTop: 8, boxSizing: "border-box", fontFamily: "Arial" },
   primaryButton: { width: "100%", height: 46, marginTop: 8, border: 0, borderRadius: 18, background: "#16a34a", color: "#fff", fontWeight: 800, fontSize: 15 },
   daySelect: { width: "100%", height: 46, borderRadius: 18, border: "1px solid #e5e7eb", padding: "0 12px", fontSize: 15, marginBottom: 12, background: "#fff" },
-  exposureCard: { background: "#faf5ff", borderRadius: 24, padding: 14, marginBottom: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.05)" },
-  exposureMini: { background: "#faf5ff", borderRadius: 18, padding: 10, marginBottom: 10, fontSize: 14 },
   mealCard: { background: "#fff", borderRadius: 24, padding: 14, marginBottom: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.06)" },
-  label: { color: "#ea580c", textTransform: "uppercase", letterSpacing: 0.5, fontSize: 12, fontWeight: 800, margin: "0 0 6px" },
+  label: { color: "#ea580c", textTransform: "uppercase", letterSpacing: 0.5, fontSize: 12, fontWeight: 800, margin: "10px 0 6px" },
   cardTitle: { margin: "0 0 8px", fontSize: 19 },
   nutritionBox: { background: "#f0fdf4", borderRadius: 16, padding: 10, fontSize: 14, lineHeight: 1.4, marginTop: 8 },
   small: { background: "rgba(255,255,255,0.7)", padding: 10, borderRadius: 14, fontSize: 13, color: "#475569" },
-  badge: { display: "inline-block", marginTop: 8, background: "#e0f2fe", color: "#0369a1", padding: "5px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700 },
+  warningText: { background: "#fffbeb", padding: 10, borderRadius: 14, fontSize: 13, color: "#92400e", marginTop: 8 },
+  safetyAvoid: { background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: 10, borderRadius: 14, fontSize: 13, marginTop: 8, lineHeight: 1.4 },
+  safetyModify: { background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", padding: 10, borderRadius: 14, fontSize: 13, marginTop: 8, lineHeight: 1.4 },
+  safetyLimit: { background: "#fefce8", border: "1px solid #fde68a", color: "#854d0e", padding: 10, borderRadius: 14, fontSize: 13, marginTop: 8, lineHeight: 1.4 },
+  safetyBadgeMini: { display: "inline-block", marginLeft: 6, background: "#fef2f2", color: "#991b1b", padding: "3px 9px", borderRadius: 999, fontSize: 11, fontWeight: 700 },
+  chatWindow: { display: "flex", flexDirection: "column", gap: 8, maxHeight: 360, overflowY: "auto", margin: "10px 0", padding: 4 },
+  chatBubbleUser: { alignSelf: "flex-end", background: "#111827", color: "#fff", padding: "8px 12px", borderRadius: 16, fontSize: 14, maxWidth: "85%" },
+  chatBubbleAssistant: { alignSelf: "flex-start", background: "#f1f5f9", color: "#1f2937", padding: "8px 12px", borderRadius: 16, fontSize: 14, maxWidth: "85%", whiteSpace: "pre-wrap" },
+  badge: { display: "inline-block", background: "#e0f2fe", color: "#0369a1", padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700 },
+  exposureBadge: { display: "inline-block", background: "#faf5ff", color: "#7e22ce", padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700, marginLeft: 6 },
+  retiredBadge: { display: "inline-block", background: "#f1f5f9", color: "#64748b", padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700 },
   weekMeal: { background: "#f8fafc", borderRadius: 16, padding: 10, marginBottom: 8 },
-  chips: { display: "flex", flexWrap: "wrap", gap: 8 },
-  chip: { background: "#f1f5f9", borderRadius: 999, padding: "7px 10px", fontSize: 13, fontWeight: 600 },
-  spaceBetween: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  smallButton: { border: "1px solid #e5e7eb", background: "#fff", padding: "8px 10px", borderRadius: 14, fontWeight: 700 },
+  chips: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  chip: { background: "#f1f5f9", borderRadius: 999, padding: "7px 10px", fontSize: 13, fontWeight: 600, border: 0 },
+  chipActive: { background: "#111827", color: "#fff", borderRadius: 999, padding: "7px 10px", fontSize: 13, fontWeight: 700, border: 0 },
+  spaceBetween: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  smallButton: { border: "1px solid #e5e7eb", background: "#fff", padding: "8px 10px", borderRadius: 14, fontWeight: 700, fontSize: 13 },
   changeRow: { display: "flex", justifyContent: "space-between", gap: 8, background: "#f8fafc", borderRadius: 16, padding: 10, marginTop: 8 },
-  deleteButton: { border: 0, background: "#fee2e2", color: "#991b1b", borderRadius: 12, padding: "8px 10px", height: 36, fontWeight: 700 },
+  deleteButton: { border: 0, background: "#fee2e2", color: "#991b1b", borderRadius: 12, padding: "8px 10px", height: 36, fontWeight: 700, fontSize: 13 },
   footer: { textAlign: "center", color: "#64748b", fontSize: 13, padding: "12px 8px" },
+  profileActions: { display: "flex", gap: 8 },
+  responseRow: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  responseButton: { border: "1px solid #e5e7eb", background: "#f8fafc", padding: "8px 10px", borderRadius: 14, fontWeight: 700, fontSize: 13 },
+  foodRow: { display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start", background: "#f8fafc", borderRadius: 16, padding: 10, marginTop: 8 },
+  settingsField: { display: "flex", flexDirection: "column", gap: 4, fontSize: 13, fontWeight: 700, color: "#475569" },
 };
