@@ -6,10 +6,10 @@ This repository contains **one production app** and an optional React prototype 
 
 | Path | What it is | Deploy this? |
 |------|------------|--------------|
-| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): auth, social login, meal logging, weekly plans, NLP/photo, recipes, food-safety, floating OpenAI chat with session memory, USDA lookups | **Yes — production** |
+| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): email/password auth, meal logging, weekly plans, NLP/photo, recipes, food-safety, floating OpenAI chat with session memory, USDA lookups, audit logs | **Yes — production** |
 | Repo root (`src/`, `server/`) | Earlier React prototype — features ported into Flask. Reference only | Optional / local |
 
-**Full docs (features, tech stack, deploy, social login):**  
+**Full docs:**  
 → [`toddler-meal-planner/README.md`](toddler-meal-planner/README.md)  
 → [`toddler-meal-planner/DEPLOYMENT.md`](toddler-meal-planner/DEPLOYMENT.md)
 
@@ -17,8 +17,9 @@ This repository contains **one production app** and an optional React prototype 
 
 ## Tech stack (production)
 
-- **Backend:** Python, Flask, SQLAlchemy, Flask-Login, Authlib (OAuth)
+- **Backend:** Python, Flask, SQLAlchemy, Flask-Login
 - **Database:** SQLite (default, Docker volume) or PostgreSQL
+- **Auth:** Email/password (social login removed for now)
 - **Frontend:** Jinja2, HTML/CSS, vanilla JS, PWA
 - **AI:** OpenAI chat (+ rolling chat summaries)
 - **Deploy:** Docker / gunicorn (also Render, Railway, Fly, AWS)
@@ -33,8 +34,7 @@ cd toddler-meal-planner
 
 mkdir -p ~/meal-data
 cp -n .env.example ~/meal-data/.env
-# edit ~/meal-data/.env → SECRET_KEY, OPENAI_API_KEY,
-# and optionally GOOGLE_* / FACEBOOK_* for social login
+# edit ~/meal-data/.env → SECRET_KEY, OPENAI_API_KEY
 
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
@@ -45,7 +45,7 @@ sudo docker run -d --name meal-planner --restart always \
   meal-planner
 ```
 
-- App: `http://YOUR_SERVER_IP` (use HTTPS + a domain for social login)
+- App: `http://YOUR_SERVER_IP`
 - **DB + `.env` stay in `~/meal-data`** across redeploys
 
 ### First-time server setup
@@ -62,30 +62,12 @@ cd kabirmealplanner/toddler-meal-planner
 
 ---
 
-## Social logins — what you need
-
-Buttons on Login/Signup stay disabled until credentials are configured.
-
-| Provider | Get credentials | Env vars | Redirect URI to register |
-|----------|-----------------|----------|---------------------------|
-| **Google** | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → OAuth Web client | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `https://YOUR_DOMAIN/authorize/google` |
-| **Facebook / Instagram** | [Meta for Developers](https://developers.facebook.com/) → Facebook Login | `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET` | `https://YOUR_DOMAIN/authorize/facebook` |
-
-1. Create the OAuth app at the provider  
-2. Add the **exact** redirect URI (HTTPS in production)  
-3. Put Client ID/Secret in `~/meal-data/.env`  
-4. Redeploy / restart the container  
-
-**Instagram** consumer sign-in uses **Facebook Login** (same Meta app).  
-Step-by-step screenshots-level guide: [`toddler-meal-planner/README.md`](toddler-meal-planner/README.md#social-logins-google--facebook--instagram).
-
----
-
 ## Recent product notes
 
 - Chat keeps the **last 10 messages** per visit and **summarizes** older turns; clears after **session end** or **15 min** inactivity  
 - Chat plan updates only touch **future unlogged** slots; meal history is separate  
 - Secrets belong in **`~/meal-data/.env`**, not one-off `docker run -e` flags  
+- Sign-in is **email/password only** for now  
 
 ---
 

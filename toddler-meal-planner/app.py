@@ -10,7 +10,6 @@ from functools import wraps
 from flask import Flask, render_template, request, jsonify, redirect, url_for, g, session, flash
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 
 # Resolve paths early so secrets on the Docker data volume are picked up.
@@ -24,7 +23,7 @@ os.makedirs(_INSTANCE_DIR, exist_ok=True)
 load_dotenv(os.path.join(_APP_DIR, '.env'))
 load_dotenv(os.path.join(_INSTANCE_DIR, '.env'), override=True)
 
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
 from meal_planner import MealPlanner, update_preferences_from_log
@@ -48,6 +47,7 @@ from chat_assistant import (
 from chat_service import call_openai_chat, chat_configured, ChatConfigError, ChatRequestError, summarize_chat_history
 from recipes import list_recipes, get_recipe, find_recipe_for_food_name
 from usda_lookup import search_foods as usda_search_foods, get_food as usda_get_food, using_demo_key as usda_using_demo_key
+from audit_logging import setup_logging, write_audit_log, app_log, request_payload_snapshot
 import json as _json
 import shutil
 
@@ -95,6 +95,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 # Initialize extensions
 db.init_app(app)
 CORS(app)
+setup_logging(_INSTANCE_DIR)
 
 # Initialize Flask-Login
 login_manager = LoginManager()
@@ -102,46 +103,6 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please sign in to access this feature.'
 login_manager.login_message_category = 'info'
-
-# Initialize OAuth (Google + Facebook; Instagram consumer login uses Facebook)
-oauth = OAuth(app)
-
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
-GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
-FACEBOOK_CLIENT_ID = os.environ.get('FACEBOOK_CLIENT_ID', '')
-FACEBOOK_CLIENT_SECRET = os.environ.get('FACEBOOK_CLIENT_SECRET', '')
-
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-    oauth.register(
-        name='google',
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-        client_kwargs={'scope': 'openid email profile'}
-    )
-
-if FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET:
-    oauth.register(
-        name='facebook',
-        client_id=FACEBOOK_CLIENT_ID,
-        client_secret=FACEBOOK_CLIENT_SECRET,
-        access_token_url='https://graph.facebook.com/oauth/access_token',
-        access_token_params=None,
-        authorize_url='https://www.facebook.com/dialog/oauth',
-        authorize_params=None,
-        api_base_url='https://graph.facebook.com/',
-        client_kwargs={'scope': 'email public_profile'},
-    )
-
-
-def oauth_providers_available():
-    """Which social providers are configured via env vars"""
-    return {
-        'google': bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
-        'facebook': bool(FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET),
-        # Instagram consumer login goes through Facebook Login
-        'instagram': bool(FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET),
-    }
 
 
 @login_manager.user_loader
@@ -192,46 +153,6 @@ def _transfer_anonymous_toddlers(user):
     return len(anonymous_toddlers)
 
 
-def _login_or_create_oauth_user(provider, oauth_id, email, name=None, avatar_url=None):
-    """Find or create a user from an OAuth provider profile"""
-    if not email:
-        raise ValueError(f'{provider.title()} did not share an email. Please allow email access.')
-    
-    email = email.strip().lower()
-    
-    # Prefer exact OAuth identity match
-    user = User.query.filter_by(oauth_provider=provider, oauth_id=str(oauth_id)).first()
-    
-    if not user:
-        # Link to existing email account if present
-        user = User.query.filter_by(email=email).first()
-        if user:
-            user.oauth_provider = provider
-            user.oauth_id = str(oauth_id)
-            if avatar_url and not user.avatar_url:
-                user.avatar_url = avatar_url
-            if name and not user.name:
-                user.name = name
-            user.email_verified = True
-        else:
-            user = User(
-                email=email,
-                name=name,
-                oauth_provider=provider,
-                oauth_id=str(oauth_id),
-                avatar_url=avatar_url,
-                email_verified=True,
-            )
-            db.session.add(user)
-    
-    _transfer_anonymous_toddlers(user)
-    user.last_login = datetime.utcnow()
-    db.session.commit()
-    
-    login_user(user, remember=True)
-    return user
-
-
 # Initialize database and food data
 with app.app_context():
     db.create_all()
@@ -274,6 +195,78 @@ def inject_globals():
     }
 
 
+# ==================== API / AUDIT REQUEST LOGGING ====================
+
+_MUTATING_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
+_AUDIT_PATH_PREFIXES = ('/api/', '/meal-plan/', '/nutrition/', '/log-meal', '/toddlers')
+
+
+@app.before_request
+def _capture_request_for_audit():
+    path = request.path or ''
+    if not any(path.startswith(p) for p in _AUDIT_PATH_PREFIXES):
+        return
+    g._audit_started = datetime.utcnow()
+    g._audit_payload = request_payload_snapshot()
+
+
+@app.after_request
+def _log_api_request(response):
+    path = request.path or ''
+    if not any(path.startswith(p) for p in _AUDIT_PATH_PREFIXES):
+        return response
+    if path.startswith('/api/audit-logs'):
+        return response
+
+    payload = getattr(g, '_audit_payload', None) or {}
+    toddler_id = None
+    try:
+        if request.view_args and 'toddler_id' in request.view_args:
+            toddler_id = request.view_args.get('toddler_id')
+        elif isinstance(payload.get('json'), dict) and payload['json'].get('toddler_id'):
+            toddler_id = payload['json'].get('toddler_id')
+        elif request.args.get('toddler_id'):
+            toddler_id = int(request.args.get('toddler_id'))
+    except Exception:
+        toddler_id = None
+
+    body_preview = None
+    try:
+        if response.is_json:
+            body_preview = response.get_json(silent=True)
+    except Exception:
+        body_preview = None
+
+    app_log(
+        f'{request.method} {path} -> {response.status_code}',
+        request=payload,
+        response_preview=body_preview if request.method in _MUTATING_METHODS else None,
+        toddler_id=toddler_id,
+    )
+
+    # Persist DB audit rows for mutating calls (and plan regenerates via GET ?regenerate=true)
+    should_db = request.method in _MUTATING_METHODS
+    if path.startswith('/api/meal-plan/weekly/') and request.args.get('regenerate', '').lower() == 'true':
+        should_db = True
+    if should_db:
+        try:
+            write_audit_log(
+                action=f'api.{request.method.lower()}',
+                toddler_id=int(toddler_id) if toddler_id is not None else None,
+                entity_type='http_request',
+                entity_id=path,
+                before=None,
+                after={'status': response.status_code, 'body': body_preview},
+                details=payload,
+                source='http',
+                commit=True,
+            )
+        except Exception as exc:
+            app_log(f'audit write failed: {exc}')
+
+    return response
+
+
 # ==================== AUTHENTICATION ROUTES ====================
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -281,8 +274,6 @@ def signup():
     """User registration page"""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
-    
-    providers = oauth_providers_available()
     
     if request.method == 'POST':
         data = request.form
@@ -305,7 +296,7 @@ def signup():
         if errors:
             for error in errors:
                 flash(error, 'error')
-            return render_template('auth/signup.html', email=email, name=name, providers=providers)
+            return render_template('auth/signup.html', email=email, name=name)
         
         # Create user
         user = User(email=email, name=name or None)
@@ -327,7 +318,7 @@ def signup():
         flash(msg, 'success')
         return redirect(url_for('home'))
     
-    return render_template('auth/signup.html', providers=providers)
+    return render_template('auth/signup.html')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -335,8 +326,6 @@ def login():
     """User login page"""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
-    
-    providers = oauth_providers_available()
     
     if request.method == 'POST':
         data = request.form
@@ -349,7 +338,7 @@ def login():
         if user and user.check_password(password):
             if not user.is_active:
                 flash('This account has been deactivated.', 'error')
-                return render_template('auth/login.html', email=email, providers=providers)
+                return render_template('auth/login.html', email=email)
             
             _transfer_anonymous_toddlers(user)
             login_user(user, remember=bool(remember))
@@ -363,9 +352,9 @@ def login():
             return redirect(url_for('home'))
         else:
             flash('Invalid email or password.', 'error')
-            return render_template('auth/login.html', email=email, providers=providers)
+            return render_template('auth/login.html', email=email)
     
-    return render_template('auth/login.html', providers=providers)
+    return render_template('auth/login.html')
 
 
 @app.route('/logout')
@@ -374,70 +363,6 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
-
-
-@app.route('/login/google')
-def login_google():
-    """Start Google OAuth login"""
-    if not oauth_providers_available()['google']:
-        flash('Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.', 'error')
-        return redirect(url_for('login'))
-    redirect_uri = url_for('authorize_google', _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
-
-
-@app.route('/authorize/google')
-def authorize_google():
-    """Google OAuth callback"""
-    try:
-        token = oauth.google.authorize_access_token()
-        userinfo = token.get('userinfo') or oauth.google.userinfo()
-        _login_or_create_oauth_user(
-            provider='google',
-            oauth_id=userinfo.get('sub'),
-            email=userinfo.get('email'),
-            name=userinfo.get('name'),
-            avatar_url=userinfo.get('picture'),
-        )
-        flash('Signed in with Google!', 'success')
-        return redirect(url_for('home'))
-    except Exception as e:
-        flash(f'Google sign-in failed: {str(e)}', 'error')
-        return redirect(url_for('login'))
-
-
-@app.route('/login/facebook')
-def login_facebook():
-    """Start Facebook / Instagram (via Facebook) OAuth login"""
-    if not oauth_providers_available()['facebook']:
-        flash('Facebook sign-in is not configured. Set FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET.', 'error')
-        return redirect(url_for('login'))
-    redirect_uri = url_for('authorize_facebook', _external=True)
-    return oauth.facebook.authorize_redirect(redirect_uri)
-
-
-@app.route('/authorize/facebook')
-def authorize_facebook():
-    """Facebook OAuth callback (also covers Instagram consumer login)"""
-    try:
-        token = oauth.facebook.authorize_access_token()
-        resp = oauth.facebook.get('me?fields=id,name,email,picture.type(large)')
-        profile = resp.json()
-        avatar = None
-        if profile.get('picture') and profile['picture'].get('data'):
-            avatar = profile['picture']['data'].get('url')
-        _login_or_create_oauth_user(
-            provider='facebook',
-            oauth_id=profile.get('id'),
-            email=profile.get('email'),
-            name=profile.get('name'),
-            avatar_url=avatar,
-        )
-        flash('Signed in with Facebook!', 'success')
-        return redirect(url_for('home'))
-    except Exception as e:
-        flash(f'Facebook sign-in failed: {str(e)}', 'error')
-        return redirect(url_for('login'))
 
 
 @app.route('/profile')
@@ -455,13 +380,11 @@ def auth_status():
         return jsonify({
             'authenticated': True,
             'user': current_user.to_dict(),
-            'providers': oauth_providers_available()
         })
     else:
         return jsonify({
             'authenticated': False,
             'session_id': get_session_id()[:8] + '...',
-            'providers': oauth_providers_available()
         })
 
 
@@ -1429,6 +1352,8 @@ def get_weekly_plan(toddler_id):
     week_start_str = request.args.get('week_start')
     if week_start_str:
         week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+        # Normalize to Monday of that week
+        week_start = week_start - timedelta(days=week_start.weekday())
     else:
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
@@ -1442,6 +1367,23 @@ def get_weekly_plan(toddler_id):
         'toddler_id': toddler_id,
         'toddler_name': toddler.name,
         **plan
+    })
+
+
+@app.route('/api/audit-logs/<int:toddler_id>', methods=['GET'])
+def get_audit_logs(toddler_id):
+    """List recent audit log entries for a toddler (plan changes + API mutations)."""
+    Toddler.query.get_or_404(toddler_id)
+    limit = min(int(request.args.get('limit', 100)), 500)
+    action = request.args.get('action')
+    q = AuditLog.query.filter_by(toddler_id=toddler_id).order_by(AuditLog.created_at.desc())
+    if action:
+        q = q.filter(AuditLog.action == action)
+    rows = q.limit(limit).all()
+    return jsonify({
+        'toddler_id': toddler_id,
+        'count': len(rows),
+        'logs': [r.to_dict() for r in rows],
     })
 
 
@@ -2400,6 +2342,12 @@ def api_chat():
                     result = planner.apply_future_plan_updates(toddler, args.get('changes') or [])
                     tool_results.append({'tool': name, 'result': result})
                     content = _json.dumps(result)
+                    app_log(
+                        'chat update_weekly_plan',
+                        toddler_id=toddler.id,
+                        args=args,
+                        result=result,
+                    )
                 else:
                     content = _json.dumps({'error': f'Unknown tool {name}'})
                 api_messages.append({

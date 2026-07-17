@@ -315,15 +315,23 @@
       touchActivity();
       await compactIfNeeded();
 
-      const planUpdated = (data.tool_results || []).some((t) => t.tool === "update_weekly_plan");
-      if (planUpdated && typeof showToast === "function") {
-        const result = (data.tool_results || []).find((t) => t.tool === "update_weekly_plan");
-        const updated = (result && result.result && result.result.updated) || [];
-        if (updated.length) {
-          showToast("Weekly plan updated for future meals (logged history kept).", "success");
+      const planTools = (data.tool_results || []).filter((t) => t.tool === "update_weekly_plan");
+      if (planTools.length && typeof showToast === "function") {
+        const results = planTools.map((t) => t.result || {});
+        const updatedCount = results.reduce((n, r) => n + ((r.updated && r.updated.length) || 0), 0);
+        const skipped = results.flatMap((r) => r.skipped || []);
+        const weeks = [...new Set(results.flatMap((r) => r.weeks_touched || []))];
+        if (updatedCount > 0) {
+          const weekHint = weeks.length ? ` Open week of ${weeks[0]}.` : "";
+          showToast(
+            `Weekly plan updated (${updatedCount} slot${updatedCount === 1 ? "" : "s"}).${weekHint}`,
+            "success"
+          );
+          if (typeof loadWeeklyPlan === "function" && cfg.toddlerId) {
+            loadWeeklyPlan(cfg.toddlerId, weeks[0] || null);
+          }
         } else {
-          const skipped = (result && result.result && result.result.skipped) || [];
-          const reason = (skipped[0] && skipped[0].reason) || "No matching future slots.";
+          const reason = (skipped[0] && skipped[0].reason) || "No matching future unlogged slots.";
           showToast(`Plan not changed: ${reason}`, "error");
         }
       }

@@ -278,48 +278,6 @@
             margin: 0;
             color: #92400e;
         }
-        
-        .social-login {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .social-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.75rem;
-            padding: 0.875rem 1rem;
-            border-radius: var(--radius-lg);
-            font-weight: 700;
-            text-decoration: none;
-            border: 2px solid var(--border-light);
-            transition: all var(--transition-fast);
-            background: white;
-            color: var(--text-primary);
-        }
-        
-        .social-btn:hover:not(.disabled) {
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-md);
-        }
-        
-        .social-btn.disabled {
-            opacity: 0.55;
-            pointer-events: none;
-        }
-        
-        .social-google i { color: #ea4335; }
-        .social-facebook i { color: #1877f2; }
-        
-        .social-note {
-            text-align: center;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin: 0;
-        }
     </style>
 </head>
 <body>
@@ -363,19 +321,6 @@
                     <i class="fas fa-info-circle"></i>
                     <p>Any toddler profiles you've created will be automatically transferred to your account!</p>
                 </div>
-                
-                {% set providers = providers if providers is defined else {} %}
-                <div class="social-login">
-                    <a href="{{ url_for('login_google') }}" class="social-btn social-google {% if not providers.get('google') %}disabled{% endif %}">
-                        <i class="fab fa-google"></i> Continue with Google
-                    </a>
-                    <a href="{{ url_for('login_facebook') }}" class="social-btn social-facebook {% if not providers.get('facebook') %}disabled{% endif %}">
-                        <i class="fab fa-facebook-f"></i> Continue with Facebook
-                    </a>
-                    <p class="social-note">Instagram sign-in uses Facebook Login (Meta)</p>
-                </div>
-                
-                <div class="auth-divider"><span>or use email</span></div>
                 
                 <form method="POST" action="{{ url_for('signup') }}">
                     <div class="form-group">

@@ -228,19 +228,12 @@ The `-v ~/meal-data:/app/instance` mount keeps **all of that** across rebuilds. 
 | `OPENAI_API_KEY` | Chat assistant (from `.env`) | unset → chat disabled |
 | `OPENAI_CHAT_MODEL` | Chat model override | `gpt-4o-mini` |
 | `USDA_FDC_API_KEY` | Optional USDA lookups | DEMO_KEY |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Sign-In | unset → button disabled |
-| `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | Facebook/Instagram Login | unset → button disabled |
 | `SESSION_COOKIE_SECURE` | `true` only behind HTTPS | unset/false for HTTP IP access |
 | `FLASK_ENV` | Environment mode | production (Docker) |
 
 Put secrets in **`~/meal-data/.env`** (same folder as the DB). Pass them with `--env-file ~/meal-data/.env`, and/or rely on the app loading `/app/instance/.env` from the volume.
 
-### Social login redirects (must match provider console)
-
-- Google: `https://YOUR_DOMAIN/authorize/google`
-- Facebook: `https://YOUR_DOMAIN/authorize/facebook`
-
-Full walkthrough: [`README.md`](README.md#social-logins-google--facebook--instagram).
+Auth is email/password only (social login removed).
 
 Do not put API keys in `docker run -e` flags, and do not keep production secrets only inside the git checkout (that can be wiped on a fresh clone).
 
