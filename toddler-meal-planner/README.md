@@ -181,8 +181,9 @@ The app follows **ICMR-NIN (National Institute of Nutrition)** guidelines for In
 
 ### Meal Logs
 - `GET /api/meal-logs` - List meal logs (filterable by toddler, date)
-- `POST /api/meal-logs` - Log a meal
+- `POST /api/meal-logs` - Log a meal (supports `items[]` and `replace_existing`)
 - `PUT /api/meal-logs/:id` - Update meal log
+- `PUT /api/meal-logs/batch` - Update multiple meal log items
 - `DELETE /api/meal-logs/:id` - Delete meal log
 
 ### Nutrition

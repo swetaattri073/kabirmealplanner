@@ -250,14 +250,17 @@ class NutritionEngine:
         return base_rda
     
     def calculate_daily_nutrition(self, meal_logs):
-        """Calculate total nutrition from a list of meal logs"""
+        """Calculate total nutrition from meal logs (portion % and refusals applied)."""
         totals = defaultdict(float)
         
         for log in meal_logs:
+            # Skipped / refused with 0% contribute nothing
+            if hasattr(log, 'effective_portion_eaten_percent') and log.effective_portion_eaten_percent() <= 0:
+                continue
             nutrients = log.get_actual_nutrients()
             if nutrients:
                 for key, value in nutrients.items():
-                    totals[key] += value
+                    totals[key] += value or 0
         
         return dict(totals)
     

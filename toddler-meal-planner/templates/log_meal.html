@@ -65,7 +65,7 @@
                     {% endif %}
                     
                     {% if already_logged %}
-                    <div class="logged-summary">
+                    <div class="logged-summary" id="logged-summary-{{ meal_type }}">
                         {% for log in logged_by_meal[meal_type] %}
                         <p>
                             Ate {{ log.portion_eaten_percent }}%
@@ -73,9 +73,36 @@
                             {% if log.food %} · {{ log.food.name }}{% elif log.custom_food_name %} · {{ log.custom_food_name }}{% endif %}
                         </p>
                         {% endfor %}
-                        <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
-                            Log a different meal instead
-                        </button>
+                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="showEditLoggedMeal('{{ meal_type }}')">
+                                <i class="fas fa-pen"></i> Edit logged meal
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                                Log a different meal instead
+                            </button>
+                        </div>
+                    </div>
+                    <div class="plan-feedback" id="edit-logged-{{ meal_type }}" style="display:none;">
+                        <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                            Update portion and reaction for each logged food. Remove an item if it was logged by mistake.
+                        </p>
+                        <div id="edit-items-{{ meal_type }}" class="meal-items-panel"></div>
+                        <div class="form-group" style="margin: 0.75rem 0;">
+                            <label class="form-label">Notes <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+                            <input type="text" class="form-input" id="edit-notes-{{ meal_type }}"
+                                   placeholder="E.g., ate more roti than usual">
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
+                            <button type="button" class="btn btn-primary" onclick="saveEditedMealLogs({{ toddler.id }}, '{{ meal_type }}')">
+                                <i class="fas fa-save"></i> Save changes
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="hideEditLoggedMeal('{{ meal_type }}')">
+                                Cancel
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                                Replace with different meal
+                            </button>
+                        </div>
                     </div>
                     {% else %}
                     {# ---- Default: per-item feedback on recommended meal ---- #}
@@ -340,9 +367,12 @@
 <script>
 const allFoods = {{ foods_data | tojson }};
 const todayPlanMeals = {{ (today_plan.meals if today_plan else {}) | tojson }};
+const loggedByMeal = {{ logged_by_meal | tojson }};
 const planItemState = {};
 const altItemState = {};
+const editItemState = {};
 const altPhotos = {};
+const editNotesSeed = {};
 
 const REACTIONS = [
     { id: 'loved', label: '😍 Loved', short: '😍' },
@@ -354,6 +384,7 @@ const REACTIONS = [
 
 document.addEventListener('DOMContentLoaded', function() {
     Object.keys(todayPlanMeals).forEach(initPlanItems);
+    Object.keys(loggedByMeal).forEach(initEditItems);
     const urlParams = new URLSearchParams(window.location.search);
     const mealType = urlParams.get('meal');
     if (mealType) {
@@ -361,6 +392,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             el.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.35)';
+        }
+        if (urlParams.get('edit') === '1' && loggedByMeal[mealType]) {
+            showEditLoggedMeal(mealType);
         }
     }
 });
@@ -416,24 +450,43 @@ function initPlanItems(mealType) {
     renderItemRows(mealType, 'plan');
 }
 
+function initEditItems(mealType) {
+    const logs = loggedByMeal[mealType] || [];
+    editItemState[mealType] = logs.map(log => ({
+        log_id: log.id,
+        food_id: log.food_id,
+        name: (log.food && log.food.name) || log.custom_food_name || 'Food',
+        portion: log.portion_eaten_percent != null ? log.portion_eaten_percent : 100,
+        reaction: log.toddler_reaction || null,
+    }));
+    const note = logs.map(l => l.notes).find(Boolean) || '';
+    editNotesSeed[mealType] = note;
+}
+
 function getItemState(mealType, mode) {
-    return mode === 'plan' ? (planItemState[mealType] || []) : (altItemState[mealType] || []);
+    if (mode === 'plan') return planItemState[mealType] || [];
+    if (mode === 'edit') return editItemState[mealType] || [];
+    return altItemState[mealType] || [];
 }
 
 function setItemState(mealType, mode, items) {
     if (mode === 'plan') planItemState[mealType] = items;
+    else if (mode === 'edit') editItemState[mealType] = items;
     else altItemState[mealType] = items;
 }
 
 function renderItemRows(mealType, mode) {
-    const containerId = mode === 'plan' ? 'plan-items-' + mealType : 'alt-items-' + mealType;
+    const containerId = mode === 'plan' ? 'plan-items-' + mealType
+        : (mode === 'edit' ? 'edit-items-' + mealType : 'alt-items-' + mealType);
     const container = document.getElementById(containerId);
     if (!container) return;
     const items = getItemState(mealType, mode);
     if (!items.length) {
-        container.innerHTML = mode === 'plan'
-            ? '<p style="color:var(--text-muted);font-size:0.9rem;">No planned items found.</p>'
-            : '';
+        container.innerHTML = mode === 'edit'
+            ? '<p style="color:var(--text-muted);font-size:0.9rem;">No items left — save to clear this meal log, or cancel.</p>'
+            : (mode === 'plan'
+                ? '<p style="color:var(--text-muted);font-size:0.9rem;">No planned items found.</p>'
+                : '');
         const hint = document.getElementById('alt-items-hint-' + mealType);
         if (hint) hint.style.display = mode === 'alt' ? 'block' : 'none';
         return;
@@ -447,8 +500,9 @@ function renderItemRows(mealType, mode) {
                     data-reaction="${r.id}"
                     onclick="pickItemReaction('${mealType}', '${mode}', ${idx}, '${r.id}')">${r.short}</button>
         `).join('');
+        const canRemove = mode === 'alt' || mode === 'edit';
         return `
-        <div class="meal-item-row" data-food-id="${item.food_id}">
+        <div class="meal-item-row" data-food-id="${item.food_id || ''}" data-log-id="${item.log_id || ''}">
             <div class="meal-item-name">${escapeHtml(item.name)}${item.role ? ` <span class="suggestion-meta">(${escapeHtml(item.role)})</span>` : ''}</div>
             <label class="form-label" style="font-size:0.85rem;">Portion eaten</label>
             <input type="range" class="portion-slider item-portion" min="0" max="100" step="25" value="${item.portion}"
@@ -456,15 +510,105 @@ function renderItemRows(mealType, mode) {
             <p class="item-portion-label" id="portion-label-${prefix}">Ate: ${item.portion}%</p>
             <label class="form-label" style="font-size:0.85rem;margin-top:0.35rem;">Reaction</label>
             <div class="reaction-buttons compact">${reactionBtns}</div>
-            ${mode === 'alt' ? `<button type="button" class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="removeAltItem('${mealType}', ${idx})">Remove</button>` : ''}
+            ${canRemove ? `<button type="button" class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="removeItemRow('${mealType}', '${mode}', ${idx})">Remove</button>` : ''}
         </div>`;
     }).join('');
+}
+
+function removeItemRow(mealType, mode, idx) {
+    const items = getItemState(mealType, mode);
+    if (!items[idx]) return;
+    items.splice(idx, 1);
+    setItemState(mealType, mode, items);
+    renderItemRows(mealType, mode);
+    if (mode === 'alt') {
+        const q = document.getElementById('alt-search-' + mealType)?.value || '';
+        filterAltFoods(mealType, q);
+    }
+}
+
+function showEditLoggedMeal(mealType) {
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
+    const alt = document.getElementById('alternate-' + mealType);
+    if (alt) alt.style.display = 'none';
+    if (summary) summary.style.display = 'none';
+    if (edit) {
+        edit.style.display = 'block';
+        // Reset from original logs each time edit opens
+        initEditItems(mealType);
+        const notes = document.getElementById('edit-notes-' + mealType);
+        if (notes) notes.value = editNotesSeed[mealType] || '';
+        renderItemRows(mealType, 'edit');
+    }
+}
+
+function hideEditLoggedMeal(mealType) {
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
+    if (edit) edit.style.display = 'none';
+    if (summary) summary.style.display = 'block';
+}
+
+async function saveEditedMealLogs(toddlerId, mealType) {
+    const items = getItemState(mealType, 'edit');
+    const original = loggedByMeal[mealType] || [];
+    const notes = document.getElementById('edit-notes-' + mealType)?.value || '';
+
+    if (!items.length) {
+        // Delete all remaining original logs
+        try {
+            for (const log of original) {
+                await apiCall('/meal-logs/' + log.id, 'DELETE');
+            }
+            showToast('Cleared logged meal', 'success');
+            setTimeout(() => location.reload(), 700);
+        } catch (e) {
+            console.error(e);
+        }
+        return;
+    }
+
+    const missing = items.filter(i => !i.reaction);
+    if (missing.length) {
+        showToast('Please set a reaction for each food (' + missing.map(m => m.name).join(', ') + ')', 'error');
+        return;
+    }
+
+    const keepIds = new Set(items.map(i => i.log_id).filter(Boolean));
+    const toDelete = original.filter(l => !keepIds.has(l.id));
+
+    try {
+        for (const log of toDelete) {
+            await apiCall('/meal-logs/' + log.id, 'DELETE');
+        }
+        const payload = {
+            items: items.map(i => ({
+                id: i.log_id,
+                food_id: i.food_id,
+                portion_eaten_percent: i.portion,
+                toddler_reaction: i.reaction,
+                notes: notes,
+            })),
+        };
+        await apiCall('/meal-logs/batch', 'PUT', payload);
+        showToast('Updated logged meal', 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 function pickItemReaction(mealType, mode, idx, reaction) {
     const items = getItemState(mealType, mode);
     if (!items[idx]) return;
     items[idx].reaction = reaction;
+    // Refused meals contribute 0% to nutrition — keep portion in sync
+    if (reaction === 'refused') {
+        items[idx].portion = 0;
+    } else if (items[idx].portion === 0) {
+        items[idx].portion = 100;
+    }
     setItemState(mealType, mode, items);
     renderItemRows(mealType, mode);
 }
@@ -473,9 +617,14 @@ function setItemPortion(mealType, mode, idx, portion) {
     const items = getItemState(mealType, mode);
     if (!items[idx]) return;
     items[idx].portion = portion;
+    // Zero portion implies refused for nutrition purposes
+    if (portion === 0 && items[idx].reaction !== 'refused') {
+        items[idx].reaction = 'refused';
+    } else if (portion > 0 && items[idx].reaction === 'refused') {
+        items[idx].reaction = 'neutral';
+    }
     setItemState(mealType, mode, items);
-    const label = document.getElementById(`portion-label-${mode}-${mealType}-${idx}`);
-    if (label) label.textContent = 'Ate: ' + portion + '%';
+    renderItemRows(mealType, mode);
 }
 
 function lookupReaction(reactionsMap, itemName, foodName) {
@@ -559,6 +708,7 @@ async function submitMealLogs(toddlerId, mealType, items, options) {
         update_plan: !!options.update_plan,
         plan_food_id: options.plan_food_id || items[0]?.food_id,
         plan_reason: options.plan_reason || '',
+        replace_existing: !!options.replace_existing,
     };
     if (options.photo_data) payload.photo_data = options.photo_data;
     return apiCall('/meal-logs', 'POST', payload);
@@ -575,8 +725,12 @@ function toggleSection(id) {
 
 function showAlternateForm(mealType) {
     const feedback = document.getElementById('feedback-' + mealType);
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
     const alt = document.getElementById('alternate-' + mealType);
     if (feedback) feedback.style.display = 'none';
+    if (summary) summary.style.display = 'none';
+    if (edit) edit.style.display = 'none';
     if (alt) {
         alt.style.display = 'block';
         switchAltTab(mealType, 'search');
@@ -586,9 +740,16 @@ function showAlternateForm(mealType) {
 
 function hideAlternateForm(mealType) {
     const feedback = document.getElementById('feedback-' + mealType);
+    const summary = document.getElementById('logged-summary-' + mealType);
+    const edit = document.getElementById('edit-logged-' + mealType);
     const alt = document.getElementById('alternate-' + mealType);
     if (alt) alt.style.display = 'none';
-    if (feedback) feedback.style.display = 'block';
+    if (loggedByMeal[mealType]) {
+        if (summary) summary.style.display = 'block';
+        if (edit) edit.style.display = 'none';
+    } else if (feedback) {
+        feedback.style.display = 'block';
+    }
 }
 
 function switchAltTab(mealType, tab) {
@@ -941,6 +1102,7 @@ async function logAlternateMeal(toddlerId, mealType) {
             plan_food_id: items[0].food_id,
             plan_reason: `Logged different meal: ${names}`,
             photo_data: altPhotos[mealType] || null,
+            replace_existing: !!(loggedByMeal[mealType] && loggedByMeal[mealType].length),
         });
 
         const swaps = result.plan_updated?.future_plans_adjusted || 0;
