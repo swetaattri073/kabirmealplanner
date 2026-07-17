@@ -36,6 +36,13 @@ A personalized meal planning application for Indian toddlers (6 months - 5 years
 - **Adult Meal Adaptation**: Input what adults are eating, get toddler-friendly versions
 - **Preference Learning**: The system learns from logged reactions and suggests preferred foods more often
 
+### Ported from the React prototype
+
+- **Floating chat assistant** (bottom-right): rotating tip messages + OpenAI Q&A about today's plan, diet, and safety. Requires `OPENAI_API_KEY` in `.env`.
+- **Food safety rules**: honey, choking hazards, mercury fish, caffeine, and more — available via `/api/food-safety/*`.
+- **Recipes library**: browsable toddler-friendly recipes under **Recipes** in the sidebar.
+- **USDA FoodData Central** lookups (optional): `/api/nutrition/usda/*` with `USDA_FDC_API_KEY` (falls back to DEMO_KEY).
+
 ## Installation
 
 ### Local Development

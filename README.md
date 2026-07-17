@@ -6,8 +6,8 @@ This repository contains **one production app** and an optional React prototype 
 
 | Path | What it is | Deploy this? |
 |------|------------|--------------|
-| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): auth, meal logging, weekly plans, NLP/photo, install popup, branding | **Yes — this is production** |
-| Repo root (`src/`, `server/`) | React experiment (localStorage + USDA/OpenAI proxy). Same LittleBowl colors/logo; **not** a feature-complete replacement | Optional / local only |
+| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): auth, meal logging, weekly plans, NLP/photo, recipes, food-safety checks, floating OpenAI chat, USDA lookups, install popup, branding | **Yes — this is production** |
+| Repo root (`src/`, `server/`) | Earlier React prototype — features have been **ported into Flask**. Keep for reference; do not deploy as the main product | Optional / local only |
 
 ---
 
