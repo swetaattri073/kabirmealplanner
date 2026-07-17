@@ -184,6 +184,54 @@ with app.app_context():
 
 
 # Context processors for templates
+def _env_flag(name, default=False):
+    raw = (os.environ.get(name) or '').strip().lower()
+    if not raw:
+        return default
+    return raw in ('1', 'true', 'yes', 'on')
+
+
+def is_chat_feature_enabled():
+    """Master switch — off by default. Set FEATURE_CHAT_ENABLED=true to allow premium chat."""
+    return _env_flag('FEATURE_CHAT_ENABLED', default=False)
+
+
+def can_use_chat_assistant():
+    """Chat UI/API: feature flag on AND logged-in premium subscriber."""
+    if not is_chat_feature_enabled():
+        return False
+    try:
+        return bool(
+            current_user
+            and current_user.is_authenticated
+            and current_user.is_premium()
+        )
+    except Exception:
+        return False
+
+
+def _chat_access_denied_response():
+    if not is_chat_feature_enabled():
+        return jsonify({
+            'error': 'Chat assistant is not available yet.',
+            'code': 'CHAT_FEATURE_DISABLED',
+            'premium': True,
+        }), 403
+    if not current_user.is_authenticated:
+        return jsonify({
+            'error': 'Sign in required for chat.',
+            'code': 'AUTH_REQUIRED',
+            'premium': True,
+        }), 401
+    if not current_user.is_premium():
+        return jsonify({
+            'error': 'Chat assistant is a Premium feature. Coming soon for subscribers.',
+            'code': 'PREMIUM_REQUIRED',
+            'premium': True,
+        }), 403
+    return jsonify({'error': 'Chat unavailable.', 'code': 'CHAT_DENIED'}), 403
+
+
 @app.context_processor
 def inject_globals():
     """Inject global variables into all templates"""
@@ -191,7 +239,9 @@ def inject_globals():
         'now': datetime.now,
         'today': date.today().isoformat(),
         'current_user': current_user,
-        'is_authenticated': current_user.is_authenticated if current_user else False
+        'is_authenticated': current_user.is_authenticated if current_user else False,
+        'feature_chat_enabled': is_chat_feature_enabled(),
+        'chat_assistant_available': can_use_chat_assistant(),
     }
 
 
@@ -2162,7 +2212,20 @@ def api_usda_food(fdc_id):
 
 @app.route('/api/chat/health', methods=['GET'])
 def api_chat_health():
-    return jsonify({'ok': chat_configured()})
+    if not can_use_chat_assistant():
+        return jsonify({
+            'ok': False,
+            'configured': chat_configured(),
+            'feature_enabled': is_chat_feature_enabled(),
+            'premium_required': True,
+            'available': False,
+        })
+    return jsonify({
+        'ok': chat_configured(),
+        'configured': chat_configured(),
+        'feature_enabled': True,
+        'available': True,
+    })
 
 
 def _chat_context_for_toddler(toddler):
@@ -2276,7 +2339,11 @@ def api_chat():
       summary: optional rolling summary of older turns
     }
     Handles one optional tool round-trip server-side.
+    Premium-only; also requires FEATURE_CHAT_ENABLED=true.
     """
+    if not can_use_chat_assistant():
+        return _chat_access_denied_response()
+
     data = request.json or {}
     toddler_id = data.get('toddler_id')
     messages = data.get('messages') or []
@@ -2379,7 +2446,11 @@ def api_chat_summarize():
     """
     Fold older chat turns into a rolling session summary.
     Body: { toddler_id, messages: [...], prior_summary?: string }
+    Premium-only; also requires FEATURE_CHAT_ENABLED=true.
     """
+    if not can_use_chat_assistant():
+        return _chat_access_denied_response()
+
     data = request.json or {}
     toddler_id = data.get('toddler_id')
     messages = data.get('messages') or []

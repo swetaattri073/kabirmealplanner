@@ -6,7 +6,7 @@ This repository contains **one production app** and an optional React prototype 
 
 | Path | What it is | Deploy this? |
 |------|------------|--------------|
-| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): email/password auth, meal logging, weekly plans, NLP/photo, recipes, food-safety, floating OpenAI chat with session memory, USDA lookups, audit logs | **Yes — production** |
+| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): email/password auth, meal logging, weekly plans, NLP/photo, recipes, food-safety, USDA lookups, audit logs; AI chat is Premium / coming soon | **Yes — production** |
 | Repo root (`src/`, `server/`) | Earlier React prototype — features ported into Flask. Reference only | Optional / local |
 
 **Full docs:**  
@@ -21,7 +21,7 @@ This repository contains **one production app** and an optional React prototype 
 - **Database:** SQLite (default, Docker volume) or PostgreSQL
 - **Auth:** Email/password (social login removed for now)
 - **Frontend:** Jinja2, HTML/CSS, vanilla JS, PWA
-- **AI:** OpenAI chat (+ rolling chat summaries)
+- **AI:** OpenAI chat (Premium-only, feature-flagged / coming soon)
 - **Deploy:** Docker / gunicorn (also Render, Railway, Fly, AWS)
 
 ---
@@ -64,7 +64,7 @@ cd kabirmealplanner/toddler-meal-planner
 
 ## Recent product notes
 
-- Chat keeps the **last 10 messages** per visit and **summarizes** older turns; clears after **session end** or **15 min** inactivity  
+- AI Chat Assistant is a **Premium** feature (Coming soon on Account); hidden behind `FEATURE_CHAT_ENABLED`  
 - Chat plan updates only touch **future unlogged** slots; meal history is separate  
 - Secrets belong in **`~/meal-data/.env`**, not one-off `docker run -e` flags  
 - Sign-in is **email/password only** for now  
