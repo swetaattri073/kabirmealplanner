@@ -1,258 +1,264 @@
-# Toddler Meal Planner
+# LittleBowl (Toddler Meal Planner)
 
-A personalized meal planning application for Indian toddlers (6 months - 5 years). Track daily meals, get nutrition insights, and receive customized meal plans based on your child's preferences and nutritional needs.
+Personalized meal planning for Indian toddlers (about 6 months–5 years) — **Little meals, big growth.**
 
-## Features
+**Production app:** this folder (`toddler-meal-planner/`).  
+The React app at the repo root is an optional prototype; features live here in Flask.
 
-### Core Features
+---
 
-- **Multi-toddler Support**: Track multiple children with individual profiles
-- **Age-based Recommendations**: Meal schedules and RDA automatically adjusted for age
-- **Indian Food Database**: 68+ pre-loaded Indian foods with complete nutritional data
-- **Allergy Management**: Filter foods based on allergens (dairy, gluten, nuts, etc.)
-- **Dietary Preferences**: Support for vegetarian, eggetarian, and non-vegetarian diets
+## Tech stack
 
-### Daily Tracking
+| Layer | Technology |
+|-------|------------|
+| Backend | Python 3.8+, **Flask 3**, Flask-Login, Flask-CORS |
+| ORM / DB | **SQLAlchemy** + **SQLite** by default (`instance/toddler_meals.db`); optional **PostgreSQL** via `DATABASE_URL` |
+| Auth | Email/password (**bcrypt**), **Google** + **Facebook/Instagram** OAuth via **Authlib** |
+| AI chat | **OpenAI** Chat Completions (`gpt-4o-mini` by default) |
+| Nutrition extras | **USDA FoodData Central** API (optional), Open Food Facts enrichment |
+| Frontend | Server-rendered **Jinja2** templates, HTML/CSS, vanilla JS, **PWA** (installable) |
+| Deploy | **Docker** / Compose, **gunicorn**; also Render, Railway, Fly, Lightsail |
+| Secrets & data | Docker volume `~/meal-data` → `/app/instance` (DB + `.env`) |
 
-- **Meal Logging**: Quick logging of breakfast, lunch, dinner, and snacks
-- **Portion Tracking**: Record how much was actually eaten (0-100%)
-- **Reaction Recording**: Track if your toddler loved, liked, or refused foods
-- **Custom Foods**: Add foods not in the database
+---
 
-### Nutrition Analysis
+## Features (current)
 
-- **Real-time RDA Tracking**: See daily progress for calories, protein, iron, calcium, and vitamins
-- **Weekly Summaries**: Comprehensive nutrition reports for the week
-- **Deficiency Alerts**: Get warned when key nutrients (especially iron, B12, Vitamin D) are low
-- **Food Recommendations**: Smart suggestions to fill nutrition gaps
+### Profiles & diet
+- Multi-toddler profiles (logged-in or anonymous session)
+- Age-based schedules and ICMR-NIN style RDA targets
+- Vegetarian / eggetarian / non-vegetarian filters
+- Allergy hard-excludes from the food DB
+- Large Indian food database with nutrients, allergens, servings, prep tips
 
-### Meal Planning
+### Logging & nutrition
+- Log meals (multi-item), portions, reactions, notes, optional photo
+- Edit / replace logged meals; history is never wiped by plan regenerate
+- Daily + weekly nutrition, alerts, preference learning from reactions
+- Custom foods + enrichment
 
-- **Weekly Meal Plans**: Auto-generated plans based on:
-  - Your toddler's food preferences (learns what they like!)
-  - Current nutrition gaps
-  - Variety (avoids repetition)
-  - Age-appropriate foods
-- **Adult Meal Adaptation**: Input what adults are eating, get toddler-friendly versions
-- **Preference Learning**: The system learns from logged reactions and suggests preferred foods more often
+### Weekly plans & recipes
+- Auto-generated weekly plans (preferences, gaps, variety, diet)
+- Chat can update **future unlogged** slots only
+- Regenerate replaces future unlogged slots; past + already-logged kept
+- Recipe cards for foods; plan meals link into Recipes
 
-### Ported from the React prototype
+### Chat assistant
+- Floating OpenAI assistant (tips + Q&A + plan tools + food feedback)
+- **Session memory:** last **10** messages in `sessionStorage`; older turns summarized
+- History wiped when the **browser session ends** or after **15 minutes** of site inactivity
+- Needs `OPENAI_API_KEY`
 
-- **Floating chat assistant** (bottom-right): rotating tip messages + OpenAI Q&A about today's plan, diet, and safety. Requires `OPENAI_API_KEY` in `.env`. Ask it to implement recommendations and it updates **future** plan slots only (logged meals are never deleted).
-- **Food safety rules**: honey, choking hazards, mercury fish, caffeine, and more — available via `/api/food-safety/*`.
-- **Recipes library**: every food in the database has a recipe card; weekly plan meals link to Recipes.
-- **USDA FoodData Central** lookups (optional): `/api/nutrition/usda/*` with `USDA_FDC_API_KEY` (falls back to DEMO_KEY).
+### Safety & extras
+- Food-safety rules (honey, choking hazards, etc.)
+- USDA lookups (optional key)
+- PWA “Add to Home Screen” prompt
+- Audit-friendly logging hooks when present on deployed branches (`instance/logs/`, `audit_logs` API)
 
-### Data storage & redeploys
+---
 
-Logged meals live in the `meal_logs` SQLite table (toddler, food, date, meal type, portion, reaction, notes, photo). Profiles, preferences, and weekly plans are separate tables in the same DB file (`instance/toddler_meals.db`).
+## Local development
 
-Always mount `-v ~/meal-data:/app/instance` and keep secrets in **`~/meal-data/.env`** (same volume). That way both history and `OPENAI_API_KEY` survive redeploys.
-
-## Installation
-
-### Local Development
-
-#### Prerequisites
-- Python 3.8+
-- pip
-
-#### Setup
-
-1. Clone the repository:
 ```bash
-git clone <repository-url>
 cd toddler-meal-planner
-```
-
-2. Install dependencies:
-```bash
+python3 -m venv .venv && source .venv/bin/activate   # optional
 pip install -r requirements.txt
-```
-
-3. Run the application:
-```bash
+cp .env.example .env
+# edit .env — at least SECRET_KEY=... ; OPENAI_API_KEY=... for chat
 python3 app.py
 ```
 
-4. Open your browser to `http://localhost:5000`
+Open `http://localhost:5000`.
 
-### Deploy to Production
+---
 
-#### Option 1: Docker
+## Production deployment (Docker — recommended)
+
+On your VPS (Lightsail, DigitalOcean, etc.):
 
 ```bash
+# First time only
+git clone https://github.com/swetaattri073/kabirmealplanner.git
+cd kabirmealplanner/toddler-meal-planner
+
 mkdir -p ~/meal-data
 cp -n .env.example ~/meal-data/.env
-# edit ~/meal-data/.env — OPENAI_API_KEY=... and SECRET_KEY=...
+# edit ~/meal-data/.env — see Environment variables below
 
-docker build -t meal-planner .
-docker run -d --name meal-planner --restart always \
+sudo docker build -t meal-planner .
+sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
+sudo docker run -d --name meal-planner --restart always \
   -p 80:5000 \
   -v ~/meal-data:/app/instance \
   --env-file ~/meal-data/.env \
   meal-planner
-
-# Or Compose (same volume; app loads /app/instance/.env automatically)
-docker compose up -d --build
 ```
 
-Secrets in `~/meal-data/.env` persist across container rebuilds together with the database.
-
-#### Option 2: Heroku
+**Update / redeploy** (keeps DB + secrets):
 
 ```bash
-# Install Heroku CLI, then:
-heroku create your-app-name
-git push heroku main
+cd ~/kabirmealplanner && git pull origin main
+cd toddler-meal-planner
+sudo docker build -t meal-planner .
+sudo docker stop meal-planner && sudo docker rm meal-planner
+sudo docker run -d --name meal-planner --restart always \
+  -p 80:5000 \
+  -v ~/meal-data:/app/instance \
+  --env-file ~/meal-data/.env \
+  meal-planner
 ```
 
-#### Option 3: Render.com
+| Host path | Container | Purpose |
+|-----------|-----------|---------|
+| `~/meal-data/toddler_meals.db` | `/app/instance/toddler_meals.db` | Users, toddlers, logs, plans |
+| `~/meal-data/.env` | `/app/instance/.env` | Secrets (`OPENAI_API_KEY`, OAuth, `SECRET_KEY`) |
+| `~/meal-data/logs/` | `/app/instance/logs/` | App/audit log files (when audit logging is enabled) |
 
-1. Connect your GitHub repository to Render
-2. The `render.yaml` file will configure the deployment automatically
-3. Your app will be live at `https://your-app.onrender.com`
+More hosts (Render, App Runner, Fly): see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-#### Option 4: Fly.io
+---
+
+## Environment variables
+
+Put these in **`~/meal-data/.env`** in production (or `toddler-meal-planner/.env` locally).
+
+| Variable | Required? | Purpose |
+|----------|-----------|---------|
+| `SECRET_KEY` | **Yes** (prod) | Flask sessions / cookies |
+| `OPENAI_API_KEY` | For chat | OpenAI chat + summarization |
+| `OPENAI_CHAT_MODEL` | No | Default `gpt-4o-mini` |
+| `DATABASE_URL` | No | Default SQLite under `instance/` |
+| `USDA_FDC_API_KEY` | No | Better USDA rate limits |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | For Google login | See social login below |
+| `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | For Facebook login | See social login below |
+| `SESSION_COOKIE_SECURE` | No | Set `true` only behind HTTPS |
+| `FLASK_ENV` | No | `production` in Docker |
+
+---
+
+## Social logins (Google & Facebook / Instagram)
+
+Email/password signup works without any OAuth setup. Social buttons stay **disabled** until the env vars below are set and the container is restarted.
+
+**Important:** Google and Meta almost always require **HTTPS** and a real domain for production redirect URIs. Use `http://localhost:5000/...` only for local testing. Put OAuth secrets in `~/meal-data/.env`, then redeploy with `--env-file`.
+
+### What you need
+
+1. A public **HTTPS** site (recommended), e.g. `https://yourdomain.com`
+2. Provider **Client ID** + **Client Secret**
+3. Exact **Authorized redirect URIs** matching the app:
+   - Google → `https://YOUR_DOMAIN/authorize/google`
+   - Facebook → `https://YOUR_DOMAIN/authorize/facebook`
+4. Env vars in `.env`, then restart Docker
+
+Callback paths are fixed in the app (`/authorize/google`, `/authorize/facebook`). Login starts at `/login/google` and `/login/facebook`.
+
+---
+
+### Google Sign-In — how to get credentials
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/)
+2. Create or select a project
+3. **APIs & Services → OAuth consent screen**
+   - User type: **External** (or Internal for Workspace-only)
+   - App name, support email, developer contact
+   - Scopes: default email/profile is enough (`openid`, `email`, `profile`)
+   - Add test users while the app is in **Testing**
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID**
+   - Application type: **Web application**
+   - Name: e.g. `LittleBowl`
+   - **Authorized JavaScript origins:** `https://YOUR_DOMAIN` (and `http://localhost:5000` for local)
+   - **Authorized redirect URIs:**
+     - `https://YOUR_DOMAIN/authorize/google`
+     - `http://localhost:5000/authorize/google` (local only)
+5. Copy **Client ID** and **Client Secret** into `.env`:
 
 ```bash
-# Install flyctl, then:
-flyctl launch
-flyctl deploy
+GOOGLE_CLIENT_ID=........apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=........
 ```
 
-#### Option 5: Railway / Vercel
+6. Restart the app. Google button on Login/Signup should enable.
+7. When ready for all users: Consent screen → **Publish app** (Google may require verification for sensitive scopes; basic sign-in is usually fine).
 
-Just connect your GitHub repo - configuration files are included.
+---
 
-### Install as Mobile App (PWA)
+### Facebook / Instagram Sign-In — how to get credentials
 
-The app is a Progressive Web App and can be installed on phones:
+Consumer **Instagram** login in this app uses **Facebook Login** (Meta). You configure one Facebook app; Instagram appears as the same Meta login flow.
 
-**On Android (Chrome):**
-1. Visit the website
-2. Tap the menu (3 dots)
-3. Select "Add to Home Screen"
+1. Open [Meta for Developers](https://developers.facebook.com/)
+2. **My Apps → Create App** → type suitable for consumer login (e.g. **Consumer**)
+3. Add product: **Facebook Login** → **Web**
+4. **Facebook Login → Settings**
+   - **Valid OAuth Redirect URIs:**
+     - `https://YOUR_DOMAIN/authorize/facebook`
+     - `http://localhost:5000/authorize/facebook` (local)
+5. **App settings → Basic**
+   - Copy **App ID** → `FACEBOOK_CLIENT_ID`
+   - Copy **App Secret** → `FACEBOOK_CLIENT_SECRET`
+   - Add **App Domains**: `YOUR_DOMAIN`
+   - Privacy Policy URL (required before Live mode)
+6. Permissions: request **`email`** (and public profile). In Development mode only roles/testers can log in. For public use: switch app to **Live** and complete App Review if Meta asks for `email`.
+7. Env:
 
-**On iPhone (Safari):**
-1. Visit the website
-2. Tap the Share button
-3. Select "Add to Home Screen"
+```bash
+FACEBOOK_CLIENT_ID=........
+FACEBOOK_CLIENT_SECRET=........
+```
 
-The app will work offline for viewing cached data!
+8. Restart Docker. Facebook button enables; Instagram note on the UI means “sign in with Meta/Facebook.”
 
-## Usage
+---
 
-### Getting Started
+### Social login checklist
 
-1. **Create a Profile**: Enter your toddler's name, age (in months), dietary preference, and any allergies
-2. **Log Meals**: Start logging what your toddler eats daily
-3. **Check Nutrition**: View the dashboard to see nutrition progress
-4. **Get Recommendations**: Use weekly plans and suggestions
+| Step | Google | Facebook |
+|------|--------|----------|
+| Create cloud/dev app | Cloud Console project | Meta app |
+| Redirect URI | `/authorize/google` | `/authorize/facebook` |
+| Env vars | `GOOGLE_CLIENT_*` | `FACEBOOK_CLIENT_*` |
+| HTTPS in production | Strongly required | Strongly required |
+| Publish / Live | Consent screen publish | App Live + review as needed |
+| Restart container after editing `.env` | Yes | Yes |
 
-### Logging a Meal
+**Local tip:** For OAuth on `localhost`, add the localhost redirect URIs above. For a public IP over plain HTTP, providers often block redirects — use a domain + Let’s Encrypt (see `DEPLOYMENT.md`) or a tunnel (e.g. ngrok) pointed at your server.
 
-1. Go to "Log Meal" from the sidebar
-2. Select the meal type (breakfast, lunch, etc.)
-3. Search and select a food from the database (or enter custom)
-4. Record how much was eaten
-5. Log the toddler's reaction (loved, liked, neutral, disliked, refused)
+**Behind a reverse proxy:** ensure Flask generates `https://...` external URLs (proxy `X-Forwarded-Proto` / `ProxyFix`, or set your public URL correctly). Wrong scheme/host → `redirect_uri_mismatch`.
 
-### Adult Meal Adaptation
+---
 
-If you're eating family meals together:
-1. Go to "Log Meal"
-2. Enter what the adults are eating (e.g., "Paneer Butter Masala with Naan")
-3. Click "Get Toddler Version"
-4. Get specific adaptations and tips for making it toddler-friendly
+## Useful API endpoints
 
-## Nutritional Guidelines
+| Area | Endpoints |
+|------|-----------|
+| Auth status | `GET /api/auth/status` |
+| Toddlers / foods / meal logs | `/api/toddlers`, `/api/foods`, `/api/meal-logs` |
+| Nutrition | `/api/nutrition/daily\|weekly\|alerts/:id` |
+| Plans | `GET /api/meal-plan/weekly/:id` (`?regenerate=true`) |
+| Chat | `GET /api/chat/health`, `POST /api/chat`, `POST /api/chat/summarize` |
+| Safety / recipes / USDA | `/api/food-safety/*`, recipes pages, `/api/nutrition/usda/*` |
 
-The app follows **ICMR-NIN (National Institute of Nutrition)** guidelines for Indian children:
+---
 
-### Key Nutrients Tracked
+## Data model (high level)
 
-| Nutrient | 12-24 months | 24-36 months |
-|----------|--------------|--------------|
-| Calories | 1060 kcal | 1240 kcal |
-| Protein | 12g | 15g |
-| Iron | 9mg | 9mg |
-| Calcium | 500mg | 600mg |
-| Vitamin D | 10mcg | 10mcg |
+- **`users`** — accounts (password and/or OAuth)
+- **`toddlers`** — profiles (user-owned or anonymous `session_id`)
+- **`foods`** — catalog + user-added foods
+- **`meal_logs`** — what was actually eaten (never deleted by plan regenerate)
+- **`weekly_plans`** — planned slots
+- **`food_preferences`** — learned likes/dislikes
 
-### Special Focus for Indian Toddlers
+---
 
-- **Iron**: Vegetarian diets can be low in iron. The app highlights iron-rich foods like ragi, spinach, dates
-- **Vitamin B12**: Critical for brain development, mainly in animal products. Vegetarian toddlers need dairy or supplements
-- **Vitamin D**: Most Indian children are deficient. App reminds about sunlight exposure
+## PWA (install on phone)
 
-## API Reference
+- **Android Chrome:** menu → Add to Home Screen  
+- **iPhone Safari:** Share → Add to Home Screen  
 
-### Toddlers
-- `GET /api/toddlers` - List all toddlers
-- `POST /api/toddlers` - Create new toddler
-- `GET /api/toddlers/:id` - Get toddler details
-- `PUT /api/toddlers/:id` - Update toddler
-- `DELETE /api/toddlers/:id` - Delete toddler
-
-### Foods
-- `GET /api/foods` - List foods (filterable by category, age, search)
-- `GET /api/foods/:id` - Get food details
-- `GET /api/foods/categories` - List categories
-- `GET /api/foods/allergens` - List allergens
-
-### Meal Logs
-- `GET /api/meal-logs` - List meal logs (filterable by toddler, date)
-- `POST /api/meal-logs` - Log a meal (supports `items[]` and `replace_existing`)
-- `PUT /api/meal-logs/:id` - Update meal log
-- `PUT /api/meal-logs/batch` - Update multiple meal log items
-- `DELETE /api/meal-logs/:id` - Delete meal log
-
-### Nutrition
-- `GET /api/nutrition/daily/:toddler_id` - Daily nutrition status
-- `GET /api/nutrition/weekly/:toddler_id` - Weekly nutrition summary
-- `GET /api/nutrition/alerts/:toddler_id` - Nutrition alerts
-- `GET /api/nutrition/rda/:age_months` - Get RDA for age
-
-### Meal Planning
-- `GET /api/meal-plan/weekly/:toddler_id` - Get/generate weekly plan
-- `GET /api/meal-plan/daily/:toddler_id` - Get daily suggestions
-- `POST /api/adapt-meal/:toddler_id` - Adapt adult meal for toddler
-
-### Dashboard
-- `GET /api/dashboard/:toddler_id` - All dashboard data in one call
-
-## Technology Stack
-
-- **Backend**: Python, Flask
-- **Database**: SQLite with SQLAlchemy ORM
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
-- **Styling**: Custom CSS with CSS variables
-
-## Food Database
-
-The app includes 68+ Indian foods with complete nutritional data:
-
-- **Grains**: Rice, Roti, Paratha, Idli, Dosa, Upma, Poha, Khichdi, Ragi, Daliya, Oats
-- **Dals**: Moong, Toor, Masoor, Chana, Rajma, Chole, Sambar
-- **Vegetables**: Potato, Sweet Potato, Carrot, Spinach, Pumpkin, Peas, Beetroot, Beans
-- **Fruits**: Banana, Apple, Mango, Papaya, Chikoo, Orange, Watermelon
-- **Dairy**: Milk, Curd, Paneer, Cheese, Ghee, Buttermilk
-- **Protein**: Eggs, Chicken, Fish
-- **Combos**: Dal Rice, Palak Paneer, Aloo Paratha, Curd Rice, Uttapam, Besan Chilla
-
-Each food includes:
-- Complete macronutrients (calories, protein, carbs, fat, fiber)
-- Micronutrients (calcium, iron, zinc, vitamins A, C, D, B12, folate)
-- Age suitability
-- Allergen information
-- Toddler-friendly preparation tips
-- Recommended serving sizes by age
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
+---
 
 ## License
 
-MIT License
+MIT

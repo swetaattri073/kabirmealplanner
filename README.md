@@ -6,14 +6,26 @@ This repository contains **one production app** and an optional React prototype 
 
 | Path | What it is | Deploy this? |
 |------|------------|--------------|
-| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): auth, meal logging, weekly plans, NLP/photo, recipes, food-safety checks, floating OpenAI chat, USDA lookups, install popup, branding | **Yes — this is production** |
-| Repo root (`src/`, `server/`) | Earlier React prototype — features have been **ported into Flask**. Keep for reference; do not deploy as the main product | Optional / local only |
+| **`toddler-meal-planner/`** | **Complete LittleBowl app** (Flask + SQLite + PWA): auth, social login, meal logging, weekly plans, NLP/photo, recipes, food-safety, floating OpenAI chat with session memory, USDA lookups | **Yes — production** |
+| Repo root (`src/`, `server/`) | Earlier React prototype — features ported into Flask. Reference only | Optional / local |
+
+**Full docs (features, tech stack, deploy, social login):**  
+→ [`toddler-meal-planner/README.md`](toddler-meal-planner/README.md)  
+→ [`toddler-meal-planner/DEPLOYMENT.md`](toddler-meal-planner/DEPLOYMENT.md)
+
+---
+
+## Tech stack (production)
+
+- **Backend:** Python, Flask, SQLAlchemy, Flask-Login, Authlib (OAuth)
+- **Database:** SQLite (default, Docker volume) or PostgreSQL
+- **Frontend:** Jinja2, HTML/CSS, vanilla JS, PWA
+- **AI:** OpenAI chat (+ rolling chat summaries)
+- **Deploy:** Docker / gunicorn (also Render, Railway, Fly, AWS)
 
 ---
 
 ## Deploy the complete app (Flask LittleBowl)
-
-Use these commands on your server. This keeps your existing UI, data, and features.
 
 ```bash
 cd ~/kabirmealplanner && git pull origin main
@@ -21,7 +33,8 @@ cd toddler-meal-planner
 
 mkdir -p ~/meal-data
 cp -n .env.example ~/meal-data/.env
-# edit ~/meal-data/.env → OPENAI_API_KEY=... and SECRET_KEY=...
+# edit ~/meal-data/.env → SECRET_KEY, OPENAI_API_KEY,
+# and optionally GOOGLE_* / FACEBOOK_* for social login
 
 sudo docker build -t meal-planner .
 sudo docker stop meal-planner 2>/dev/null; sudo docker rm meal-planner 2>/dev/null
@@ -32,11 +45,10 @@ sudo docker run -d --name meal-planner --restart always \
   meal-planner
 ```
 
-- App URL: `http://YOUR_SERVER_IP`
-- **DB + `.env` both live in `~/meal-data`** and survive redeploys
-- More options: see [`toddler-meal-planner/DEPLOYMENT.md`](toddler-meal-planner/DEPLOYMENT.md)
+- App: `http://YOUR_SERVER_IP` (use HTTPS + a domain for social login)
+- **DB + `.env` stay in `~/meal-data`** across redeploys
 
-### First-time setup (if the repo is not on the server yet)
+### First-time server setup
 
 ```bash
 sudo yum update -y   # or apt update
@@ -45,54 +57,44 @@ sudo systemctl start docker && sudo systemctl enable docker
 
 git clone https://github.com/swetaattri073/kabirmealplanner.git
 cd kabirmealplanner/toddler-meal-planner
-# then run the docker build / run commands above
+# then docker build / run above
 ```
 
 ---
 
-## React prototype (optional — same LittleBowl branding)
+## Social logins — what you need
 
-Styled to match Flask LittleBowl (Nunito, purple/pink gradient, logo mark). Functionality is the separate React planner (profiles in the browser, USDA nutrition, chat). It does **not** replace the Flask production features.
+Buttons on Login/Signup stay disabled until credentials are configured.
 
-### Local development
+| Provider | Get credentials | Env vars | Redirect URI to register |
+|----------|-----------------|----------|---------------------------|
+| **Google** | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → OAuth Web client | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `https://YOUR_DOMAIN/authorize/google` |
+| **Facebook / Instagram** | [Meta for Developers](https://developers.facebook.com/) → Facebook Login | `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET` | `https://YOUR_DOMAIN/authorize/facebook` |
+
+1. Create the OAuth app at the provider  
+2. Add the **exact** redirect URI (HTTPS in production)  
+3. Put Client ID/Secret in `~/meal-data/.env`  
+4. Redeploy / restart the container  
+
+**Instagram** consumer sign-in uses **Facebook Login** (same Meta app).  
+Step-by-step screenshots-level guide: [`toddler-meal-planner/README.md`](toddler-meal-planner/README.md#social-logins-google--facebook--instagram).
+
+---
+
+## Recent product notes
+
+- Chat keeps the **last 10 messages** per visit and **summarizes** older turns; clears after **session end** or **15 min** inactivity  
+- Chat plan updates only touch **future unlogged** slots; meal history is separate  
+- Secrets belong in **`~/meal-data/.env`**, not one-off `docker run -e` flags  
+
+---
+
+## React prototype (optional)
 
 ```bash
 npm install
-npm run dev      # terminal 1 — UI
-npm run server   # terminal 2 — USDA + OpenAI proxy
+npm run dev      # UI
+npm run server   # USDA + OpenAI proxy
 ```
 
-Optional `.env` at the repo root (see `.env.example`):
-
-- `USDA_FDC_API_KEY` — real nutrition data (falls back to USDA `DEMO_KEY`)
-- `OPENAI_API_KEY` — enables the Chat tab
-
-### Optional React Docker (not production)
-
-From the **repo root** only if you intentionally want the React prototype:
-
-```bash
-cd ~/kabirmealplanner
-cp .env.example .env   # optional API keys
-sudo docker build -t littlebowl-app .
-sudo docker run -d --name littlebowl-app --restart always \
-  -p 8080:5000 --env-file .env littlebowl-app
-```
-
-Use port **8080** (or another free port) so it does not conflict with Flask on port 80.
-
-### Project structure (React)
-
-- `src/foodEngine.js` — weekly plan rules engine
-- `src/defaultProfile.js` — starter profiles + recipes
-- `src/foodSafety.js` — age-appropriate safety flags
-- `src/nutritionApi.js` / `server/` — USDA + OpenAI proxy
-- `src/App.jsx` — UI (LittleBowl-branded)
-
----
-
-## Important
-
-- **Production users should only deploy `toddler-meal-planner/`.**
-- Do not run Flask and a root-level React container both on port 80 at once.
-- Keep using `-v ~/meal-data:/app/instance` so you do not lose logged meals.
+Not required for production. See root `.env.example` for `OPENAI_API_KEY` / `USDA_FDC_API_KEY`.
