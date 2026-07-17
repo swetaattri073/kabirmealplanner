@@ -32,13 +32,16 @@ from nutrient_lookup import lookup_nutrients, guess_category
 from food_safety import check_food_safety, check_foods_safety, safety_rules_for_prompt
 from chat_assistant import (
     LOG_FOOD_FEEDBACK_TOOL,
+    UPDATE_WEEKLY_PLAN_TOOL,
+    CHAT_TOOLS,
     build_system_prompt,
     find_matching_food,
 )
 from chat_service import call_openai_chat, chat_configured, ChatConfigError, ChatRequestError
-from recipes import list_recipes
+from recipes import list_recipes, get_recipe, find_recipe_for_food_name
 from usda_lookup import search_foods as usda_search_foods, get_food as usda_get_food, using_demo_key as usda_using_demo_key
 import json as _json
+import shutil
 
 # Create Flask app
 app = Flask(__name__)
@@ -61,8 +64,23 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
-# Database configuration - supports both SQLite and PostgreSQL
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///toddler_meals.db')
+# Database configuration - supports both SQLite and PostgreSQL.
+# SQLite defaults to instance/toddler_meals.db so Docker volume mounts at
+# /app/instance (e.g. -v ~/meal-data:/app/instance) persist users + meal history
+# across rebuilds/redeploys.
+_INSTANCE_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance')
+os.makedirs(_INSTANCE_DIR, exist_ok=True)
+_DEFAULT_SQLITE = 'sqlite:///' + os.path.join(_INSTANCE_DIR, 'toddler_meals.db')
+# One-time migrate from older CWD-relative DB path if present
+_legacy_db = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'toddler_meals.db')
+_instance_db = os.path.join(_INSTANCE_DIR, 'toddler_meals.db')
+if os.path.exists(_legacy_db) and not os.path.exists(_instance_db):
+    try:
+        shutil.copy2(_legacy_db, _instance_db)
+    except OSError:
+        pass
+
+database_url = os.environ.get('DATABASE_URL', _DEFAULT_SQLITE)
 # Fix for Heroku PostgreSQL URL format
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
@@ -580,13 +598,30 @@ def preferences_page(toddler_id):
 
 @app.route('/recipes/<int:toddler_id>')
 def recipes_page(toddler_id):
-    """Recipe ideas ported from the React app"""
+    """Recipe ideas — curated + one card per food in the database"""
     toddler = Toddler.query.get_or_404(toddler_id)
     if not owns_toddler(toddler):
         flash('You do not have access to this profile.', 'error')
         return redirect(url_for('home'))
     toddlers = get_user_toddlers()
-    return render_template('recipes.html', toddler=toddler, toddlers=toddlers, recipes=list_recipes())
+    q = request.args.get('q', '').strip() or None
+    category = request.args.get('category', '').strip() or None
+    highlight = request.args.get('highlight', '').strip() or None
+    recipes = list_recipes(category=category, q=q)
+    # Put highlighted recipe first when present
+    if highlight:
+        recipes = sorted(recipes, key=lambda r: 0 if r.get('slug') == highlight else 1)
+    categories = sorted({r.get('category') for r in list_recipes() if r.get('category')})
+    return render_template(
+        'recipes.html',
+        toddler=toddler,
+        toddlers=toddlers,
+        recipes=recipes,
+        categories=categories,
+        q=q or '',
+        category=category or '',
+        highlight=highlight or '',
+    )
 
 
 # ==================== API ROUTES ====================
@@ -2110,7 +2145,26 @@ def get_dashboard_data(toddler_id):
 
 @app.route('/api/recipes', methods=['GET'])
 def api_recipes():
-    return jsonify({'recipes': list_recipes()})
+    q = request.args.get('q')
+    category = request.args.get('category')
+    return jsonify({'recipes': list_recipes(category=category, q=q)})
+
+
+@app.route('/api/recipes/<slug>', methods=['GET'])
+def api_recipe_detail(slug):
+    recipe = get_recipe(slug)
+    if not recipe:
+        return jsonify({'error': 'Recipe not found'}), 404
+    return jsonify({'recipe': recipe})
+
+
+@app.route('/api/recipes/for-food', methods=['GET'])
+def api_recipe_for_food():
+    name = request.args.get('name', '').strip()
+    recipe = find_recipe_for_food_name(name)
+    if not recipe:
+        return jsonify({'recipe': None})
+    return jsonify({'recipe': recipe})
 
 
 @app.route('/api/food-safety/rules', methods=['GET'])
@@ -2304,9 +2358,9 @@ def api_chat():
         if role in ('user', 'assistant') and content:
             api_messages.append({'role': role, 'content': content})
 
-    tool_result = None
+    tool_results = []
     try:
-        first = call_openai_chat(messages=api_messages, tools=[LOG_FOOD_FEEDBACK_TOOL])
+        first = call_openai_chat(messages=api_messages, tools=CHAT_TOOLS)
         choice = (first.get('choices') or [{}])[0]
         assistant_msg = choice.get('message') or {}
 
@@ -2321,8 +2375,14 @@ def api_chat():
                 except Exception:
                     args = {}
                 if name == 'log_food_feedback':
-                    tool_result = _apply_chat_food_feedback(toddler, args, foods)
-                    content = _json.dumps(tool_result)
+                    result = _apply_chat_food_feedback(toddler, args, foods)
+                    tool_results.append({'tool': name, 'result': result})
+                    content = _json.dumps(result)
+                elif name == 'update_weekly_plan':
+                    planner = MealPlanner(db.session)
+                    result = planner.apply_future_plan_updates(toddler, args.get('changes') or [])
+                    tool_results.append({'tool': name, 'result': result})
+                    content = _json.dumps(result)
                 else:
                     content = _json.dumps({'error': f'Unknown tool {name}'})
                 api_messages.append({
@@ -2330,14 +2390,15 @@ def api_chat():
                     'tool_call_id': call.get('id'),
                     'content': content,
                 })
-            second = call_openai_chat(messages=api_messages, tools=[LOG_FOOD_FEEDBACK_TOOL])
+            second = call_openai_chat(messages=api_messages, tools=CHAT_TOOLS)
             choice = (second.get('choices') or [{}])[0]
             assistant_msg = choice.get('message') or {}
 
         reply = assistant_msg.get('content') or 'Got it.'
         return jsonify({
             'message': {'role': 'assistant', 'content': reply},
-            'tool_result': tool_result,
+            'tool_result': tool_results[0]['result'] if len(tool_results) == 1 else None,
+            'tool_results': tool_results,
         })
     except ChatConfigError as exc:
         status = 501 if exc.code == 'NO_API_KEY' else 400

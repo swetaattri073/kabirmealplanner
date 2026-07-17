@@ -563,6 +563,7 @@ function renderWeeklyPlan(plan) {
     }
     
     const today = new Date().toISOString().split('T')[0];
+    const toddlerId = document.body.dataset.toddlerId;
     
     let html = '';
     plan.days.forEach(day => {
@@ -577,10 +578,12 @@ function renderWeeklyPlan(plan) {
                 <div class="day-meals">
                     ${Object.entries(day.meals || {}).map(([mealType, meal]) => {
                         const name = getPlannedMealDisplayName(meal) || 'Not planned';
+                        const recipeLinks = buildRecipeLinks(meal, toddlerId);
                         return `
                         <div class="day-meal">
                             <div class="day-meal-type">${getMealTypeIcon(mealType)} ${formatMealType(mealType)}</div>
                             <div class="day-meal-food">${escapeHtml(name)}</div>
+                            ${recipeLinks}
                         </div>`;
                     }).join('')}
                 </div>
@@ -589,6 +592,26 @@ function renderWeeklyPlan(plan) {
     });
     
     container.innerHTML = html;
+}
+
+function buildRecipeLinks(meal, toddlerId) {
+    if (!toddlerId || !meal) return '';
+    const links = [];
+    const seen = new Set();
+    const add = (slug, label) => {
+        if (!slug || seen.has(slug)) return;
+        seen.add(slug);
+        const href = `/recipes/${toddlerId}?highlight=${encodeURIComponent(slug)}#${encodeURIComponent(slug)}`;
+        links.push(`<a class="recipe-plan-link" href="${href}"><i class="fas fa-book-open"></i> ${escapeHtml(label || 'Recipe')}</a>`);
+    };
+
+    if (meal.recipe_slug) {
+        add(meal.recipe_slug, meal.recipe_name || 'Recipe');
+    }
+    (meal.recipes || []).forEach((r) => add(r.slug, r.name || 'Recipe'));
+
+    if (!links.length) return '';
+    return `<div class="day-meal-recipes">${links.join('')}</div>`;
 }
 
 function navigateWeek(direction) {

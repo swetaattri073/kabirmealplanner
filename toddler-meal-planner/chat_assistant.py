@@ -49,6 +49,55 @@ LOG_FOOD_FEEDBACK_TOOL = {
     },
 }
 
+UPDATE_WEEKLY_PLAN_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "update_weekly_plan",
+        "description": (
+            "Applies meal recommendations into the toddler's weekly plan in the app. "
+            "Call this when the parent asks to implement / add / change / put something on the plan "
+            "(e.g. \"add chicken to lunch this week\", \"put that on Thursday dinner\", "
+            "\"update the plan with your suggestion\"). "
+            "Only future unlogged slots are changed — past days and already-logged meals are never deleted. "
+            "Do not call this just for advice; only when the parent wants the app plan updated."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "changes": {
+                    "type": "array",
+                    "description": "One or more plan updates to apply.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "foodName": {
+                                "type": "string",
+                                "description": "Food name from the toddler food list / database.",
+                            },
+                            "mealType": {
+                                "type": "string",
+                                "description": "breakfast, lunch, dinner, mid_morning_snack, or evening_snack. Optional.",
+                            },
+                            "day": {
+                                "type": "string",
+                                "description": "Weekday name like Monday. Optional — if omitted, applies to the next few matching future slots.",
+                            },
+                            "note": {
+                                "type": "string",
+                                "description": "Short reason shown on the plan.",
+                            },
+                        },
+                        "required": ["foodName"],
+                    },
+                }
+            },
+            "required": ["changes"],
+        },
+    },
+}
+
+CHAT_TOOLS = [LOG_FOOD_FEEDBACK_TOOL, UPDATE_WEEKLY_PLAN_TOOL]
+
 SEVERITY_LABEL = {"avoid": "Avoid", "modify": "Modify how it's served", "limit": "Limit"}
 
 
@@ -122,6 +171,7 @@ You can help with:
 - Whether a specific food is recommended for a toddler/infant, and a safer alternative if it isn't — use the reference above first.
 - General toddler/infant feeding questions: portion sizes, how many tries a new food typically takes (usually 10-15), iron-rich foods, allergen introduction, hydration, picky eating, textures, mealtime behavior.
 - Logging feedback: when the parent reports that {toddler_name} refused, disliked, loved, or tried a food, or is being selective/picky in general, call log_food_feedback with the closest matching food name from the list above (leave foodName empty for a general note). Never suggest removing a refused food from rotation — toddlers often need 10-15 tries; the app keeps refused foods in rotation at a lower frequency.
+- Updating the plan: when the parent asks you to implement a recommendation in the weekly plan (e.g. "add that to lunch", "put chicken on Thursday", "update the plan"), call update_weekly_plan. The app will only change future unlogged slots and will never delete logged meal history. Confirm what changed after the tool runs.
 
 Stay strictly on topic: toddler/infant food, nutrition, feeding, and this app's plan. If the parent asks about anything else, politely decline in one short sentence and steer back to toddler food/nutrition.
 

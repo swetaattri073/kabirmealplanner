@@ -199,7 +199,9 @@ cp .env.example .env   # optional
 docker compose up -d --build
 ```
 
-Open `http://YOUR_PUBLIC_IP`. Data persists in `~/meal-data`.
+Open `http://YOUR_PUBLIC_IP`.
+
+**Data persistence (important):** The SQLite database is `/app/instance/toddler_meals.db` (users, toddlers, `meal_logs`, preferences, weekly plans). The `-v ~/meal-data:/app/instance` mount keeps that data on the host across rebuilds and redeploys. Do not delete `~/meal-data` unless you want a full wipe. Meal log history is never deleted by plan regeneration or chat plan updates.
 
 ---
 

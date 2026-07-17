@@ -38,10 +38,14 @@ A personalized meal planning application for Indian toddlers (6 months - 5 years
 
 ### Ported from the React prototype
 
-- **Floating chat assistant** (bottom-right): rotating tip messages + OpenAI Q&A about today's plan, diet, and safety. Requires `OPENAI_API_KEY` in `.env`.
+- **Floating chat assistant** (bottom-right): rotating tip messages + OpenAI Q&A about today's plan, diet, and safety. Requires `OPENAI_API_KEY` in `.env`. Ask it to implement recommendations and it updates **future** plan slots only (logged meals are never deleted).
 - **Food safety rules**: honey, choking hazards, mercury fish, caffeine, and more — available via `/api/food-safety/*`.
-- **Recipes library**: browsable toddler-friendly recipes under **Recipes** in the sidebar.
+- **Recipes library**: every food in the database has a recipe card; weekly plan meals link to Recipes.
 - **USDA FoodData Central** lookups (optional): `/api/nutrition/usda/*` with `USDA_FDC_API_KEY` (falls back to DEMO_KEY).
+
+### Data storage & redeploys
+
+Logged meals live in the `meal_logs` SQLite table (toddler, food, date, meal type, portion, reaction, notes, photo). Profiles, preferences, and weekly plans are separate tables in the same DB file (`instance/toddler_meals.db`). Always mount `-v ~/meal-data:/app/instance` so redeploys keep history.
 
 ## Installation
 
