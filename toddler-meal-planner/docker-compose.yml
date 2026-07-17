@@ -3,15 +3,13 @@ services:
     build: .
     ports:
       - "80:5000"
-    env_file:
-      - .env
     environment:
-      # Defaults if not set in .env — .env values win for overlapping keys with env_file
       FLASK_ENV: production
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/instance/toddler_meals.db}
     volumes:
-      # User accounts, toddlers, meal_logs, weekly plans, preferences — survive rebuilds
-      - meal_data:/app/instance
+      # Persists SQLite DB and .env (put secrets in ~/meal-data/.env).
+      # The app loads /app/instance/.env automatically on startup.
+      - ${HOME}/meal-data:/app/instance
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/"]
@@ -19,7 +17,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  meal_data:
-    driver: local

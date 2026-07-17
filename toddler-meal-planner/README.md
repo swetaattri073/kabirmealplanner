@@ -45,7 +45,9 @@ A personalized meal planning application for Indian toddlers (6 months - 5 years
 
 ### Data storage & redeploys
 
-Logged meals live in the `meal_logs` SQLite table (toddler, food, date, meal type, portion, reaction, notes, photo). Profiles, preferences, and weekly plans are separate tables in the same DB file (`instance/toddler_meals.db`). Always mount `-v ~/meal-data:/app/instance` so redeploys keep history.
+Logged meals live in the `meal_logs` SQLite table (toddler, food, date, meal type, portion, reaction, notes, photo). Profiles, preferences, and weekly plans are separate tables in the same DB file (`instance/toddler_meals.db`).
+
+Always mount `-v ~/meal-data:/app/instance` and keep secrets in **`~/meal-data/.env`** (same volume). That way both history and `OPENAI_API_KEY` survive redeploys.
 
 ## Installation
 
@@ -80,20 +82,22 @@ python3 app.py
 #### Option 1: Docker
 
 ```bash
-cp -n .env.example .env
-# edit .env — set OPENAI_API_KEY=... and SECRET_KEY=...
+mkdir -p ~/meal-data
+cp -n .env.example ~/meal-data/.env
+# edit ~/meal-data/.env — OPENAI_API_KEY=... and SECRET_KEY=...
 
-# Compose (reads .env via env_file)
-docker compose up -d --build
-
-# Or manually
 docker build -t meal-planner .
 docker run -d --name meal-planner --restart always \
   -p 80:5000 \
   -v ~/meal-data:/app/instance \
-  --env-file .env \
+  --env-file ~/meal-data/.env \
   meal-planner
+
+# Or Compose (same volume; app loads /app/instance/.env automatically)
+docker compose up -d --build
 ```
+
+Secrets in `~/meal-data/.env` persist across container rebuilds together with the database.
 
 #### Option 2: Heroku
 
