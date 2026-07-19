@@ -208,26 +208,49 @@ def get_admin_emails():
     return {e.strip().lower() for e in raw.split(',') if e.strip()}
 
 
-def is_admin_user(user=None):
-    """True if the user is logged in and their email is in ADMIN_EMAILS."""
-    u = user if user is not None else current_user
+def get_admin_password():
+    """Shared admin password from ADMIN_PASSWORD env."""
+    return (os.environ.get('ADMIN_PASSWORD') or '').strip()
+
+
+def admin_configured():
+    """Admin login is available only when both email allowlist and password are set."""
+    return bool(get_admin_emails() and get_admin_password())
+
+
+def is_admin_session():
+    """True when this browser session passed /admin env login."""
+    if not admin_configured():
+        return False
+    if not session.get('admin_authenticated'):
+        return False
+    email = (session.get('admin_email') or '').strip().lower()
+    return bool(email) and email in get_admin_emails()
+
+
+def _admin_password_matches(provided):
+    expected = get_admin_password()
+    if not expected or provided is None:
+        return False
     try:
-        if not u or not getattr(u, 'is_authenticated', False):
-            return False
+        return secrets.compare_digest(
+            str(provided).encode('utf-8'),
+            expected.encode('utf-8'),
+        )
     except Exception:
         return False
-    emails = get_admin_emails()
-    if not emails:
-        return False
-    return (getattr(u, 'email', None) or '').strip().lower() in emails
+
+
+def clear_admin_session():
+    session.pop('admin_authenticated', None)
+    session.pop('admin_email', None)
 
 
 def admin_required(f):
-    """Allow only ADMIN_EMAILS users. Everyone else gets an indistinguishable 404."""
+    """Require a successful /admin env login. Others get an indistinguishable 404."""
     @wraps(f)
     def wrapped(*args, **kwargs):
-        # Do not redirect to login with next=/admin — that would expose the URL.
-        if not current_user.is_authenticated or not is_admin_user(current_user):
+        if not is_admin_session():
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'Resource not found'}), 404
             return render_template('404.html'), 404
@@ -2547,11 +2570,49 @@ def api_chat_summarize():
 
 # ==================== ADMIN DASHBOARD ====================
 
-@app.route('/admin')
-@admin_required
+@app.route('/admin', methods=['GET'])
 def admin_dashboard():
-    """Operator dashboard: users, toddlers, meal-logging engagement."""
-    return render_template('admin/dashboard.html', toddler=None, toddlers=[])
+    """Operator dashboard. Shows env-based login when not authenticated."""
+    if not admin_configured():
+        return render_template('404.html'), 404
+    if not is_admin_session():
+        return render_template('admin/login.html', error=None)
+    return render_template(
+        'admin/dashboard.html',
+        toddler=None,
+        toddlers=[],
+        admin_email=session.get('admin_email'),
+    )
+
+
+@app.route('/admin/login', methods=['POST'])
+def admin_login():
+    """Authenticate with ADMIN_EMAILS + ADMIN_PASSWORD from .env."""
+    if not admin_configured():
+        return render_template('404.html'), 404
+
+    email = (request.form.get('email') or '').strip().lower()
+    password = request.form.get('password') or ''
+
+    if email in get_admin_emails() and _admin_password_matches(password):
+        session.permanent = True
+        session['admin_authenticated'] = True
+        session['admin_email'] = email
+        return redirect(url_for('admin_dashboard'))
+
+    return render_template(
+        'admin/login.html',
+        error='Invalid email or password.',
+        email=email,
+    ), 401
+
+
+@app.route('/admin/logout', methods=['GET', 'POST'])
+def admin_logout():
+    clear_admin_session()
+    if not admin_configured():
+        return render_template('404.html'), 404
+    return redirect(url_for('admin_dashboard'))
 
 
 @app.route('/api/admin/stats', methods=['GET'])
