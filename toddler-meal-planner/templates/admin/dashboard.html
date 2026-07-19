@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard | LittleBowl{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header admin-header">
+    <div>
+        <h1><i class="fas fa-chart-line"></i> Admin Dashboard</h1>
+        <p>Parent adoption, toddler profiles, and meal-logging engagement</p>
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh" onclick="loadAdminDashboard()">
+        <i class="fas fa-sync-alt"></i> Refresh
+    </button>
+</div>
+
+<div id="admin-error" class="alert warning" style="display:none; margin-bottom: 1.25rem;"></div>
+
+<!-- Overview -->
+<section class="admin-section">
+    <h2 class="admin-section-title">Overview</h2>
+    <div class="stats-row" id="admin-overview-stats">
+        <div class="stat-card"><div class="stat-content"><h3>—</h3><p>Loading…</p></div></div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Engagement signals</h2>
+    <div class="stats-row" id="admin-engagement-stats"></div>
+    <div class="card" style="margin-top: 1.25rem;">
+        <div class="card-header">
+            <h2>Meal logs — last 14 days</h2>
+        </div>
+        <div class="card-body">
+            <div id="admin-daily-chart" class="admin-bar-chart" aria-label="Daily meal log volume"></div>
+        </div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Who’s using LittleBowl</h2>
+    <div class="card">
+        <div class="card-header">
+            <h2>Registered users</h2>
+            <span class="admin-muted" id="admin-user-count"></span>
+        </div>
+        <div class="card-body admin-table-wrap">
+            <table class="admin-table" id="admin-users-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>User</th>
+                        <th>Joined</th>
+                        <th>Last login</th>
+                        <th>Toddlers</th>
+                        <th>Days logged</th>
+                        <th>Meals logged</th>
+                        <th>Last meal</th>
+                        <th>Plan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="9" class="admin-muted">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Guest toddler profiles</h2>
+    <div class="card">
+        <div class="card-header">
+            <h2>Anonymous / not signed up</h2>
+            <span class="admin-muted" id="admin-guest-count"></span>
+        </div>
+        <div class="card-body admin-table-wrap">
+            <table class="admin-table" id="admin-guests-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Age</th>
+                        <th>Created</th>
+                        <th>Days logged</th>
+                        <th>Meals</th>
+                        <th>Last meal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="6" class="admin-muted">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Product mix</h2>
+    <div class="admin-dist-grid" id="admin-distributions"></div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/admin-dashboard.js') }}"></script>
+{% endblock %}
