@@ -10,11 +10,16 @@
 <div class="page-header admin-header">
     <div>
         <h1><i class="fas fa-chart-line"></i> Admin Dashboard</h1>
-        <p>Parent adoption, toddler profiles, and meal-logging engagement</p>
+        <p>Parent adoption, toddler profiles, and meal-logging engagement{% if admin_email %} · {{ admin_email }}{% endif %}</p>
     </div>
-    <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh" onclick="loadAdminDashboard()">
-        <i class="fas fa-sync-alt"></i> Refresh
-    </button>
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh" onclick="loadAdminDashboard()">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+        <a href="{{ url_for('admin_logout') }}" class="btn btn-outline btn-sm">
+            <i class="fas fa-sign-out-alt"></i> Sign out
+        </a>
+    </div>
 </div>
 
 <div id="admin-error" class="alert warning" style="display:none; margin-bottom: 1.25rem;"></div>
