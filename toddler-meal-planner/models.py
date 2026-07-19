@@ -385,6 +385,11 @@ class Food(db.Model):
             'vitamin_a_mcg': self.vitamin_a_mcg,
             'vitamin_c_mg': self.vitamin_c_mg,
             'vitamin_d_mcg': self.vitamin_d_mcg,
+            'vitamin_b12_mcg': self.vitamin_b12_mcg,
+            'folate_mcg': self.folate_mcg,
+            'serving_size_6_12': self.serving_size_6_12,
+            'serving_size_12_24': self.serving_size_12_24,
+            'serving_size_24_36': self.serving_size_24_36,
             'spice_level': self.spice_level,
             'texture': self.texture,
             'allergens': self.allergens or [],
@@ -445,34 +450,52 @@ class MealLog(db.Model):
 
     def get_actual_nutrients(self):
         """Calculate nutrients actually consumed (respects portion % and refusals)."""
+        detail = self.get_nutrition_calculation()
+        return detail['nutrients'] if detail else None
+
+    def get_nutrition_calculation(self):
+        """
+        Nutrients plus the portion math used so UIs can show a transparent breakdown.
+        Returns None when there is no linked food (custom name-only items).
+        """
         if not self.food:
             return None
 
         portion_pct = self.effective_portion_eaten_percent()
-        if portion_pct <= 0:
-            # Zero-calorie entry so callers still see the nutrient keys when needed
-            return {
-                'calories': 0.0,
-                'protein_g': 0.0,
-                'carbs_g': 0.0,
-                'fat_g': 0.0,
-                'fiber_g': 0.0,
-                'calcium_mg': 0.0,
-                'iron_mg': 0.0,
-                'zinc_mg': 0.0,
-                'vitamin_a_mcg': 0.0,
-                'vitamin_c_mg': 0.0,
-                'vitamin_d_mcg': 0.0,
-                'vitamin_b12_mcg': 0.0,
-                'folate_mcg': 0.0,
-            }
-
         age_months = self.toddler.age_months if self.toddler else 24
-        serving = self.portion_offered_g or self.food.get_serving_for_age(age_months)
-        actual_serving = serving * (portion_pct / 100.0)
-        return self.food.get_nutrients_for_serving(actual_serving)
+        serving = self.portion_offered_g or self.food.get_serving_for_age(age_months) or 0
+        actual_serving = serving * (portion_pct / 100.0) if serving else 0
+        nutrients = self.food.get_nutrients_for_serving(actual_serving) if actual_serving > 0 else {
+            'calories': 0.0,
+            'protein_g': 0.0,
+            'carbs_g': 0.0,
+            'fat_g': 0.0,
+            'fiber_g': 0.0,
+            'calcium_mg': 0.0,
+            'iron_mg': 0.0,
+            'zinc_mg': 0.0,
+            'vitamin_a_mcg': 0.0,
+            'vitamin_c_mg': 0.0,
+            'vitamin_d_mcg': 0.0,
+            'vitamin_b12_mcg': 0.0,
+            'folate_mcg': 0.0,
+        }
+        return {
+            'nutrients': {k: round(v or 0, 2) for k, v in nutrients.items()},
+            'serving_g': round(float(serving or 0), 1),
+            'actual_g': round(float(actual_serving or 0), 1),
+            'portion_pct': portion_pct,
+            'age_months': age_months,
+            'formula': (
+                f"Age serving {round(float(serving or 0), 1)}g × {portion_pct}% eaten "
+                f"= {round(float(actual_serving or 0), 1)}g × (values per 100g)"
+            ),
+            'counted': portion_pct > 0 and bool(self.food),
+            'nutrition_pending': bool(getattr(self.food, 'nutrition_pending', False)),
+        }
     
     def to_dict(self):
+        calc = self.get_nutrition_calculation()
         return {
             'id': self.id,
             'toddler_id': self.toddler_id,
@@ -489,7 +512,8 @@ class MealLog(db.Model):
             'toddler_reaction': self.toddler_reaction,
             'notes': self.notes,
             'photo_path': self.photo_path,
-            'nutrients': self.get_actual_nutrients()
+            'nutrients': calc['nutrients'] if calc else None,
+            'nutrition_calculation': calc,
         }
 
 

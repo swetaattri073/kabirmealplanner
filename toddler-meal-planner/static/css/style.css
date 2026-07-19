@@ -609,9 +609,203 @@ a.card-body-link:focus-visible {
     transition: all var(--transition-normal);
 }
 
+button.nutrient-card-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+
+.nutrition-hint {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
 .nutrient-card:hover {
     transform: scale(1.03);
     box-shadow: var(--shadow-md);
+}
+
+/* Nutrition breakdown modal */
+body.nutrition-modal-open {
+    overflow: hidden;
+}
+
+.nutrition-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.nutrition-modal[hidden] {
+    display: none !important;
+}
+
+.nutrition-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(20, 24, 16, 0.45);
+}
+
+.nutrition-modal-panel {
+    position: relative;
+    width: min(720px, 100%);
+    max-height: min(88vh, 900px);
+    overflow: auto;
+    background: var(--bg-secondary, #fff);
+    border-radius: 18px 18px 0 0;
+    padding: 1.25rem 1.25rem 1.75rem;
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.2);
+}
+
+@media (min-width: 768px) {
+    .nutrition-modal {
+        align-items: center;
+        padding: 1rem;
+    }
+    .nutrition-modal-panel {
+        border-radius: 16px;
+    }
+}
+
+.nutrition-modal-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.nutrition-modal-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.nutrition-modal-sub {
+    margin: 0.25rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.nutrition-modal-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+}
+
+.nutrition-filter-chip {
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary, #f5f5f0);
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.nutrition-filter-chip.active {
+    background: rgba(107, 143, 60, 0.15);
+    border-color: var(--primary, #6b8f3c);
+    font-weight: 700;
+}
+
+.nutrition-meal-block {
+    margin-bottom: 1.25rem;
+}
+
+.nutrition-meal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+}
+
+.nutrition-meal-head h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.nutrition-item-card {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.55rem;
+    background: var(--bg-tertiary, #fafaf6);
+}
+
+.nutrition-item-top,
+.nutrition-item-values,
+.nutrition-focus-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: baseline;
+}
+
+.nutrition-item-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.45rem;
+}
+
+.nutrition-item-chips span {
+    font-size: 0.75rem;
+    background: rgba(107, 143, 60, 0.1);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+}
+
+.nutrition-item-formula {
+    margin: 0.45rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.nutrition-item-warn {
+    margin: 0.35rem 0 0;
+    font-size: 0.78rem;
+    color: #b45309;
+}
+
+.nutrition-focus-summary {
+    padding: 0.75rem 0;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.nutrient-preview {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.nutrient-preview span {
+    font-size: 0.75rem;
+    background: rgba(107, 143, 60, 0.12);
+    color: var(--text-primary);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+}
+
+.nutrient-preview.muted span {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--text-secondary);
+}
+
+.meal-nutrient-total {
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px dashed var(--border-color);
+    font-size: 0.85rem;
+    font-weight: 700;
 }
 
 .nutrient-header {

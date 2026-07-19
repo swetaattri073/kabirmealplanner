@@ -1425,6 +1425,8 @@ def update_meal_logs_batch():
 def get_daily_nutrition(toddler_id):
     """Get daily nutrition status"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
     date_str = request.args.get('date', date.today().isoformat())
     target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     
@@ -1439,10 +1441,31 @@ def get_daily_nutrition(toddler_id):
     })
 
 
+@app.route('/api/nutrition/breakdown/<int:toddler_id>', methods=['GET'])
+def get_nutrition_breakdown(toddler_id):
+    """Per-item / per-meal nutrient calculation breakdown for a day."""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    date_str = request.args.get('date', date.today().isoformat())
+    target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+    engine = NutritionEngine(db.session)
+    breakdown = engine.get_daily_breakdown(toddler, target_date)
+    return jsonify({
+        'toddler_id': toddler_id,
+        'toddler_name': toddler.name,
+        'age_months': toddler.age_months,
+        **breakdown,
+    })
+
+
 @app.route('/api/nutrition/weekly/<int:toddler_id>', methods=['GET'])
 def get_weekly_nutrition(toddler_id):
     """Get weekly nutrition analysis"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
     
     week_start_str = request.args.get('week_start')
     if week_start_str:

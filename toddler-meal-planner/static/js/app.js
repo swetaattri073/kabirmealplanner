@@ -112,7 +112,7 @@ async function loadDashboard(toddlerId) {
 
 function renderDashboard(data) {
     // Render nutrition status
-    renderNutritionStatus(data.nutrition);
+    renderNutritionStatus(data.nutrition, data.toddler?.id);
     
     // Render meal schedule
     renderMealSchedule(data);
@@ -121,11 +121,12 @@ function renderDashboard(data) {
     renderAlerts(data.alerts);
 }
 
-function renderNutritionStatus(nutrition) {
+function renderNutritionStatus(nutrition, toddlerId) {
     const container = document.getElementById('nutrition-grid');
     if (!container) return;
     
     const priorityNutrients = ['calories', 'protein_g', 'iron_mg', 'calcium_mg', 'vitamin_a_mcg', 'vitamin_c_mg'];
+    const tid = toddlerId || document.body.dataset.toddlerId;
     
     let html = '';
     priorityNutrients.forEach(key => {
@@ -137,7 +138,9 @@ function renderNutritionStatus(nutrition) {
         const info = nutrient.info || {};
         
         html += `
-            <div class="nutrient-card">
+            <button type="button" class="nutrient-card nutrient-card-btn"
+                    onclick="openNutritionBreakdown(${tid ? Number(tid) : 'null'}, '${key}')"
+                    aria-label="View ${info.name || key} breakdown">
                 <div class="nutrient-header">
                     <span class="nutrient-icon">${info.icon || '📊'}</span>
                     <span class="nutrient-name">${info.name || key}</span>
@@ -149,11 +152,175 @@ function renderNutritionStatus(nutrition) {
                     <span>${nutrient.actual} ${info.unit || ''}</span>
                     <span>${nutrient.percentage}% of RDA</span>
                 </div>
-            </div>
+            </button>
         `;
     });
     
-    container.innerHTML = html;
+    container.innerHTML = html || '<p class="nutrition-hint">No nutrition data yet — log a meal to see totals.</p>';
+}
+
+function formatMealTypeLabel(mealType) {
+    return String(mealType || '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function ensureNutritionModal() {
+    let modal = document.getElementById('nutrition-breakdown-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'nutrition-breakdown-modal';
+    modal.className = 'nutrition-modal';
+    modal.hidden = true;
+    modal.innerHTML = `
+        <div class="nutrition-modal-backdrop" onclick="closeNutritionBreakdown()"></div>
+        <div class="nutrition-modal-panel" role="dialog" aria-modal="true" aria-labelledby="nutrition-modal-title">
+            <div class="nutrition-modal-header">
+                <div>
+                    <h2 id="nutrition-modal-title">Nutrient details</h2>
+                    <p class="nutrition-modal-sub" id="nutrition-modal-sub"></p>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeNutritionBreakdown()" aria-label="Close">Close</button>
+            </div>
+            <div class="nutrition-modal-filters" id="nutrition-modal-filters"></div>
+            <div class="nutrition-modal-body" id="nutrition-modal-body"></div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeNutritionBreakdown() {
+    const modal = document.getElementById('nutrition-breakdown-modal');
+    if (modal) modal.hidden = true;
+    document.body.classList.remove('nutrition-modal-open');
+}
+
+async function openNutritionBreakdown(toddlerId, focusNutrient) {
+    const tid = toddlerId || document.body.dataset.toddlerId;
+    if (!tid) return;
+    const modal = ensureNutritionModal();
+    const body = document.getElementById('nutrition-modal-body');
+    const sub = document.getElementById('nutrition-modal-sub');
+    const filters = document.getElementById('nutrition-modal-filters');
+    modal.hidden = false;
+    document.body.classList.add('nutrition-modal-open');
+    body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    filters.innerHTML = '';
+    sub.textContent = 'Loading…';
+
+    try {
+        const data = await apiCall(`/nutrition/breakdown/${tid}`);
+        window._nutritionBreakdownCache = data;
+        renderNutritionBreakdownModal(data, focusNutrient || null);
+    } catch (err) {
+        console.error(err);
+        body.innerHTML = `<p class="nutrition-hint">Could not load nutrient details.</p>`;
+        sub.textContent = '';
+    }
+}
+
+function renderNutritionBreakdownModal(data, focusNutrient) {
+    const body = document.getElementById('nutrition-modal-body');
+    const sub = document.getElementById('nutrition-modal-sub');
+    const filters = document.getElementById('nutrition-modal-filters');
+    if (!body) return;
+
+    const info = data.nutrient_info || {};
+    const priority = ['calories', 'protein_g', 'iron_mg', 'calcium_mg', 'vitamin_a_mcg', 'vitamin_c_mg', 'fat_g', 'fiber_g', 'zinc_mg', 'vitamin_d_mcg'];
+    const keys = priority.filter((k) => info[k] || (data.nutrition && data.nutrition[k]));
+    const active = focusNutrient && keys.includes(focusNutrient) ? focusNutrient : null;
+
+    sub.textContent = `${data.toddler_name || ''} · ${data.date || 'today'} · ${data.item_count || 0} item(s) logged`;
+
+    filters.innerHTML = `
+        <button type="button" class="nutrition-filter-chip ${!active ? 'active' : ''}"
+                onclick="renderNutritionBreakdownModal(window._nutritionBreakdownCache, null)">All meals</button>
+        ${keys.map((k) => {
+            const n = info[k] || {};
+            return `<button type="button" class="nutrition-filter-chip ${active === k ? 'active' : ''}"
+                onclick="renderNutritionBreakdownModal(window._nutritionBreakdownCache, '${k}')">${n.icon || ''} ${n.name || k}</button>`;
+        }).join('')}
+    `;
+
+    if (!data.meals || !data.meals.length) {
+        body.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🍽️</div>
+                <h3>No meals logged today</h3>
+                <p>Log a meal to see the nutrient calculation per item.</p>
+            </div>`;
+        return;
+    }
+
+    let html = '';
+    if (active) {
+        const meta = info[active] || {};
+        const total = data.nutrition?.[active];
+        html += `
+            <div class="nutrition-focus-summary">
+                <strong>${meta.icon || ''} ${meta.name || active}</strong>
+                <span>${total ? `${total.actual} ${meta.unit || ''} · ${total.percentage}% of RDA` : '—'}</span>
+            </div>
+        `;
+        const contrib = [];
+        (data.items || []).forEach((item) => {
+            const val = item.nutrients ? (item.nutrients[active] || 0) : 0;
+            contrib.push({ ...item, value: val });
+        });
+        contrib.sort((a, b) => b.value - a.value);
+        const dayTotal = total?.actual || contrib.reduce((s, c) => s + c.value, 0) || 1;
+        html += contrib.map((item) => {
+            const share = dayTotal ? Math.round((item.value / dayTotal) * 100) : 0;
+            return `
+                <div class="nutrition-item-card">
+                    <div class="nutrition-item-top">
+                        <strong>${escapeHtml(item.food_name)}</strong>
+                        <span>${formatMealTypeLabel(item.meal_type)}</span>
+                    </div>
+                    <div class="nutrition-item-values">
+                        <strong>${Number(item.value || 0).toFixed(1)} ${meta.unit || ''}</strong>
+                        <span>${share}% of today's ${meta.name || active}</span>
+                    </div>
+                    <p class="nutrition-item-formula">${escapeHtml(item.formula || item.not_counted_reason || '')}</p>
+                    ${!item.counted ? `<p class="nutrition-item-warn">${escapeHtml(item.not_counted_reason || 'Not counted')}</p>` : ''}
+                </div>
+            `;
+        }).join('');
+    } else {
+        html += (data.meals || []).map((meal) => {
+            const kcal = meal.totals?.calories;
+            return `
+                <div class="nutrition-meal-block">
+                    <div class="nutrition-meal-head">
+                        <h3>${formatMealTypeLabel(meal.meal_type)}</h3>
+                        <span>${kcal != null ? `${Math.round(kcal)} kcal` : '—'}</span>
+                    </div>
+                    ${(meal.items || []).map((item) => {
+                        const n = item.nutrients || {};
+                        return `
+                            <div class="nutrition-item-card">
+                                <div class="nutrition-item-top">
+                                    <strong>${escapeHtml(item.food_name)}</strong>
+                                    <span>${item.effective_portion_eaten_percent ?? item.portion_eaten_percent ?? 0}% eaten</span>
+                                </div>
+                                <div class="nutrition-item-chips">
+                                    <span>${Math.round(n.calories || 0)} kcal</span>
+                                    <span>${Number(n.protein_g || 0).toFixed(1)}g protein</span>
+                                    <span>${Number(n.iron_mg || 0).toFixed(1)}mg iron</span>
+                                    <span>${Number(n.calcium_mg || 0).toFixed(0)}mg calcium</span>
+                                </div>
+                                <p class="nutrition-item-formula">${escapeHtml(item.formula || item.not_counted_reason || 'Custom food — nutrients not in database')}</p>
+                                ${!item.counted ? `<p class="nutrition-item-warn">${escapeHtml(item.not_counted_reason || 'Not counted in daily totals')}</p>` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }).join('');
+    }
+
+    body.innerHTML = html;
 }
 
 function renderMealSchedule(data) {
@@ -183,11 +350,12 @@ function renderMealSchedule(data) {
                 <div class="meal-time-icon">${getMealTypeIcon(mealType)}</div>
                 <div class="meal-info">
                     <div class="meal-type">${formatMealType(mealType)}</div>
-                    <div class="meal-food">
-                        ${isEaten 
-                            ? (log?.food?.name || log?.custom_food_name || 'Logged') 
-                            : pendingLabel}
-                    </div>
+                    ${isEaten 
+                    ? `<div class="meal-food">
+                        ${log?.food?.name || log?.custom_food_name || 'Logged'}
+                        ${log?.nutrients ? `<div class="nutrient-preview"><span>${Math.round(log.nutrients.calories || 0)} kcal</span></div>` : ''}
+                       </div>`
+                    : `<div class="meal-food">${pendingLabel}</div>`}
                 </div>
                 ${isEaten 
                     ? '<span class="meal-action done"><i class="fas fa-check"></i></span>'
@@ -656,6 +824,9 @@ async function regenerateWeeklyPlan(toddlerId) {
 
 async function loadWeeklyNutrition(toddlerId) {
     try {
+        const daily = await apiCall(`/nutrition/daily/${toddlerId}`);
+        renderNutritionStatus(daily.nutrition, toddlerId);
+
         const data = await apiCall(`/nutrition/weekly/${toddlerId}`);
         renderWeeklyNutrition(data);
         
@@ -665,6 +836,11 @@ async function loadWeeklyNutrition(toddlerId) {
         if (window.location.hash === '#alerts') {
             requestAnimationFrame(() => {
                 document.getElementById('alerts')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
+        if (window.location.hash === '#today-breakdown' || window.location.search.includes('view=today')) {
+            requestAnimationFrame(() => {
+                document.getElementById('today-breakdown')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         }
     } catch (error) {
