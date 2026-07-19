@@ -72,8 +72,16 @@
                             {% if log.toddler_reaction %} · {{ log.toddler_reaction }}{% endif %}
                             {% if log.food %} · {{ log.food.name }}{% elif log.custom_food_name %} · {{ log.custom_food_name }}{% endif %}
                         </p>
+                        {% if log.nutrients %}
+                        <div class="nutrient-preview">
+                            <span>{{ log.nutrients.calories|round|int }} kcal</span>
+                            <span>{{ '%.1f'|format(log.nutrients.protein_g or 0) }}g protein</span>
+                            <span>{{ '%.1f'|format(log.nutrients.iron_mg or 0) }}mg iron</span>
+                            <span>{{ (log.nutrients.calcium_mg or 0)|round|int }}mg calcium</span>
+                        </div>
+                        {% endif %}
                         {% endfor %}
-                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-top:0.5rem;">
                             <button type="button" class="btn btn-sm btn-primary" onclick="showEditLoggedMeal('{{ meal_type }}')">
                                 <i class="fas fa-pen"></i> Edit logged meal
                             </button>
@@ -366,6 +374,7 @@
 
 <script>
 const allFoods = {{ foods_data | tojson }};
+const toddlerAgeMonths = {{ toddler.age_months }};
 const todayPlanMeals = {{ (today_plan.meals if today_plan else {}) | tojson }};
 const loggedByMeal = {{ logged_by_meal | tojson }};
 const planItemState = {};
@@ -381,6 +390,75 @@ const REACTIONS = [
     { id: 'disliked', label: '😕 Disliked', short: '😕' },
     { id: 'refused', label: '🙅 Refused', short: '🙅' },
 ];
+
+function servingForAge(food, age) {
+    if (!food) return 0;
+    if (age < 12) return Number(food.serving_size_6_12) || 0;
+    if (age < 24) return Number(food.serving_size_12_24) || 0;
+    return Number(food.serving_size_24_36) || 0;
+}
+
+function previewNutrientsForItem(item) {
+    const food = item.food_id ? allFoods.find(f => f.id === item.food_id) : null;
+    if (!food) {
+        return { available: false, reason: 'Nutrients unavailable for custom foods' };
+    }
+    if (food.nutrition_pending) {
+        return { available: false, reason: 'Nutrients updating…' };
+    }
+    const portion = (item.reaction === 'refused') ? 0 : (item.portion != null ? item.portion : 100);
+    const serving = servingForAge(food, toddlerAgeMonths);
+    const actualG = serving * (portion / 100);
+    const factor = actualG / 100;
+    return {
+        available: true,
+        serving_g: serving,
+        actual_g: actualG,
+        portion,
+        calories: (food.calories || 0) * factor,
+        protein_g: (food.protein_g || 0) * factor,
+        iron_mg: (food.iron_mg || 0) * factor,
+        calcium_mg: (food.calcium_mg || 0) * factor,
+    };
+}
+
+function nutrientPreviewHtml(item) {
+    const n = previewNutrientsForItem(item);
+    if (!n.available) {
+        return `<div class="nutrient-preview muted"><span>${escapeHtml(n.reason || 'No nutrients')}</span></div>`;
+    }
+    return `
+        <div class="nutrient-preview" title="Based on ${Math.round(n.serving_g)}g age serving × ${n.portion}% eaten">
+            <span>${Math.round(n.calories)} kcal</span>
+            <span>${n.protein_g.toFixed(1)}g protein</span>
+            <span>${n.iron_mg.toFixed(1)}mg iron</span>
+            <span>${Math.round(n.calcium_mg)}mg calcium</span>
+        </div>
+    `;
+}
+
+function mealNutrientTotalHtml(items) {
+    let kcal = 0, protein = 0, iron = 0, calcium = 0, any = false;
+    items.forEach((item) => {
+        const n = previewNutrientsForItem(item);
+        if (!n.available) return;
+        any = true;
+        kcal += n.calories;
+        protein += n.protein_g;
+        iron += n.iron_mg;
+        calcium += n.calcium_mg;
+    });
+    if (!any) return '';
+    return `<div class="meal-nutrient-total">Meal total: ${Math.round(kcal)} kcal · ${protein.toFixed(1)}g protein · ${iron.toFixed(1)}mg iron · ${Math.round(calcium)}mg calcium</div>`;
+}
+
+function escapeHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     Object.keys(todayPlanMeals).forEach(initPlanItems);
@@ -504,6 +582,7 @@ function renderItemRows(mealType, mode) {
         return `
         <div class="meal-item-row" data-food-id="${item.food_id || ''}" data-log-id="${item.log_id || ''}">
             <div class="meal-item-name">${escapeHtml(item.name)}${item.role ? ` <span class="suggestion-meta">(${escapeHtml(item.role)})</span>` : ''}</div>
+            ${nutrientPreviewHtml(item)}
             <label class="form-label" style="font-size:0.85rem;">Portion eaten</label>
             <input type="range" class="portion-slider item-portion" min="0" max="100" step="25" value="${item.portion}"
                    oninput="setItemPortion('${mealType}', '${mode}', ${idx}, parseInt(this.value, 10))">
@@ -512,7 +591,7 @@ function renderItemRows(mealType, mode) {
             <div class="reaction-buttons compact">${reactionBtns}</div>
             ${canRemove ? `<button type="button" class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="removeItemRow('${mealType}', '${mode}', ${idx})">Remove</button>` : ''}
         </div>`;
-    }).join('');
+    }).join('') + mealNutrientTotalHtml(items);
 }
 
 function removeItemRow(mealType, mode, idx) {
@@ -797,13 +876,6 @@ function filterAltFoods(mealType, query) {
     list.innerHTML = html || '<p style="padding:0.75rem;color:var(--text-muted);">Type a food name to search or add</p>';
 }
 
-function escapeHtml(str) {
-    return String(str || '').replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
-}
-
-/** Avoid offering to save full sentences / long phrases as a food name. */
 function looksLikeFoodName(name) {
     const t = (name || '').trim();
     if (t.length < 2 || t.length > 60) return false;

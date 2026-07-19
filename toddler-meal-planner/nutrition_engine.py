@@ -303,6 +303,95 @@ class NutritionEngine:
         
         return status
     
+    def get_daily_breakdown(self, toddler, target_date=None):
+        """Per-item / per-meal contribution breakdown for a day's nutrition totals."""
+        from models import MealLog
+        from collections import defaultdict
+
+        if target_date is None:
+            target_date = date.today()
+
+        logs = (
+            MealLog.query
+            .filter(MealLog.toddler_id == toddler.id, MealLog.date == target_date)
+            .order_by(MealLog.id.asc())
+            .all()
+        )
+        nutrition = self.get_nutrition_status(toddler, target_date)
+
+        items = []
+        by_meal = defaultdict(lambda: {
+            'meal_type': None,
+            'items': [],
+            'totals': defaultdict(float),
+        })
+
+        for log in logs:
+            calc = log.get_nutrition_calculation()
+            food_name = (
+                (log.food.name if log.food else None)
+                or log.custom_food_name
+                or 'Unknown food'
+            )
+            entry = {
+                'meal_log_id': log.id,
+                'meal_type': log.meal_type,
+                'food_id': log.food_id,
+                'food_name': food_name,
+                'custom_food': bool(log.custom_food_name and not log.food_id),
+                'reaction': log.toddler_reaction,
+                'portion_eaten_percent': log.portion_eaten_percent,
+                'effective_portion_eaten_percent': log.effective_portion_eaten_percent(),
+                'nutrients': (calc or {}).get('nutrients'),
+                'serving_g': (calc or {}).get('serving_g'),
+                'actual_g': (calc or {}).get('actual_g'),
+                'formula': (calc or {}).get('formula'),
+                'counted': bool(calc and calc.get('counted')),
+                'nutrition_pending': bool(calc and calc.get('nutrition_pending')),
+                'not_counted_reason': (
+                    None if calc and calc.get('counted')
+                    else (
+                        'Refused / 0% portion'
+                        if log.effective_portion_eaten_percent() <= 0
+                        else (
+                            'Custom food without nutrients'
+                            if not log.food
+                            else 'Nutrients pending lookup'
+                            if calc and calc.get('nutrition_pending')
+                            else 'Not counted'
+                        )
+                    )
+                ),
+            }
+            items.append(entry)
+            bucket = by_meal[log.meal_type]
+            bucket['meal_type'] = log.meal_type
+            bucket['items'].append(entry)
+            if entry['nutrients'] and entry['counted']:
+                for k, v in entry['nutrients'].items():
+                    bucket['totals'][k] += v or 0
+
+        meals = []
+        for mt, bucket in by_meal.items():
+            meals.append({
+                'meal_type': mt,
+                'items': bucket['items'],
+                'totals': {k: round(v, 2) for k, v in bucket['totals'].items()},
+            })
+
+        # Stable meal order
+        order = ['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner']
+        meals.sort(key=lambda m: order.index(m['meal_type']) if m['meal_type'] in order else 99)
+
+        return {
+            'date': target_date.isoformat(),
+            'nutrition': nutrition,
+            'items': items,
+            'meals': meals,
+            'item_count': len(items),
+            'nutrient_info': NUTRIENT_INFO,
+        }
+
     def _get_status_label(self, percentage):
         """Get status label based on percentage of RDA"""
         if percentage < 50:

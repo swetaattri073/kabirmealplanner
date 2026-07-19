@@ -91,22 +91,26 @@
         </div>
         
         <!-- Nutrition Status -->
-        <div class="card card-clickable">
+        <div class="card">
             <div class="card-header">
-                <h2><a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="card-title-link">📊 Today's Nutrition</a></h2>
-                <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
-                    View Details
-                </a>
+                <h2>📊 Today's Nutrition</h2>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openNutritionBreakdown({{ toddler.id }})">
+                        View Details
+                    </button>
+                    <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
+                        Weekly
+                    </a>
+                </div>
             </div>
-            <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="card-body-link">
-                <div class="card-body">
-                    <div id="nutrition-grid" class="nutrition-grid">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                        </div>
+            <div class="card-body">
+                <div id="nutrition-grid" class="nutrition-grid">
+                    <div class="loading">
+                        <div class="spinner"></div>
                     </div>
                 </div>
-            </a>
+                <p class="nutrition-hint">Tap a nutrient or View Details for the per-item calculation.</p>
+            </div>
         </div>
         
         <!-- Alerts & Recommendations -->

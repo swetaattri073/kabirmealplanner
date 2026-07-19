@@ -8,6 +8,21 @@
         <h1>📊 Nutrition Analysis</h1>
         <p>Weekly nutrition summary for {{ toddler.name }} ({{ toddler.age_months }} months old)</p>
     </div>
+
+    <div class="card" id="today-breakdown" style="margin-bottom: 1.5rem; scroll-margin-top: 5rem;">
+        <div class="card-header">
+            <h2>🍽️ Today's nutrient breakdown</h2>
+            <button type="button" class="btn btn-primary btn-sm" onclick="openNutritionBreakdown({{ toddler.id }})">
+                View Details
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="nutrition-grid" class="nutrition-grid">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+            <p class="nutrition-hint">Tap a nutrient or View Details to see how each meal/item contributes.</p>
+        </div>
+    </div>
     
     <div class="card">
         <div class="card-header">
