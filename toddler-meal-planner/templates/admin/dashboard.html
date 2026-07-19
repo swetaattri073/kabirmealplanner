@@ -13,6 +13,9 @@
         <p>Parent adoption, toddler profiles, and meal-logging engagement{% if admin_email %} · {{ admin_email }}{% endif %}</p>
     </div>
     <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <a href="{{ url_for('admin_content_page') }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-book"></i> Recipes &amp; catalog
+        </a>
         <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh" onclick="loadAdminDashboard()">
             <i class="fas fa-sync-alt"></i> Refresh
         </button>

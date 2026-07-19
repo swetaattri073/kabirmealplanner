@@ -23,7 +23,7 @@ os.makedirs(_INSTANCE_DIR, exist_ok=True)
 load_dotenv(os.path.join(_APP_DIR, '.env'))
 load_dotenv(os.path.join(_INSTANCE_DIR, '.env'), override=True)
 
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe
 from admin_stats import build_admin_stats
 from analytics import record_analytics_event
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
@@ -47,11 +47,14 @@ from chat_assistant import (
     find_matching_food,
 )
 from chat_service import call_openai_chat, chat_configured, ChatConfigError, ChatRequestError, summarize_chat_history
-from recipes import list_recipes, get_recipe, find_recipe_for_food_name
+from recipes import list_recipes, get_recipe, find_recipe_for_food_name, slugify_recipe_name, detect_video_platform, youtube_embed_url
 from usda_lookup import search_foods as usda_search_foods, get_food as usda_get_food, using_demo_key as usda_using_demo_key
 from audit_logging import setup_logging, write_audit_log, app_log, request_payload_snapshot
 import json as _json
 import shutil
+from pathlib import Path
+import base64
+import re as _re
 
 # Create Flask app
 app = Flask(__name__)
@@ -1295,10 +1298,6 @@ def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason='
 
 def _save_meal_photo(toddler_id, photo_data):
     """Save a base64 data-URL meal photo under static/uploads/meals/"""
-    import base64
-    import re as _re
-    from pathlib import Path
-    
     match = _re.match(r'^data:image/(png|jpeg|jpg|webp);base64,(.+)$', photo_data, _re.I | _re.S)
     if not match:
         return None
@@ -1315,6 +1314,33 @@ def _save_meal_photo(toddler_id, photo_data):
     path = upload_dir / filename
     path.write_bytes(raw)
     return f"/static/uploads/meals/{filename}"
+
+
+def _save_recipe_cover(photo_data):
+    """Persist recipe cover under instance/uploads/recipes (Docker volume)."""
+    match = _re.match(r'^data:image/(png|jpeg|jpg|webp);base64,(.+)$', photo_data, _re.I | _re.S)
+    if not match:
+        return None
+    ext = match.group(1).lower().replace('jpeg', 'jpg')
+    raw = base64.b64decode(match.group(2))
+    if len(raw) > 4 * 1024 * 1024:
+        return None
+    upload_dir = Path(_INSTANCE_DIR) / 'uploads' / 'recipes'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"recipe_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.{ext}"
+    (upload_dir / filename).write_bytes(raw)
+    return f"/media/recipes/{filename}"
+
+
+@app.route('/media/recipes/<path:filename>')
+def serve_recipe_media(filename):
+    """Serve admin-uploaded recipe covers from the persistent instance volume."""
+    from flask import send_from_directory
+    safe = Path(filename).name
+    directory = Path(_INSTANCE_DIR) / 'uploads' / 'recipes'
+    if not (directory / safe).is_file():
+        return render_template('404.html'), 404
+    return send_from_directory(directory, safe)
 
 
 @app.route('/api/meal-logs/<int:log_id>', methods=['PUT'])
@@ -2684,6 +2710,253 @@ def api_admin_stats():
     recent_days = max(7, min(recent_days, 90))
     stats = build_admin_stats(db.session, recent_days=recent_days)
     return jsonify(stats)
+
+
+@app.route('/admin/content')
+def admin_content_page():
+    """Admin CMS: recipes (with video/cover) and shared food catalog items."""
+    if not admin_configured():
+        return render_template('404.html'), 404
+    if not is_admin_session():
+        return redirect(url_for('admin_dashboard'))
+    return render_template(
+        'admin/content.html',
+        toddler=None,
+        toddlers=[],
+        admin_email=session.get('admin_email'),
+        food_categories=FOOD_CATEGORIES,
+    )
+
+
+def _parse_food_names(raw):
+    if isinstance(raw, list):
+        names = [str(x).strip() for x in raw if str(x).strip()]
+    else:
+        names = [p.strip() for p in str(raw or '').replace('\n', ',').split(',') if p.strip()]
+    return names
+
+
+def _unique_recipe_slug(base_name, exclude_id=None):
+    base = slugify_recipe_name(base_name)
+    slug = base
+    n = 2
+    while True:
+        q = Recipe.query.filter_by(slug=slug)
+        if exclude_id:
+            q = q.filter(Recipe.id != exclude_id)
+        if not q.first():
+            return slug
+        slug = f'{base}-{n}'
+        n += 1
+
+
+@app.route('/api/admin/recipes', methods=['GET'])
+@admin_required
+def api_admin_list_recipes():
+    rows = Recipe.query.order_by(Recipe.sort_order.desc(), Recipe.created_at.desc()).all()
+    return jsonify({'recipes': [r.to_admin_dict() for r in rows]})
+
+
+@app.route('/api/admin/recipes', methods=['POST'])
+@admin_required
+def api_admin_create_recipe():
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Recipe name is required'}), 400
+
+    food_names = _parse_food_names(data.get('food_names'))
+    if name not in food_names:
+        food_names = [name] + food_names
+
+    video_url = (data.get('video_url') or '').strip() or None
+    platform = detect_video_platform(video_url) if video_url else None
+    cover_path = None
+    if data.get('cover_image_data'):
+        cover_path = _save_recipe_cover(data['cover_image_data'])
+        if not cover_path:
+            return jsonify({'error': 'Invalid cover image (use PNG/JPG/WebP under 4MB)'}), 400
+
+    recipe = Recipe(
+        slug=_unique_recipe_slug(name),
+        name=name,
+        category=(data.get('category') or 'combo').strip().lower(),
+        why=(data.get('why') or '').strip() or None,
+        cheese=(data.get('cheese') or '').strip() or None,
+        steps=(data.get('steps') or '').strip() or None,
+        food_names=food_names,
+        allergens=data.get('allergens') if isinstance(data.get('allergens'), list) else [],
+        suitable_from_months=int(data['suitable_from_months']) if data.get('suitable_from_months') not in (None, '') else None,
+        cover_image_path=cover_path or (data.get('cover_image_path') or None),
+        video_url=video_url,
+        video_platform=platform,
+        is_published=bool(data.get('is_published', True)),
+        sort_order=int(data.get('sort_order') or 0),
+        source='admin',
+        created_by_email=session.get('admin_email'),
+    )
+    db.session.add(recipe)
+    db.session.commit()
+    return jsonify({'recipe': recipe.to_admin_dict(), 'message': 'Recipe published for all users'}), 201
+
+
+@app.route('/api/admin/recipes/<int:recipe_id>', methods=['PUT'])
+@admin_required
+def api_admin_update_recipe(recipe_id):
+    recipe = Recipe.query.get_or_404(recipe_id)
+    data = request.get_json(silent=True) or {}
+
+    if 'name' in data and (data.get('name') or '').strip():
+        recipe.name = data['name'].strip()
+        if data.get('rename_slug'):
+            recipe.slug = _unique_recipe_slug(recipe.name, exclude_id=recipe.id)
+    if 'category' in data:
+        recipe.category = (data.get('category') or 'combo').strip().lower()
+    if 'why' in data:
+        recipe.why = (data.get('why') or '').strip() or None
+    if 'cheese' in data:
+        recipe.cheese = (data.get('cheese') or '').strip() or None
+    if 'steps' in data:
+        recipe.steps = (data.get('steps') or '').strip() or None
+    if 'food_names' in data:
+        names = _parse_food_names(data.get('food_names'))
+        if recipe.name not in names:
+            names = [recipe.name] + names
+        recipe.food_names = names
+    if 'suitable_from_months' in data:
+        raw = data.get('suitable_from_months')
+        recipe.suitable_from_months = int(raw) if raw not in (None, '') else None
+    if 'is_published' in data:
+        recipe.is_published = bool(data.get('is_published'))
+    if 'sort_order' in data:
+        recipe.sort_order = int(data.get('sort_order') or 0)
+    if 'video_url' in data:
+        recipe.video_url = (data.get('video_url') or '').strip() or None
+        recipe.video_platform = detect_video_platform(recipe.video_url)
+    if data.get('cover_image_data'):
+        cover_path = _save_recipe_cover(data['cover_image_data'])
+        if not cover_path:
+            return jsonify({'error': 'Invalid cover image'}), 400
+        recipe.cover_image_path = cover_path
+    elif 'cover_image_path' in data and data.get('cover_image_path') is None:
+        recipe.cover_image_path = None
+
+    recipe.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'recipe': recipe.to_admin_dict(), 'message': 'Recipe updated'})
+
+
+@app.route('/api/admin/recipes/<int:recipe_id>', methods=['DELETE'])
+@admin_required
+def api_admin_delete_recipe(recipe_id):
+    recipe = Recipe.query.get_or_404(recipe_id)
+    db.session.delete(recipe)
+    db.session.commit()
+    return jsonify({'ok': True, 'message': 'Recipe deleted'})
+
+
+@app.route('/api/admin/foods', methods=['GET'])
+@admin_required
+def api_admin_list_foods():
+    """List admin/catalog foods (newest user/admin-added first, then sample of all)."""
+    added = (
+        Food.query
+        .filter_by(is_user_added=True)
+        .order_by(Food.id.desc())
+        .limit(100)
+        .all()
+    )
+    return jsonify({
+        'foods': [f.to_dict() for f in added],
+        'categories': FOOD_CATEGORIES,
+        'note': 'Showing recently added catalog items. Admin-created items are available to all users for logging and planning.',
+    })
+
+
+@app.route('/api/admin/foods', methods=['POST'])
+@admin_required
+def api_admin_create_food():
+    """Add a shared food/meal item to the global catalog for all users."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Food name is required'}), 400
+
+    existing = Food.query.filter(db.func.lower(Food.name) == name.lower()).first()
+    if existing:
+        return jsonify({
+            **existing.to_dict(),
+            'already_existed': True,
+            'message': f'"{existing.name}" already exists in the catalog',
+        }), 200
+
+    category = (data.get('category') or '').strip().lower()
+    if category not in FOOD_CATEGORIES:
+        category = guess_category(name)
+
+    food = Food(
+        name=name,
+        name_hindi=(data.get('name_hindi') or '').strip() or None,
+        category=category,
+        calories=float(data.get('calories') or 0),
+        protein_g=float(data.get('protein_g') or 0),
+        carbs_g=float(data.get('carbs_g') or 0),
+        fat_g=float(data.get('fat_g') or 0),
+        fiber_g=float(data.get('fiber_g') or 0),
+        calcium_mg=float(data.get('calcium_mg') or 0),
+        iron_mg=float(data.get('iron_mg') or 0),
+        zinc_mg=float(data.get('zinc_mg') or 0),
+        vitamin_a_mcg=float(data.get('vitamin_a_mcg') or 0),
+        vitamin_c_mg=float(data.get('vitamin_c_mg') or 0),
+        vitamin_d_mcg=float(data.get('vitamin_d_mcg') or 0),
+        spice_level=int(data.get('spice_level') or 0),
+        texture=data.get('texture') or 'soft',
+        allergens=data.get('allergens') if isinstance(data.get('allergens'), list) else [],
+        suitable_from_months=int(data.get('suitable_from_months') or 12),
+        serving_size_6_12=float(data.get('serving_size_6_12') or 50),
+        serving_size_12_24=float(data.get('serving_size_12_24') or 75),
+        serving_size_24_36=float(data.get('serving_size_24_36') or 100),
+        toddler_friendly_version=(data.get('toddler_friendly_version') or '').strip() or f'Admin catalog item: {name}',
+        preparation_tips=(data.get('preparation_tips') or '').strip() or None,
+        is_user_added=True,  # marks as non-seed; shared for all users via Food table
+        nutrition_pending=bool(data.get('enrich', False)) and not data.get('calories'),
+        nutrition_source='admin' if data.get('calories') else None,
+    )
+    db.session.add(food)
+    db.session.commit()
+
+    if data.get('enrich') and food.nutrition_pending:
+        _enqueue_food_enrichment(food.id)
+
+    # Optionally also create a recipe card linked to this food
+    created_recipe = None
+    if data.get('also_create_recipe'):
+        recipe = Recipe(
+            slug=_unique_recipe_slug(name),
+            name=name,
+            category=category if category != 'fruit' else 'snack',
+            why=food.toddler_friendly_version,
+            steps=food.preparation_tips or food.toddler_friendly_version,
+            food_names=[name],
+            allergens=food.allergens or [],
+            suitable_from_months=food.suitable_from_months,
+            video_url=(data.get('video_url') or '').strip() or None,
+            video_platform=detect_video_platform(data.get('video_url')),
+            is_published=True,
+            source='admin',
+            created_by_email=session.get('admin_email'),
+        )
+        if data.get('cover_image_data'):
+            recipe.cover_image_path = _save_recipe_cover(data['cover_image_data'])
+        db.session.add(recipe)
+        db.session.commit()
+        created_recipe = recipe.to_admin_dict()
+
+    result = food.to_dict()
+    result['already_existed'] = False
+    result['recipe'] = created_recipe
+    result['message'] = f'Added "{food.name}" for all users'
+    return jsonify(result), 201
 
 
 @app.route('/api/analytics/collect', methods=['POST'])

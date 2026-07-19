@@ -764,6 +764,61 @@ class AnalyticsEvent(db.Model):
         }
 
 
+class Recipe(db.Model):
+    """Admin-authored recipes visible to all users (optional video + cover)."""
+    __tablename__ = 'recipes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(200), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(50), default='combo')
+    why = db.Column(db.Text, nullable=True)
+    cheese = db.Column(db.Text, nullable=True)
+    steps = db.Column(db.Text, nullable=True)
+    food_names = db.Column(JSON, default=list)
+    allergens = db.Column(JSON, default=list)
+    suitable_from_months = db.Column(db.Integer, nullable=True)
+
+    cover_image_path = db.Column(db.String(500), nullable=True)
+    video_url = db.Column(db.String(500), nullable=True)
+    video_platform = db.Column(db.String(30), nullable=True)  # youtube | instagram | other
+
+    is_published = db.Column(db.Boolean, default=True)
+    sort_order = db.Column(db.Integer, default=0)
+    source = db.Column(db.String(30), default='admin')
+    created_by_email = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_public_dict(self):
+        return {
+            'id': self.slug,
+            'db_id': self.id,
+            'slug': self.slug,
+            'name': self.name,
+            'food_names': self.food_names or [self.name],
+            'category': self.category or 'combo',
+            'why': self.why or '',
+            'cheese': self.cheese or '',
+            'steps': self.steps or '',
+            'source': self.source or 'admin',
+            'allergens': self.allergens or [],
+            'suitable_from_months': self.suitable_from_months,
+            'cover_image_path': self.cover_image_path,
+            'video_url': self.video_url,
+            'video_platform': self.video_platform,
+            'is_published': bool(self.is_published),
+            'sort_order': self.sort_order or 0,
+        }
+
+    def to_admin_dict(self):
+        d = self.to_public_dict()
+        d['created_by_email'] = self.created_by_email
+        d['created_at'] = self.created_at.isoformat() if self.created_at else None
+        d['updated_at'] = self.updated_at.isoformat() if self.updated_at else None
+        return d
+
+
 class NutritionAlert(db.Model):
     """Track nutrition alerts and recommendations"""
     __tablename__ = 'nutrition_alerts'

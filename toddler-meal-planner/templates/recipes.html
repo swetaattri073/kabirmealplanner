@@ -24,10 +24,40 @@
 <div class="recipe-grid">
     {% for recipe in recipes %}
     <article class="recipe-card {% if highlight and recipe.slug == highlight %}is-highlighted{% endif %}" id="{{ recipe.slug }}">
+        {% if recipe.cover_image_path or recipe.video_url %}
+        <div class="recipe-media">
+            {% if recipe.cover_image_path %}
+            <img class="recipe-cover" src="{{ recipe.cover_image_path }}" alt="{{ recipe.name }} cover" loading="lazy">
+            {% elif recipe.video_platform == 'youtube' and recipe.video_embed_url %}
+            <div class="recipe-cover recipe-cover-placeholder">Video recipe</div>
+            {% endif %}
+            {% if recipe.video_url %}
+            <a class="recipe-video-link" href="{{ recipe.video_url }}" target="_blank" rel="noopener noreferrer">
+                {% if recipe.video_platform == 'youtube' %}
+                <i class="fab fa-youtube"></i> Watch on YouTube
+                {% elif recipe.video_platform == 'instagram' %}
+                <i class="fab fa-instagram"></i> Watch on Instagram
+                {% else %}
+                <i class="fas fa-play"></i> Watch video
+                {% endif %}
+            </a>
+            {% endif %}
+        </div>
+        {% if recipe.video_platform == 'youtube' and recipe.video_embed_url %}
+        <div class="recipe-embed-wrap">
+            <iframe
+                class="recipe-embed"
+                src="{{ recipe.video_embed_url }}"
+                title="{{ recipe.name }} video"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen></iframe>
+        </div>
+        {% endif %}
         <div class="recipe-card-top">
             <span class="recipe-category">{{ recipe.category | title }}</span>
-            {% if recipe.source == 'curated' %}
-            <span class="recipe-badge">Featured</span>
+            {% if recipe.source in ['curated', 'admin'] %}
+            <span class="recipe-badge">{% if recipe.source == 'admin' %}New{% else %}Featured{% endif %}</span>
             {% endif %}
         </div>
         <h2>{{ recipe.name }}</h2>

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Content | LittleBowl{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header admin-header">
+    <div>
+        <h1><i class="fas fa-book"></i> Recipes &amp; catalog</h1>
+        <p>Add recipes and food items for all parents{% if admin_email %} · {{ admin_email }}{% endif %}</p>
+    </div>
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary btn-sm">Analytics</a>
+        <a href="{{ url_for('admin_logout') }}" class="btn btn-outline btn-sm">Sign out</a>
+    </div>
+</div>
+
+<div id="admin-content-error" class="alert warning" style="display:none;margin-bottom:1rem;"></div>
+<div id="admin-content-ok" class="alert info" style="display:none;margin-bottom:1rem;"></div>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Add recipe (all users)</h2>
+    <div class="card">
+        <div class="card-body">
+            <form id="admin-recipe-form" class="admin-form-grid">
+                <div class="form-group">
+                    <label for="recipe-name">Recipe name *</label>
+                    <input id="recipe-name" name="name" required placeholder="e.g. Soft Ragi Idli">
+                </div>
+                <div class="form-group">
+                    <label for="recipe-category">Category</label>
+                    <select id="recipe-category" name="category">
+                        {% for cat in food_categories %}
+                        <option value="{{ cat }}" {% if cat == 'combo' %}selected{% endif %}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group full">
+                    <label for="recipe-food-names">Linked food names (comma-separated)</label>
+                    <input id="recipe-food-names" name="food_names" placeholder="Ragi Idli, Idli">
+                    <p class="admin-muted">Used so weekly-plan foods can deep-link to this recipe.</p>
+                </div>
+                <div class="form-group full">
+                    <label for="recipe-why">Why it may work</label>
+                    <textarea id="recipe-why" name="why" rows="2"></textarea>
+                </div>
+                <div class="form-group full">
+                    <label for="recipe-steps">How to make it *</label>
+                    <textarea id="recipe-steps" name="steps" rows="4" required></textarea>
+                </div>
+                <div class="form-group full">
+                    <label for="recipe-cheese">Cheese / tip</label>
+                    <input id="recipe-cheese" name="cheese" placeholder="Optional tip">
+                </div>
+                <div class="form-group">
+                    <label for="recipe-from">Suitable from (months)</label>
+                    <input id="recipe-from" name="suitable_from_months" type="number" min="6" max="60" placeholder="12">
+                </div>
+                <div class="form-group">
+                    <label for="recipe-video">YouTube or Instagram URL</label>
+                    <input id="recipe-video" name="video_url" type="url" placeholder="https://youtube.com/... or https://instagram.com/reel/...">
+                </div>
+                <div class="form-group full">
+                    <label for="recipe-cover">Cover image</label>
+                    <input id="recipe-cover" name="cover" type="file" accept="image/png,image/jpeg,image/webp">
+                    <p class="admin-muted">Shown on the recipe card for everyone. Max 4MB.</p>
+                    <img id="recipe-cover-preview" alt="" style="display:none;max-width:220px;margin-top:0.5rem;border-radius:12px;">
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="recipe-published" checked> Published (visible to all users)</label>
+                </div>
+                <div class="form-group full">
+                    <button type="submit" class="btn btn-primary">Publish recipe</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Admin recipes</h2>
+    <div class="card">
+        <div class="card-body admin-table-wrap">
+            <table class="admin-table" id="admin-recipes-table">
+                <thead>
+                    <tr>
+                        <th>Cover</th>
+                        <th>Name</th>
+                        <th>Video</th>
+                        <th>Published</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="5" class="admin-muted">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Add food / meal item (all users)</h2>
+    <div class="card">
+        <div class="card-body">
+            <p class="admin-muted" style="margin-top:0;">Adds to the shared food catalog used for logging and meal plans.</p>
+            <form id="admin-food-form" class="admin-form-grid">
+                <div class="form-group">
+                    <label for="food-name">Food / meal name *</label>
+                    <input id="food-name" required placeholder="e.g. Soft Moong Khichdi">
+                </div>
+                <div class="form-group">
+                    <label for="food-category">Category</label>
+                    <select id="food-category">
+                        {% for cat in food_categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="food-from">Suitable from (months)</label>
+                    <input id="food-from" type="number" value="12" min="6" max="60">
+                </div>
+                <div class="form-group">
+                    <label for="food-calories">Calories / 100g</label>
+                    <input id="food-calories" type="number" step="0.1" min="0" placeholder="optional">
+                </div>
+                <div class="form-group">
+                    <label for="food-protein">Protein g / 100g</label>
+                    <input id="food-protein" type="number" step="0.1" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="food-iron">Iron mg / 100g</label>
+                    <input id="food-iron" type="number" step="0.1" min="0">
+                </div>
+                <div class="form-group full">
+                    <label for="food-tips">Preparation tips</label>
+                    <textarea id="food-tips" rows="2"></textarea>
+                </div>
+                <div class="form-group full">
+                    <label><input type="checkbox" id="food-also-recipe"> Also create a recipe card for this item</label>
+                </div>
+                <div class="form-group full" id="food-recipe-extra" style="display:none;">
+                    <label for="food-video">YouTube / Instagram URL (optional)</label>
+                    <input id="food-video" type="url" placeholder="https://...">
+                    <label for="food-cover" style="margin-top:0.75rem;display:block;">Cover image</label>
+                    <input id="food-cover" type="file" accept="image/png,image/jpeg,image/webp">
+                </div>
+                <div class="form-group full">
+                    <button type="submit" class="btn btn-primary">Add to catalog</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h2 class="admin-section-title">Recently added catalog items</h2>
+    <div class="card">
+        <div class="card-body admin-table-wrap">
+            <table class="admin-table" id="admin-foods-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>From (mo)</th>
+                        <th>kcal/100g</th>
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="4" class="admin-muted">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/admin-content.js') }}"></script>
+{% endblock %}
