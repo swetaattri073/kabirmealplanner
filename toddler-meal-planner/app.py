@@ -24,6 +24,7 @@ load_dotenv(os.path.join(_APP_DIR, '.env'))
 load_dotenv(os.path.join(_INSTANCE_DIR, '.env'), override=True)
 
 from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog
+from admin_stats import build_admin_stats
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
 from meal_planner import MealPlanner, update_preferences_from_log
@@ -201,6 +202,42 @@ def is_chat_feature_enabled():
     return _env_flag('FEATURE_CHAT_ENABLED', default=False)
 
 
+def get_admin_emails():
+    """Comma-separated allowlist from ADMIN_EMAILS env (case-insensitive)."""
+    raw = os.environ.get('ADMIN_EMAILS') or ''
+    return {e.strip().lower() for e in raw.split(',') if e.strip()}
+
+
+def is_admin_user(user=None):
+    """True if the user is logged in and their email is in ADMIN_EMAILS."""
+    u = user if user is not None else current_user
+    try:
+        if not u or not getattr(u, 'is_authenticated', False):
+            return False
+    except Exception:
+        return False
+    emails = get_admin_emails()
+    if not emails:
+        return False
+    return (getattr(u, 'email', None) or '').strip().lower() in emails
+
+
+def admin_required(f):
+    """Require login + ADMIN_EMAILS allowlist. JSON 403 for /api/, else HTML 403."""
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated:
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Sign in required.', 'code': 'AUTH_REQUIRED'}), 401
+            return redirect(url_for('login', next=request.path))
+        if not is_admin_user(current_user):
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Admin access required.', 'code': 'ADMIN_REQUIRED'}), 403
+            return render_template('404.html'), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
 def can_use_chat_assistant():
     """Chat UI/API: feature flag on AND logged-in premium subscriber."""
     if not is_chat_feature_enabled():
@@ -247,6 +284,7 @@ def inject_globals():
         'is_authenticated': current_user.is_authenticated if current_user else False,
         'feature_chat_enabled': is_chat_feature_enabled(),
         'chat_assistant_available': can_use_chat_assistant(),
+        'is_admin': is_admin_user(),
     }
 
 
@@ -2509,6 +2547,28 @@ def api_chat_summarize():
         toddler_name=toddler.name,
     )
     return jsonify({'summary': summary})
+
+
+# ==================== ADMIN DASHBOARD ====================
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    """Operator dashboard: users, toddlers, meal-logging engagement."""
+    return render_template('admin/dashboard.html', toddler=None, toddlers=[])
+
+
+@app.route('/api/admin/stats', methods=['GET'])
+@admin_required
+def api_admin_stats():
+    """JSON analytics for the admin dashboard."""
+    try:
+        recent_days = int(request.args.get('range', 30))
+    except (TypeError, ValueError):
+        recent_days = 30
+    recent_days = max(7, min(recent_days, 90))
+    stats = build_admin_stats(db.session, recent_days=recent_days)
+    return jsonify(stats)
 
 
 # ==================== ERROR HANDLERS ====================
