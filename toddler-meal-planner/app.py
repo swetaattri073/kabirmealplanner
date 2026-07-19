@@ -223,17 +223,14 @@ def is_admin_user(user=None):
 
 
 def admin_required(f):
-    """Require login + ADMIN_EMAILS allowlist. JSON 403 for /api/, else HTML 403."""
+    """Allow only ADMIN_EMAILS users. Everyone else gets an indistinguishable 404."""
     @wraps(f)
     def wrapped(*args, **kwargs):
-        if not current_user.is_authenticated:
+        # Do not redirect to login with next=/admin — that would expose the URL.
+        if not current_user.is_authenticated or not is_admin_user(current_user):
             if request.path.startswith('/api/'):
-                return jsonify({'error': 'Sign in required.', 'code': 'AUTH_REQUIRED'}), 401
-            return redirect(url_for('login', next=request.path))
-        if not is_admin_user(current_user):
-            if request.path.startswith('/api/'):
-                return jsonify({'error': 'Admin access required.', 'code': 'ADMIN_REQUIRED'}), 403
-            return render_template('404.html'), 403
+                return jsonify({'error': 'Resource not found'}), 404
+            return render_template('404.html'), 404
         return f(*args, **kwargs)
     return wrapped
 
@@ -284,7 +281,6 @@ def inject_globals():
         'is_authenticated': current_user.is_authenticated if current_user else False,
         'feature_chat_enabled': is_chat_feature_enabled(),
         'chat_assistant_available': can_use_chat_assistant(),
-        'is_admin': is_admin_user(),
     }
 
 
