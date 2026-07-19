@@ -21,9 +21,36 @@
     margin: 0 0 0.85rem;
 }
 
-.admin-muted {
-    color: var(--text-secondary);
+.admin-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.admin-form-grid .full {
+    grid-column: 1 / -1;
+}
+
+.admin-form-grid label {
+    display: block;
+    font-weight: 700;
     font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+}
+
+.admin-form-grid input,
+.admin-form-grid select,
+.admin-form-grid textarea {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font: inherit;
+    background: #fff;
+}
+
+.admin-form-grid .form-group {
+    margin: 0;
 }
 
 .admin-table-wrap {

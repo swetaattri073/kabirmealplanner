@@ -109,6 +109,43 @@ def _slugify(name: str) -> str:
     return slug or "recipe"
 
 
+def slugify_recipe_name(name: str) -> str:
+    return _slugify(name)
+
+
+def detect_video_platform(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    u = url.strip().lower()
+    if not u:
+        return None
+    if "youtube.com" in u or "youtu.be" in u:
+        return "youtube"
+    if "instagram.com" in u:
+        return "instagram"
+    return "other"
+
+
+def youtube_embed_url(url: Optional[str]) -> Optional[str]:
+    """Convert a YouTube watch/share URL into an embeddable /embed/ URL."""
+    if not url:
+        return None
+    u = url.strip()
+    # youtu.be/<id>
+    m = re.search(r"youtu\.be/([A-Za-z0-9_-]{6,})", u)
+    if m:
+        return f"https://www.youtube.com/embed/{m.group(1)}"
+    # youtube.com/watch?v=<id>
+    m = re.search(r"[?&]v=([A-Za-z0-9_-]{6,})", u)
+    if m:
+        return f"https://www.youtube.com/embed/{m.group(1)}"
+    # youtube.com/embed/<id> or /shorts/<id>
+    m = re.search(r"youtube\.com/(?:embed|shorts)/([A-Za-z0-9_-]{6,})", u)
+    if m:
+        return f"https://www.youtube.com/embed/{m.group(1)}"
+    return None
+
+
 def _food_to_recipe(food: Dict[str, Any]) -> Dict[str, Any]:
     name = food.get("name") or "Food"
     why = food.get("toddler_friendly_version") or f"Age-appropriate {food.get('category', 'meal')} option for toddlers."
@@ -126,6 +163,10 @@ def _food_to_recipe(food: Dict[str, Any]) -> Dict[str, Any]:
         "source": "food_db",
         "allergens": food.get("allergens") or [],
         "suitable_from_months": food.get("suitable_from_months"),
+        "cover_image_path": None,
+        "video_url": None,
+        "video_platform": None,
+        "video_embed_url": None,
     }
 
 
@@ -143,7 +184,56 @@ def _curated_to_recipe(item: Dict[str, Any]) -> Dict[str, Any]:
         "source": "curated",
         "allergens": [],
         "suitable_from_months": None,
+        "cover_image_path": None,
+        "video_url": None,
+        "video_platform": None,
+        "video_embed_url": None,
     }
+
+
+def _enrich_video_fields(recipe: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(recipe)
+    platform = out.get("video_platform") or detect_video_platform(out.get("video_url"))
+    out["video_platform"] = platform
+    out["video_embed_url"] = youtube_embed_url(out.get("video_url")) if platform == "youtube" else None
+    return out
+
+
+def _load_db_recipes(published_only: bool = True) -> List[Dict[str, Any]]:
+    try:
+        from models import Recipe
+        q = Recipe.query
+        if published_only:
+            q = q.filter_by(is_published=True)
+        rows = q.order_by(Recipe.sort_order.desc(), Recipe.created_at.desc()).all()
+        return [_enrich_video_fields(r.to_public_dict()) for r in rows]
+    except Exception:
+        return []
+
+
+def _merged_recipes(published_only: bool = True) -> List[Dict[str, Any]]:
+    """Admin DB recipes first (override same slug), then static curated/food cards."""
+    by_slug: Dict[str, Dict[str, Any]] = {}
+    order: List[str] = []
+
+    for recipe in _load_db_recipes(published_only=published_only):
+        slug = recipe["slug"]
+        if slug not in by_slug:
+            order.append(slug)
+        by_slug[slug] = recipe
+
+    for recipe in _ALL_RECIPES:
+        slug = recipe["slug"]
+        if slug in by_slug:
+            # Merge food_names onto admin/static winner
+            names = set(by_slug[slug].get("food_names") or [])
+            names.update(recipe.get("food_names") or [])
+            by_slug[slug]["food_names"] = sorted(names)
+            continue
+        by_slug[slug] = _enrich_video_fields(recipe)
+        order.append(slug)
+
+    return [by_slug[s] for s in order]
 
 
 def _build_all_recipes() -> List[Dict[str, Any]]:
@@ -159,7 +249,6 @@ def _build_all_recipes() -> List[Dict[str, Any]]:
     for food in INDIAN_FOODS:
         recipe = _food_to_recipe(food)
         if recipe["slug"] in seen:
-            # Keep curated version; still allow food-name matching via food_names merge
             for existing in recipes:
                 if existing["slug"] == recipe["slug"]:
                     names = set(existing.get("food_names") or [])
@@ -178,7 +267,7 @@ _BY_SLUG = {r["slug"]: r for r in _ALL_RECIPES}
 
 
 def list_recipes(category: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
-    recipes = list(_ALL_RECIPES)
+    recipes = _merged_recipes(published_only=True)
     if category:
         recipes = [r for r in recipes if (r.get("category") or "") == category]
     if q:
@@ -193,7 +282,11 @@ def list_recipes(category: Optional[str] = None, q: Optional[str] = None) -> Lis
 
 
 def get_recipe(slug: str) -> Optional[Dict[str, Any]]:
-    return _BY_SLUG.get((slug or "").strip().lower())
+    key = (slug or "").strip().lower()
+    for recipe in _merged_recipes(published_only=True):
+        if recipe.get("slug") == key:
+            return recipe
+    return _enrich_video_fields(_BY_SLUG[key]) if key in _BY_SLUG else None
 
 
 def find_recipe_for_food_name(food_name: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -203,31 +296,29 @@ def find_recipe_for_food_name(food_name: Optional[str]) -> Optional[Dict[str, An
     if not name:
         return None
 
-    # Exact food_names match
-    for recipe in _ALL_RECIPES:
+    recipes = _merged_recipes(published_only=True)
+
+    for recipe in recipes:
         for n in recipe.get("food_names") or []:
             if n.lower() == name:
                 return recipe
 
-    # Exact recipe name
-    for recipe in _ALL_RECIPES:
+    for recipe in recipes:
         if recipe["name"].lower() == name:
             return recipe
 
-    # Substring either way
-    for recipe in _ALL_RECIPES:
+    for recipe in recipes:
         for n in recipe.get("food_names") or [recipe["name"]]:
             nl = n.lower()
             if name in nl or nl in name:
                 return recipe
 
-    # Word overlap
     words = [w for w in re.split(r"\s+", name) if len(w) > 2]
     if not words:
         return None
     best = None
     best_score = 0
-    for recipe in _ALL_RECIPES:
+    for recipe in recipes:
         hay = " ".join(recipe.get("food_names") or [recipe["name"]]).lower()
         score = sum(1 for w in words if w in hay)
         if score > best_score:

@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#6b8f3c">
+    <meta name="theme-color" content="{% block theme_color %}#6b8f3c{% endblock %}">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="LittleBowl">
-    <meta name="application-name" content="LittleBowl">
-    <meta name="description" content="LittleBowl — Little meals, big growth. Personalized meal planning for Indian toddlers.">
+    <meta name="apple-mobile-web-app-status-bar-style" content="{% block apple_status_bar %}black-translucent{% endblock %}">
+    <meta name="apple-mobile-web-app-title" content="{% block apple_app_title %}LittleBowl{% endblock %}">
+    <meta name="application-name" content="{% block application_name %}LittleBowl{% endblock %}">
+    <meta name="description" content="{% block meta_description %}LittleBowl — Little meals, big growth. Personalized meal planning for Indian toddlers.{% endblock %}">
     
     <title>{% block title %}LittleBowl{% endblock %}</title>
     
     <!-- PWA Manifest -->
+    {% block pwa_manifest %}
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    {% endblock %}
     
     <!-- Favicon & App Icons -->
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
@@ -215,7 +217,9 @@
     {% endif %}
     
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block a2hs_script %}
     <script src="{{ url_for('static', filename='js/a2hs-prompt.js') }}" defer></script>
+    {% endblock %}
     {% if chat_assistant_available and toddler %}
     <script>
         window.LITTLEBOWL_CHAT = {
@@ -227,6 +231,7 @@
     {% endif %}
     
     <!-- PWA Service Worker Registration -->
+    {% block service_worker %}
     <script>
         // Register Service Worker
         if ('serviceWorker' in navigator) {
@@ -240,7 +245,9 @@
                     });
             });
         }
-        
+    </script>
+    {% endblock %}
+    <script>
         // Mobile sidebar toggle
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
@@ -259,12 +266,11 @@
             });
         });
         
-        // Install prompt for PWA
+        // Install prompt for PWA (legacy #install-btn hook)
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
-            // Show install button if needed
             const installBtn = document.getElementById('install-btn');
             if (installBtn) {
                 installBtn.style.display = 'block';

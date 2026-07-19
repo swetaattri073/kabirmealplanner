@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 
 {% block title %}Admin Dashboard | LittleBowl{% endblock %}
+{% block theme_color %}#1a1f16{% endblock %}
+{% block apple_status_bar %}black{% endblock %}
+{% block apple_app_title %}LB Admin{% endblock %}
+{% block application_name %}LittleBowl Admin{% endblock %}
+{% block meta_description %}LittleBowl Admin — operator analytics and content tools.{% endblock %}
+{% block pwa_manifest %}
+<link rel="manifest" href="{{ url_for('static', filename='manifest-admin.json') }}">
+{% endblock %}
+{% block a2hs_script %}
+<script src="{{ url_for('static', filename='js/a2hs-admin-prompt.js') }}" defer></script>
+{% endblock %}
+{% block service_worker %}
+{# Admin SW is registered by a2hs-admin-prompt.js with scope /admin #}
+{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
@@ -13,6 +27,12 @@
         <p>Parent adoption, toddler profiles, and meal-logging engagement{% if admin_email %} · {{ admin_email }}{% endif %}</p>
     </div>
     <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.installLittleBowlAdminApp && window.installLittleBowlAdminApp()">
+            <i class="fas fa-mobile-alt"></i> Install app
+        </button>
+        <a href="{{ url_for('admin_content_page') }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-book"></i> Recipes &amp; catalog
+        </a>
         <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh" onclick="loadAdminDashboard()">
             <i class="fas fa-sync-alt"></i> Refresh
         </button>
