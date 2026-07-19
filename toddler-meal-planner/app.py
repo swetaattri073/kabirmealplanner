@@ -2171,6 +2171,7 @@ def get_dashboard_data(toddler_id):
         'today_plan': today_plan,
         'nutrition': nutrition,
         'alerts': alerts[:3],  # Top 3 alerts
+        'alerts_total': len(alerts),
         'suggestions': fallback_suggestions
     })
 

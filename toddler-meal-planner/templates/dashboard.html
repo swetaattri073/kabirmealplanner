@@ -11,40 +11,40 @@
     
     <!-- Quick Stats -->
     <div class="stats-row">
-        <div class="stat-card">
+        <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="stat-card stat-card-link" aria-label="View and log meals">
             <div class="stat-icon primary">🍽️</div>
             <div class="stat-content">
                 <h3 id="meals-eaten">0</h3>
                 <p>Meals Today</p>
             </div>
-        </div>
-        <div class="stat-card">
+        </a>
+        <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="stat-card stat-card-link" aria-label="View nutrition details">
             <div class="stat-icon success">📊</div>
             <div class="stat-content">
                 <h3 id="nutrition-score">--</h3>
                 <p>Nutrition Score</p>
             </div>
-        </div>
-        <div class="stat-card">
+        </a>
+        <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}#alerts" class="stat-card stat-card-link" aria-label="View nutrition alerts">
             <div class="stat-icon warning">⚡</div>
             <div class="stat-content">
                 <h3 id="alerts-count">0</h3>
                 <p>Alerts</p>
             </div>
-        </div>
-        <div class="stat-card">
+        </a>
+        <a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}" class="stat-card stat-card-link" aria-label="View preferences and profile">
             <div class="stat-icon primary">📅</div>
             <div class="stat-content">
                 <h3>{{ toddler.age_months }}</h3>
                 <p>Months Old</p>
             </div>
-        </div>
+        </a>
     </div>
     
     <!-- Health Status Card (if weight provided) -->
     {% if toddler.weight_kg %}
-    <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-body" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+    <div class="card card-clickable" style="margin-bottom: 1.5rem;">
+        <a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}" class="card-body-link" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 1.75rem; text-decoration: none; color: inherit;">
             <div style="flex: 1; min-width: 200px;">
                 <span style="font-size: 0.85rem; color: var(--text-secondary);">Weight Status</span>
                 <div style="font-weight: 700; font-size: 1.1rem;" id="weight-status">
@@ -63,7 +63,9 @@
                     Calculating...
                 </div>
             </div>
-            <a href="#" onclick="showHealthModal()" class="btn btn-secondary btn-sm">
+        </a>
+        <div style="padding: 0 1.75rem 1.25rem;">
+            <a href="#" onclick="showHealthModal(); return false;" class="btn btn-secondary btn-sm">
                 <i class="fas fa-edit"></i> Update
             </a>
         </div>
@@ -72,9 +74,9 @@
     
     <div class="dashboard-grid">
         <!-- Today's Meals -->
-        <div class="card">
+        <div class="card card-clickable">
             <div class="card-header">
-                <h2>🍱 Today's Meals</h2>
+                <h2><a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="card-title-link">🍱 Today's Meals</a></h2>
                 <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="btn btn-primary btn-sm">
                     <i class="fas fa-plus"></i> Log Meal
                 </a>
@@ -89,40 +91,50 @@
         </div>
         
         <!-- Nutrition Status -->
-        <div class="card">
+        <div class="card card-clickable">
             <div class="card-header">
-                <h2>📊 Today's Nutrition</h2>
+                <h2><a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="card-title-link">📊 Today's Nutrition</a></h2>
                 <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
                     View Details
                 </a>
             </div>
-            <div class="card-body">
-                <div id="nutrition-grid" class="nutrition-grid">
-                    <div class="loading">
-                        <div class="spinner"></div>
+            <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="card-body-link">
+                <div class="card-body">
+                    <div id="nutrition-grid" class="nutrition-grid">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
         
         <!-- Alerts & Recommendations -->
-        <div class="card full-width">
+        <div class="card full-width card-clickable">
             <div class="card-header">
-                <h2>💡 Nutrition Alerts & Tips</h2>
+                <h2><a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}#alerts" class="card-title-link">💡 Nutrition Alerts & Tips</a></h2>
+                <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}#alerts" class="btn btn-secondary btn-sm">
+                    View All
+                </a>
             </div>
-            <div class="card-body">
-                <div id="alerts-container">
-                    <div class="loading">
-                        <div class="spinner"></div>
+            <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}#alerts" class="card-body-link">
+                <div class="card-body">
+                    <div id="alerts-container">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
         
         <!-- Daily Enhancement Tip -->
-        <div class="card">
+        <div class="card card-clickable">
             <div class="card-header">
-                <h2>✨ Make It More Nutritious</h2>
+                <h2><a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}" class="card-title-link">✨ Make It More Nutritious</a></h2>
+                <a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
+                    Preferences
+                </a>
             </div>
             <div class="card-body">
                 <div id="daily-tip-container">
@@ -139,22 +151,27 @@
         </div>
         
         <!-- Flavor Exploration -->
-        <div class="card">
+        <div class="card card-clickable">
             <div class="card-header">
-                <h2>🌈 Try New Flavors</h2>
+                <h2><a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}" class="card-title-link">🌈 Try New Flavors</a></h2>
+                <a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
+                    Preferences
+                </a>
             </div>
-            <div class="card-body">
-                <div id="flavor-exploration-container">
-                    <p style="color: var(--text-secondary);">
-                        Based on what {{ toddler.name }} already likes, here are similar foods to try...
-                    </p>
-                    <div id="flavor-suggestions" style="margin-top: 1rem;">
-                        <div class="loading">
-                            <div class="spinner"></div>
+            <a href="{{ url_for('preferences_page', toddler_id=toddler.id) }}" class="card-body-link">
+                <div class="card-body">
+                    <div id="flavor-exploration-container">
+                        <p style="color: var(--text-secondary);">
+                            Based on what {{ toddler.name }} already likes, here are similar foods to try...
+                        </p>
+                        <div id="flavor-suggestions" style="margin-top: 1rem;">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
     
@@ -176,7 +193,8 @@
     // Update stats when dashboard loads
     function updateStats(data) {
         document.getElementById('meals-eaten').textContent = data.meals_eaten?.length || 0;
-        document.getElementById('alerts-count').textContent = data.alerts?.length || 0;
+        document.getElementById('alerts-count').textContent =
+            data.alerts_total ?? data.alerts?.length ?? 0;
         
         // Calculate average nutrition score
         const nutrition = data.nutrition || {};
