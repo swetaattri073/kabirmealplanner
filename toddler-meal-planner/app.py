@@ -2654,6 +2654,22 @@ def api_chat_summarize():
 
 # ==================== ADMIN DASHBOARD ====================
 
+@app.route('/admin/sw.js')
+def admin_service_worker():
+    """Serve admin PWA service worker with /admin scope."""
+    from flask import send_from_directory, make_response
+    response = make_response(
+        send_from_directory(
+            Path(app.root_path) / 'static',
+            'admin-sw.js',
+            mimetype='application/javascript',
+        )
+    )
+    response.headers['Service-Worker-Allowed'] = '/admin'
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
+
 @app.route('/admin', methods=['GET'])
 def admin_dashboard():
     """Operator dashboard. Shows env-based login when not authenticated."""
