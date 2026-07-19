@@ -192,6 +192,123 @@ function renderAdminDistributions(dist) {
     }).join('');
 }
 
+function adminFmtDuration(seconds) {
+    if (seconds == null || Number.isNaN(Number(seconds))) return '—';
+    const s = Math.round(Number(seconds));
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    if (m < 60) return rem ? `${m}m ${rem}s` : `${m}m`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+}
+
+function renderAdminBehavior(behavior) {
+    const note = document.getElementById('admin-behavior-note');
+    const traffic = document.getElementById('admin-traffic-stats');
+    const funnelEl = document.getElementById('admin-funnel');
+    const stuckEl = document.getElementById('admin-stuck');
+    const pagesEl = document.getElementById('admin-top-pages');
+    const actionsEl = document.getElementById('admin-actions');
+    const limEl = document.getElementById('admin-limitations');
+    if (!behavior) return;
+
+    if (note) {
+        note.textContent = behavior.available
+            ? `Tracking since ${adminFmtDate(behavior.instrumentation_since)}. Duration and visits are first-party estimates.`
+            : 'Visit/time tracking is not available yet (no events collected). Product signup/meal stats above still work.';
+    }
+
+    const visits = behavior.visits || {};
+    const time = behavior.time_on_site || {};
+    if (traffic) {
+        traffic.innerHTML = [
+            adminStatCard(visits.unique_sessions_7d ?? '—', 'Unique visits (7d)', '👀'),
+            adminStatCard(visits.page_views_7d ?? '—', 'Page views (7d)', '📄'),
+            adminStatCard(visits.unique_sessions_30d ?? '—', 'Unique visits (30d)', '🗓️'),
+            adminStatCard(adminFmtDuration(time.median_seconds_7d), 'Median stay (7d)', '⏱️'),
+            adminStatCard(adminFmtDuration(time.avg_seconds_7d), 'Avg stay (7d)', '⌛'),
+            adminStatCard(time.sessions_measured_7d ?? '—', 'Sessions with duration', '📏'),
+        ].join('');
+    }
+
+    const steps = (behavior.funnel && behavior.funnel.steps) || [];
+    const maxStep = Math.max(1, ...steps.map((s) => s.count || 0));
+    if (funnelEl) {
+        if (!steps.length) {
+            funnelEl.innerHTML = '<p class="admin-muted">No funnel data yet.</p>';
+        } else {
+            funnelEl.innerHTML = steps.map((s) => {
+                const w = Math.max(4, Math.round((s.count / maxStep) * 100));
+                return `
+                    <div class="admin-funnel-row">
+                        <div class="admin-funnel-label">${adminEsc(s.label)}</div>
+                        <div class="admin-funnel-bar-wrap"><div class="admin-funnel-bar" style="width:${w}%"></div></div>
+                        <div class="admin-funnel-count"><strong>${s.count}</strong></div>
+                    </div>
+                `;
+            }).join('') + (behavior.funnel.note ? `<p class="admin-muted" style="margin-top:0.75rem;">${adminEsc(behavior.funnel.note)}</p>` : '');
+        }
+    }
+
+    const dropOffs = (behavior.funnel && behavior.funnel.drop_offs) || [];
+    const stuck = behavior.stuck_insights || [];
+    if (stuckEl) {
+        let html = stuck.map((s) => `
+            <div class="admin-insight">
+                <strong>${adminEsc(s.title)}</strong>
+                <p>${adminEsc(s.detail)}</p>
+            </div>
+        `).join('');
+        if (dropOffs.length) {
+            html += '<h4 style="margin:1rem 0 0.5rem;">Largest drop-offs</h4>';
+            html += dropOffs
+                .filter((d) => d.lost > 0)
+                .sort((a, b) => b.drop_pct - a.drop_pct)
+                .slice(0, 4)
+                .map((d) => `
+                    <div class="admin-insight">
+                        <strong>${adminEsc(d.title)} — ${d.drop_pct}% drop (${d.lost} lost)</strong>
+                        <p>Likely reasons (heuristic, not proven): ${adminEsc((d.likely_reasons || []).join('; '))}</p>
+                    </div>
+                `).join('');
+        }
+        stuckEl.innerHTML = html || '<p class="admin-muted">No insights yet.</p>';
+    }
+
+    if (pagesEl) {
+        const pages = behavior.top_pages || [];
+        pagesEl.innerHTML = pages.length
+            ? `<ul class="admin-dist-list">${pages.map((p) => `<li><span>${adminEsc(p.path)}</span><strong>${p.views}</strong></li>`).join('')}</ul>`
+            : '<p class="admin-muted">No page views yet.</p>';
+    }
+
+    if (actionsEl) {
+        const named = (behavior.actions && behavior.actions.named_product_actions_7d) || {};
+        const audit = (behavior.actions && behavior.actions.api_audit_actions_7d) || {};
+        const namedList = Object.entries(named).sort((a, b) => b[1] - a[1]);
+        const auditList = Object.entries(audit).sort((a, b) => b[1] - a[1]).slice(0, 10);
+        let html = '';
+        html += '<h4 style="margin:0 0 0.5rem;">Product actions</h4>';
+        html += namedList.length
+            ? `<ul class="admin-dist-list">${namedList.map(([k, v]) => `<li><span>${adminEsc(k)}</span><strong>${v}</strong></li>`).join('')}</ul>`
+            : '<p class="admin-muted">No named product actions yet (signup / toddler / meal).</p>';
+        html += '<h4 style="margin:1rem 0 0.5rem;">API mutations (audit)</h4>';
+        html += auditList.length
+            ? `<ul class="admin-dist-list">${auditList.map(([k, v]) => `<li><span>${adminEsc(k)}</span><strong>${v}</strong></li>`).join('')}</ul>`
+            : '<p class="admin-muted">No audited API mutations in the last 7 days.</p>';
+        if (behavior.actions && behavior.actions.note) {
+            html += `<p class="admin-muted" style="margin-top:0.75rem;">${adminEsc(behavior.actions.note)}</p>`;
+        }
+        actionsEl.innerHTML = html;
+    }
+
+    if (limEl) {
+        const lims = behavior.limitations || [];
+        limEl.innerHTML = lims.map((l) => `<li><span>${adminEsc(l)}</span></li>`).join('');
+    }
+}
+
 async function loadAdminDashboard() {
     const err = document.getElementById('admin-error');
     if (err) {
@@ -210,6 +327,7 @@ async function loadAdminDashboard() {
         const data = await res.json();
         renderAdminOverview(data.overview || {});
         renderAdminDailyChart(data.daily_meal_volume || []);
+        renderAdminBehavior(data.behavior || {});
         renderAdminUsers(data.users || []);
         renderAdminGuests(data.guest_toddlers || []);
         renderAdminDistributions(data.distributions || {});

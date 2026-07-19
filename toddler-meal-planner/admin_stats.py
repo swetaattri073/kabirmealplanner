@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import distinct, func
 
-from models import MealLog, Toddler, User, WeeklyPlan, FoodPreference, Food
+from models import MealLog, Toddler, User, WeeklyPlan, FoodPreference, Food, AnalyticsEvent, AuditLog
 
 
 def _iso(d):
@@ -23,6 +23,36 @@ def _iso(d):
     if isinstance(d, date):
         return d.isoformat()
     return str(d)
+
+
+def _median(values):
+    if not values:
+        return None
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    if n % 2:
+        return s[mid]
+    return (s[mid - 1] + s[mid]) / 2
+
+
+def _path_bucket(path):
+    p = (path or '/').split('?')[0]
+    if p.startswith('action:'):
+        return p
+    parts = [x for x in p.split('/') if x]
+    if not parts:
+        return '/'
+    root = parts[0]
+    known = {
+        'dashboard', 'log-meal', 'weekly-plan', 'nutrition', 'preferences',
+        'recipes', 'onboarding', 'signup', 'login', 'home', 'profile',
+    }
+    if root in known:
+        return f'/{root}' + ('/:id' if len(parts) > 1 and parts[1].isdigit() else '')
+    if root == 'api':
+        return '/api/…'
+    return '/' + root
 
 
 def _age_bucket(months):
@@ -37,6 +67,318 @@ def _age_bucket(months):
     if months < 36:
         return '24–35 mo'
     return '36+ mo'
+
+
+def _build_traffic_and_funnel(db_session, now, week_ago_dt, month_ago_dt, users, toddlers, log_by_toddler):
+    """Visit/time/action/funnel stats from AnalyticsEvent + product tables."""
+    limitations = [
+        'Visit and time-on-site data only exist after this analytics feature was deployed — older history cannot be recovered.',
+        'Duration is approximate (visible-tab time via heartbeats / page leave), not exact engagement.',
+        'Visitors with JavaScript disabled or blocked are undercounted.',
+        'We cannot see scroll depth, rage clicks, heatmaps, or marketing attribution (UTM/ads) unless added later.',
+        'Guest→signup linking is imperfect after toddlers transfer to a user account.',
+    ]
+
+    first_event = db_session.query(func.min(AnalyticsEvent.created_at)).scalar()
+    event_count = db_session.query(func.count(AnalyticsEvent.id)).scalar() or 0
+
+    if not event_count:
+        return {
+            'available': False,
+            'instrumentation_since': None,
+            'limitations': limitations + [
+                'No analytics events recorded yet. Open the site in a browser after deploy to start collecting visits.',
+            ],
+            'visits': {},
+            'time_on_site': {},
+            'top_pages': [],
+            'actions': {},
+            'funnel': {'steps': [], 'drop_offs': []},
+            'stuck_insights': [
+                {
+                    'title': 'Waiting for visit data',
+                    'detail': 'Until parents browse the live site, we can only use signup / toddler / meal-log tables for engagement — not page visits or stay time.',
+                }
+            ],
+        }
+
+    def _window_stats(since_dt):
+        page_views = (
+            AnalyticsEvent.query
+            .filter(
+                AnalyticsEvent.created_at >= since_dt,
+                AnalyticsEvent.event_type == 'page_view',
+            )
+            .count()
+        )
+        sessions = (
+            db_session.query(func.count(distinct(AnalyticsEvent.session_id)))
+            .filter(
+                AnalyticsEvent.created_at >= since_dt,
+                AnalyticsEvent.session_id.isnot(None),
+            )
+            .scalar()
+            or 0
+        )
+        return page_views, int(sessions)
+
+    pv7, sess7 = _window_stats(week_ago_dt)
+    pv30, sess30 = _window_stats(month_ago_dt)
+
+    events_7d = (
+        AnalyticsEvent.query
+        .filter(AnalyticsEvent.created_at >= week_ago_dt)
+        .order_by(AnalyticsEvent.created_at.asc())
+        .all()
+    )
+    by_session = defaultdict(list)
+    for ev in events_7d:
+        if ev.session_id:
+            by_session[ev.session_id].append(ev)
+
+    session_seconds = []
+    for _sid, evs in by_session.items():
+        max_dur = 0
+        for ev in evs:
+            if ev.duration_ms and ev.event_type in ('heartbeat', 'page_leave'):
+                max_dur = max(max_dur, ev.duration_ms)
+        if max_dur > 0:
+            session_seconds.append(max_dur / 1000.0)
+        elif len(evs) >= 2 and evs[0].created_at and evs[-1].created_at:
+            span = (evs[-1].created_at - evs[0].created_at).total_seconds()
+            if span > 0:
+                session_seconds.append(min(span, 4 * 3600))
+
+    page_rows = (
+        db_session.query(AnalyticsEvent.path, func.count(AnalyticsEvent.id))
+        .filter(
+            AnalyticsEvent.created_at >= week_ago_dt,
+            AnalyticsEvent.event_type == 'page_view',
+        )
+        .group_by(AnalyticsEvent.path)
+        .all()
+    )
+    page_counter = Counter()
+    for path, count in page_rows:
+        page_counter[_path_bucket(path)] += int(count)
+    top_pages = [{'path': p, 'views': c} for p, c in page_counter.most_common(12)]
+
+    action_events = (
+        AnalyticsEvent.query
+        .filter(
+            AnalyticsEvent.created_at >= week_ago_dt,
+            AnalyticsEvent.event_type == 'action',
+        )
+        .all()
+    )
+    named_actions = Counter()
+    for ev in action_events:
+        name = None
+        if ev.meta and isinstance(ev.meta, dict):
+            name = ev.meta.get('action')
+        if not name and ev.path and ev.path.startswith('action:'):
+            name = ev.path.split(':', 1)[1]
+        named_actions[name or 'unknown'] += 1
+
+    audit_rows = (
+        db_session.query(AuditLog.action, func.count(AuditLog.id))
+        .filter(AuditLog.created_at >= week_ago_dt)
+        .group_by(AuditLog.action)
+        .order_by(func.count(AuditLog.id).desc())
+        .limit(15)
+        .all()
+    )
+    audit_actions = {a: int(c) for a, c in audit_rows}
+
+    events_30d = (
+        AnalyticsEvent.query
+        .filter(AnalyticsEvent.created_at >= month_ago_dt)
+        .all()
+    )
+    session_flags = defaultdict(lambda: {
+        'landing': False, 'signup_page': False, 'login_page': False,
+        'onboarding': False, 'dashboard': False, 'log_meal_page': False,
+        'weekly_plan': False, 'nutrition': False, 'preferences': False,
+        'action_signup': False, 'action_toddler': False, 'action_meal': False,
+        'user_id': None,
+    })
+    for ev in events_30d:
+        if not ev.session_id:
+            continue
+        f = session_flags[ev.session_id]
+        if ev.user_id:
+            f['user_id'] = ev.user_id
+        p = (ev.path or '')
+        if ev.event_type == 'page_view':
+            if p == '/' or p.startswith('/?'):
+                f['landing'] = True
+            elif p.startswith('/signup'):
+                f['signup_page'] = True
+            elif p.startswith('/login'):
+                f['login_page'] = True
+            elif p.startswith('/onboarding'):
+                f['onboarding'] = True
+            elif p.startswith('/dashboard'):
+                f['dashboard'] = True
+            elif p.startswith('/log-meal'):
+                f['log_meal_page'] = True
+            elif p.startswith('/weekly-plan'):
+                f['weekly_plan'] = True
+            elif p.startswith('/nutrition'):
+                f['nutrition'] = True
+            elif p.startswith('/preferences'):
+                f['preferences'] = True
+        if ev.event_type == 'action':
+            an = (ev.meta or {}).get('action') if isinstance(ev.meta, dict) else None
+            if not an and p.startswith('action:'):
+                an = p.split(':', 1)[1]
+            if an == 'user.signup':
+                f['action_signup'] = True
+            elif an == 'toddler.created':
+                f['action_toddler'] = True
+            elif an == 'meal.logged':
+                f['action_meal'] = True
+
+    for t in toddlers:
+        if t.session_id and t.session_id in session_flags:
+            session_flags[t.session_id]['action_toddler'] = True
+
+    def count_flag(key):
+        return sum(1 for f in session_flags.values() if f.get(key))
+
+    visitors = len(session_flags) or 0
+    saw_landing = count_flag('landing') or visitors
+    saw_onboarding = count_flag('onboarding')
+    created_toddler = count_flag('action_toddler')
+    signed_up = count_flag('action_signup')
+    users_new_30 = sum(1 for u in users if u.created_at and u.created_at >= month_ago_dt)
+    signed_up_effective = max(signed_up, users_new_30)
+    logged_meal = count_flag('action_meal')
+    saw_log_meal_page = count_flag('log_meal_page')
+
+    funnel_steps = [
+        {'key': 'visitors', 'label': 'Site visitors (sessions)', 'count': int(visitors)},
+        {'key': 'landing', 'label': 'Viewed landing page', 'count': int(saw_landing)},
+        {'key': 'onboarding', 'label': 'Opened onboarding', 'count': int(saw_onboarding)},
+        {'key': 'toddler', 'label': 'Created toddler profile', 'count': int(created_toddler)},
+        {'key': 'signup', 'label': 'Signed up (account)', 'count': int(signed_up_effective)},
+        {'key': 'log_meal_page', 'label': 'Opened Log Meal', 'count': int(saw_log_meal_page)},
+        {'key': 'meal', 'label': 'Logged at least one meal', 'count': int(logged_meal)},
+    ]
+
+    drop_offs = []
+    pairs = [
+        ('visitors', 'onboarding', 'Visited but never started onboarding',
+         ['Landing CTA unclear or not compelling', 'Browsing / bouncing without intent', 'Mobile load or trust concerns']),
+        ('onboarding', 'toddler', 'Started onboarding but did not create a profile',
+         ['Form friction (too many fields)', 'Interrupted mid-flow', 'Unsure about sharing child data']),
+        ('toddler', 'meal', 'Created a toddler but never logged a meal',
+         ['Did not understand next step after profile', 'Logging feels like work', 'Came only to explore meal ideas']),
+        ('log_meal_page', 'meal', 'Opened Log Meal but did not finish logging',
+         ['Food search / reaction UI friction', 'Abandoned because meal was not in database', 'Left to cook and never returned']),
+        ('toddler', 'signup', 'Used as guest but did not create an account',
+         ['Signup not required so easy to leave', 'Privacy hesitation', 'Did not see value in saving progress']),
+    ]
+    step_map = {s['key']: s['count'] for s in funnel_steps}
+    for a, b, title, reasons in pairs:
+        left = step_map.get(a, 0)
+        right = step_map.get(b, 0)
+        if left <= 0:
+            continue
+        lost = max(0, left - right)
+        drop_offs.append({
+            'from': a,
+            'to': b,
+            'title': title,
+            'from_count': left,
+            'to_count': right,
+            'lost': lost,
+            'drop_pct': round(lost / left * 100, 1) if left else 0,
+            'likely_reasons': reasons,
+            'confidence': 'heuristic',
+        })
+
+    stuck = []
+    guests_no_logs = [
+        t for t in toddlers
+        if not t.user_id and log_by_toddler.get(t.id, {}).get('log_count', 0) == 0
+    ]
+    if guests_no_logs:
+        stuck.append({
+            'title': f'{len(guests_no_logs)} guest toddler(s) with zero meals logged',
+            'detail': 'Parents created a profile anonymously but never came back to log food — highest-risk drop after first session.',
+        })
+
+    uids_with_t = {t.user_id for t in toddlers if t.user_id}
+    users_no_toddler = [u for u in users if u.id not in uids_with_t]
+    if users_no_toddler:
+        stuck.append({
+            'title': f'{len(users_no_toddler)} registered user(s) with no toddler profile',
+            'detail': 'Signed up but stalled before onboarding completed — account alone is not activation.',
+        })
+
+    users_with_t_no_logs = []
+    for u in users:
+        kids = [t for t in toddlers if t.user_id == u.id]
+        if not kids:
+            continue
+        if all(log_by_toddler.get(t.id, {}).get('log_count', 0) == 0 for t in kids):
+            users_with_t_no_logs.append(u)
+    if users_with_t_no_logs:
+        stuck.append({
+            'title': f'{len(users_with_t_no_logs)} user(s) with toddlers but zero meal logs',
+            'detail': 'They completed setup but are not forming the core habit (daily logging). Check Log Meal UX and reminders.',
+        })
+
+    bounceish = sum(
+        1 for f in session_flags.values()
+        if f['landing'] and not f['onboarding'] and not f['action_toddler'] and not f['dashboard']
+    )
+    if bounceish:
+        stuck.append({
+            'title': f'{bounceish} session(s) looked like landing-only visits (30d)',
+            'detail': 'Saw marketing/home but did not enter the product. Improve hero CTA clarity or load speed — estimate from page views only.',
+        })
+
+    if not stuck:
+        stuck.append({
+            'title': 'No strong stuck segments detected yet',
+            'detail': 'Either traffic is low or parents who arrive are converting into meal logs. Re-check after more visits accumulate.',
+        })
+
+    med = _median(session_seconds)
+    avg = (sum(session_seconds) / len(session_seconds)) if session_seconds else None
+
+    return {
+        'available': True,
+        'instrumentation_since': _iso(first_event),
+        'limitations': limitations,
+        'visits': {
+            'page_views_7d': pv7,
+            'page_views_30d': pv30,
+            'unique_sessions_7d': sess7,
+            'unique_sessions_30d': sess30,
+        },
+        'time_on_site': {
+            'sessions_measured_7d': len(session_seconds),
+            'median_seconds_7d': round(med, 1) if med is not None else None,
+            'avg_seconds_7d': round(avg, 1) if avg is not None else None,
+            'note': 'Based on visible-tab time from heartbeats/page leave when available; otherwise first→last event span.',
+        },
+        'top_pages': top_pages,
+        'actions': {
+            'named_product_actions_7d': dict(named_actions),
+            'api_audit_actions_7d': audit_actions,
+            'note': 'Named actions (signup, toddler created, meal logged) are explicit. API audit actions are mutating requests (not every click).',
+        },
+        'funnel': {
+            'window_days': 30,
+            'steps': funnel_steps,
+            'drop_offs': drop_offs,
+            'note': 'Funnel uses browser sessions + product events. Counts are not a perfect single-user journey.',
+        },
+        'stuck_insights': stuck,
+    }
 
 
 def build_admin_stats(db_session, recent_days=30, user_limit=200):
@@ -291,4 +633,7 @@ def build_admin_stats(db_session, recent_days=30, user_limit=200):
             'meal_types': meal_types,
         },
         'daily_meal_volume': daily_volume,
+        'behavior': _build_traffic_and_funnel(
+            db_session, now, week_ago_dt, month_ago_dt, users, toddlers, log_by_toddler
+        ),
     }
