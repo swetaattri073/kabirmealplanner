@@ -707,6 +707,39 @@ class AuditLog(db.Model):
         }
 
 
+class AnalyticsEvent(db.Model):
+    """First-party page views, session heartbeats, and named product actions."""
+    __tablename__ = 'analytics_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(64), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    toddler_id = db.Column(db.Integer, db.ForeignKey('toddlers.id'), nullable=True, index=True)
+
+    event_type = db.Column(db.String(30), nullable=False, index=True)  # page_view, heartbeat, page_leave, action
+    path = db.Column(db.String(300), nullable=True, index=True)
+    referrer = db.Column(db.String(500), nullable=True)
+    duration_ms = db.Column(db.Integer, nullable=True)
+    meta = db.Column(JSON, nullable=True)
+
+    ip_address = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'session_id': self.session_id,
+            'user_id': self.user_id,
+            'toddler_id': self.toddler_id,
+            'event_type': self.event_type,
+            'path': self.path,
+            'referrer': self.referrer,
+            'duration_ms': self.duration_ms,
+            'meta': self.meta,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class NutritionAlert(db.Model):
     """Track nutrition alerts and recommendations"""
     __tablename__ = 'nutrition_alerts'

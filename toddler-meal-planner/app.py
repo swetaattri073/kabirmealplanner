@@ -23,8 +23,9 @@ os.makedirs(_INSTANCE_DIR, exist_ok=True)
 load_dotenv(os.path.join(_APP_DIR, '.env'))
 load_dotenv(os.path.join(_INSTANCE_DIR, '.env'), override=True)
 
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent
 from admin_stats import build_admin_stats
+from analytics import record_analytics_event
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
 from meal_planner import MealPlanner, update_preferences_from_log
@@ -316,6 +317,8 @@ _AUDIT_PATH_PREFIXES = ('/api/', '/meal-plan/', '/nutrition/', '/log-meal', '/to
 @app.before_request
 def _capture_request_for_audit():
     path = request.path or ''
+    if path.startswith('/api/analytics/'):
+        return
     if not any(path.startswith(p) for p in _AUDIT_PATH_PREFIXES):
         return
     g._audit_started = datetime.utcnow()
@@ -325,6 +328,8 @@ def _capture_request_for_audit():
 @app.after_request
 def _log_api_request(response):
     path = request.path or ''
+    if path.startswith('/api/analytics/'):
+        return response
     if not any(path.startswith(p) for p in _AUDIT_PATH_PREFIXES):
         return response
     if path.startswith('/api/audit-logs'):
@@ -423,6 +428,14 @@ def signup():
         login_user(user, remember=True)
         user.last_login = datetime.utcnow()
         db.session.commit()
+
+        record_analytics_event(
+            db.session,
+            event_type='action',
+            action_name='user.signup',
+            path='/signup',
+            meta={'transferred_toddlers': transferred},
+        )
         
         msg = 'Account created successfully! Your data has been saved.'
         if transferred:
@@ -712,6 +725,15 @@ def create_toddler():
     
     db.session.add(toddler)
     db.session.commit()
+
+    record_analytics_event(
+        db.session,
+        event_type='action',
+        action_name='toddler.created',
+        path='/onboarding',
+        toddler_id=toddler.id,
+        meta={'age_months': toddler.age_months},
+    )
     
     return jsonify(toddler.to_dict()), 201
 
@@ -1167,6 +1189,19 @@ def create_meal_log():
     for log in created_logs:
         if log.toddler_reaction and log.food_id:
             update_preferences_from_log(db.session, log)
+
+    record_analytics_event(
+        db.session,
+        event_type='action',
+        action_name='meal.logged',
+        path=f'/log-meal/{toddler.id}',
+        toddler_id=toddler.id,
+        meta={
+            'meal_type': meal_type,
+            'item_count': len(created_logs),
+            'date': log_date.isoformat(),
+        },
+    )
     
     if len(created_logs) == 1:
         result = created_logs[0].to_dict()
@@ -2626,6 +2661,60 @@ def api_admin_stats():
     recent_days = max(7, min(recent_days, 90))
     stats = build_admin_stats(db.session, recent_days=recent_days)
     return jsonify(stats)
+
+
+@app.route('/api/analytics/collect', methods=['POST'])
+def api_analytics_collect():
+    """Receive first-party page view / heartbeat / leave beacons."""
+    data = request.get_json(silent=True)
+    if data is None and request.data:
+        try:
+            data = _json.loads(request.data.decode('utf-8'))
+        except Exception:
+            data = None
+    data = data or {}
+
+    event_type = (data.get('event_type') or '').strip().lower()
+    if event_type not in ('page_view', 'heartbeat', 'page_leave', 'action'):
+        return jsonify({'error': 'invalid event_type'}), 400
+
+    # Do not track admin UI itself
+    path = data.get('path') or request.path
+    if str(path).startswith('/admin'):
+        return jsonify({'ok': True, 'skipped': True})
+
+    toddler_id = data.get('toddler_id')
+    try:
+        toddler_id = int(toddler_id) if toddler_id not in (None, '', 'null') else None
+    except (TypeError, ValueError):
+        toddler_id = None
+
+    # Soft rate limit: skip if this session sent >120 events in the last minute
+    sid = get_session_id()
+    one_min_ago = datetime.utcnow() - timedelta(seconds=60)
+    recent = (
+        AnalyticsEvent.query
+        .filter(
+            AnalyticsEvent.session_id == sid,
+            AnalyticsEvent.created_at >= one_min_ago,
+        )
+        .count()
+    )
+    if recent >= 120:
+        return jsonify({'ok': True, 'skipped': True})
+
+    record_analytics_event(
+        db.session,
+        event_type=event_type,
+        path=path,
+        referrer=data.get('referrer'),
+        duration_ms=data.get('duration_ms'),
+        action_name=data.get('action_name') or (data.get('meta') or {}).get('action'),
+        toddler_id=toddler_id,
+        meta=data.get('meta') if isinstance(data.get('meta'), dict) else None,
+        session_id=sid,
+    )
+    return jsonify({'ok': True})
 
 
 # ==================== ERROR HANDLERS ====================
