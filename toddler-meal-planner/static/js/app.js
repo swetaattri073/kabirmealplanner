@@ -661,6 +661,12 @@ async function loadWeeklyNutrition(toddlerId) {
         
         const alerts = await apiCall(`/nutrition/alerts/${toddlerId}`);
         renderAlerts(alerts.alerts);
+
+        if (window.location.hash === '#alerts') {
+            requestAnimationFrame(() => {
+                document.getElementById('alerts')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
     } catch (error) {
         console.error('Failed to load nutrition data:', error);
     }

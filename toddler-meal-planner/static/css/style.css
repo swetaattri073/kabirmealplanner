@@ -511,6 +511,38 @@ input, select, textarea {
 .stat-card:nth-child(3) { animation-delay: 0.2s; }
 .stat-card:nth-child(4) { animation-delay: 0.25s; }
 
+a.stat-card-link {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+a.stat-card-link:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.card-title-link {
+    text-decoration: none;
+    color: inherit;
+}
+
+.card-title-link:hover {
+    color: var(--primary);
+}
+
+a.card-body-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+a.card-body-link:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
 .stat-icon {
     width: 60px;
     height: 60px;
