@@ -1,12 +1,14 @@
 // Service Worker for Toddler Meal Planner PWA
-const CACHE_NAME = 'littlebowl-v5';
+const CACHE_NAME = 'littlebowl-v6';
 const STATIC_URLS = [
   '/static/css/style.css',
   '/static/js/app.js',
   '/static/js/session-persist.js',
   '/static/js/a2hs-prompt.js',
   '/static/manifest.json',
-  '/static/icons/icon-192.png'
+  '/static/icons/icon-192.png',
+  '/static/icons/icon-512.png',
+  '/static/icons/apple-touch-icon.png'
 ];
 
 // Install event - cache static assets only (never HTML pages)
