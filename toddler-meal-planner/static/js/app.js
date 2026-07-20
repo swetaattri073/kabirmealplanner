@@ -707,6 +707,16 @@ function selectAdaptedFood(item) {
 // ==================== Weekly Plan Functions ====================
 
 let currentWeekStart = null;
+let lastWeeklyPlan = null;
+let weeklyPlanMediaBound = false;
+
+const MEAL_TYPE_ORDER = [
+    'breakfast',
+    'mid_morning_snack',
+    'lunch',
+    'evening_snack',
+    'dinner',
+];
 
 /** Display name for a planned meal (matches Log Meal: summary / food / main). */
 function getPlannedMealDisplayName(meal) {
@@ -719,15 +729,106 @@ function getPlannedMealDisplayName(meal) {
         || '';
 }
 
+function isCompactWeeklyPlanView() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function shiftDateISO(iso, days) {
+    const d = parseLocalDate(iso);
+    d.setDate(d.getDate() + days);
+    return localDateISO(d);
+}
+
+function formatPlanDayLabel(dateStr) {
+    const date = parseLocalDate(dateStr);
+    return date.toLocaleDateString('en-IN', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+    });
+}
+
+function relativePlanDayLabel(dateStr, todayISO) {
+    if (dateStr === todayISO) return 'Today';
+    if (dateStr === shiftDateISO(todayISO, -1)) return 'Yesterday';
+    if (dateStr === shiftDateISO(todayISO, 1)) return 'Tomorrow';
+    return null;
+}
+
+function orderedMealEntries(meals) {
+    const entries = Object.entries(meals || {});
+    entries.sort((a, b) => {
+        const ai = MEAL_TYPE_ORDER.indexOf(a[0]);
+        const bi = MEAL_TYPE_ORDER.indexOf(b[0]);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+    return entries;
+}
+
+function bindWeeklyPlanMediaListener(toddlerId) {
+    if (weeklyPlanMediaBound || !toddlerId) return;
+    weeklyPlanMediaBound = true;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const onChange = () => {
+        // Crossing the breakpoint needs a reload so week-boundary days are available.
+        loadWeeklyPlan(toddlerId, isCompactWeeklyPlanView() ? null : currentWeekStart);
+    };
+    if (typeof mq.addEventListener === 'function') {
+        mq.addEventListener('change', onChange);
+    } else if (typeof mq.addListener === 'function') {
+        mq.addListener(onChange);
+    }
+}
+
+async function fetchWeeklyPlanDays(toddlerId, weekStartISO) {
+    let url = `/meal-plan/weekly/${toddlerId}`;
+    if (weekStartISO) {
+        url += `?week_start=${encodeURIComponent(weekStartISO)}`;
+    }
+    return apiCall(url);
+}
+
+/** Phone view: only yesterday / today / tomorrow (fetch adjacent weeks at boundaries). */
+async function buildCompactPlanDays(toddlerId) {
+    const today = localDateISO();
+    const focusDates = [shiftDateISO(today, -1), today, shiftDateISO(today, 1)];
+    const daysByDate = {};
+
+    const seed = await fetchWeeklyPlanDays(toddlerId, today);
+    currentWeekStart = seed.week_start;
+    (seed.days || []).forEach((day) => {
+        daysByDate[day.date] = day;
+    });
+
+    const missing = focusDates.filter((iso) => !daysByDate[iso]);
+    for (const iso of missing) {
+        const extra = await fetchWeeklyPlanDays(toddlerId, iso);
+        (extra.days || []).forEach((day) => {
+            daysByDate[day.date] = day;
+        });
+    }
+
+    return {
+        ...seed,
+        compact: true,
+        days: focusDates.map((iso) => daysByDate[iso]).filter(Boolean),
+    };
+}
+
 async function loadWeeklyPlan(toddlerId, weekStart = null) {
     try {
-        let url = `/meal-plan/weekly/${toddlerId}`;
-        if (weekStart) {
-            url += `?week_start=${weekStart}`;
+        bindWeeklyPlanMediaListener(toddlerId);
+
+        if (isCompactWeeklyPlanView()) {
+            const plan = await buildCompactPlanDays(toddlerId);
+            lastWeeklyPlan = plan;
+            renderWeeklyPlan(plan);
+            return;
         }
-        
-        const plan = await apiCall(url);
+
+        const plan = await fetchWeeklyPlanDays(toddlerId, weekStart);
         currentWeekStart = plan.week_start;
+        lastWeeklyPlan = plan;
         renderWeeklyPlan(plan);
     } catch (error) {
         console.error('Failed to load weekly plan:', error);
@@ -737,43 +838,85 @@ async function loadWeeklyPlan(toddlerId, weekStart = null) {
 function renderWeeklyPlan(plan) {
     const container = document.getElementById('week-grid');
     if (!container) return;
-    
-    // Update week title
-    const titleEl = document.getElementById('week-title');
-    if (titleEl) {
-        titleEl.textContent = `${formatDate(plan.week_start)} - ${formatDate(plan.week_end)}`;
-    }
-    
+
+    const compact = isCompactWeeklyPlanView();
     const today = localDateISO();
     const toddlerId = document.body.dataset.toddlerId;
-    
+    const desktopNav = document.querySelector('.week-navigation-desktop');
+    const compactHeader = document.getElementById('compact-plan-header');
+    const compactTitle = document.getElementById('compact-plan-title');
+    const titleEl = document.getElementById('week-title');
+
+    let days = plan.days || [];
+    if (compact) {
+        const focus = new Set([
+            shiftDateISO(today, -1),
+            today,
+            shiftDateISO(today, 1),
+        ]);
+        // If we already have a full week cached (desktop→mobile resize), filter locally.
+        const filtered = days.filter((day) => focus.has(day.date));
+        if (filtered.length) {
+            days = filtered.sort((a, b) => a.date.localeCompare(b.date));
+        }
+    }
+
+    if (titleEl && plan.week_start && plan.week_end) {
+        titleEl.textContent = `${formatPlanDayLabel(plan.week_start)} – ${formatPlanDayLabel(plan.week_end)}`;
+    }
+
+    if (desktopNav) desktopNav.hidden = compact;
+    if (compactHeader) compactHeader.hidden = !compact;
+    if (compact && compactTitle) {
+        compactTitle.textContent = `${formatPlanDayLabel(shiftDateISO(today, -1))} – ${formatPlanDayLabel(shiftDateISO(today, 1))}`;
+    }
+
+    container.classList.toggle('is-compact', compact);
+
     let html = '';
-    plan.days.forEach(day => {
+    days.forEach((day) => {
         const isToday = day.date === today;
-        
+        const relative = relativePlanDayLabel(day.date, today);
+        const dayClass = [
+            'day-card',
+            isToday ? 'is-today' : '',
+            relative === 'Yesterday' ? 'is-yesterday' : '',
+            relative === 'Tomorrow' ? 'is-tomorrow' : '',
+        ].filter(Boolean).join(' ');
+
+        const mealRows = orderedMealEntries(day.meals).map(([mealType, meal]) => {
+            const name = getPlannedMealDisplayName(meal) || 'Not planned';
+            const recipeLinks = buildRecipeLinks(meal, toddlerId);
+            return `
+                <div class="day-meal">
+                    <div class="day-meal-type">
+                        <span class="day-meal-icon" aria-hidden="true">${getMealTypeIcon(mealType)}</span>
+                        <span>${formatMealType(mealType)}</span>
+                    </div>
+                    <div class="day-meal-food">${escapeHtml(name)}</div>
+                    ${recipeLinks}
+                </div>`;
+        }).join('');
+
         html += `
-            <div class="day-card">
+            <article class="${dayClass}">
                 <div class="day-header ${isToday ? 'today' : ''}">
-                    <div class="day-name">${day.day_name}</div>
-                    <div class="day-date">${formatDate(day.date)}</div>
+                    ${relative ? `<div class="day-relative">${relative}</div>` : ''}
+                    <div class="day-name">${escapeHtml(day.day_name || '')}</div>
+                    <div class="day-date">${formatPlanDayLabel(day.date)}</div>
                 </div>
                 <div class="day-meals">
-                    ${Object.entries(day.meals || {}).map(([mealType, meal]) => {
-                        const name = getPlannedMealDisplayName(meal) || 'Not planned';
-                        const recipeLinks = buildRecipeLinks(meal, toddlerId);
-                        return `
-                        <div class="day-meal">
-                            <div class="day-meal-type">${getMealTypeIcon(mealType)} ${formatMealType(mealType)}</div>
-                            <div class="day-meal-food">${escapeHtml(name)}</div>
-                            ${recipeLinks}
-                        </div>`;
-                    }).join('')}
+                    ${mealRows || '<p class="day-meals-empty">No meals planned</p>'}
                 </div>
-            </div>
+            </article>
         `;
     });
-    
-    container.innerHTML = html;
+
+    container.innerHTML = html || `
+        <div class="empty-state" style="padding: 1.5rem;">
+            <p>No meals in this range yet. Tap Regenerate to build a plan.</p>
+        </div>
+    `;
 }
 
 function buildRecipeLinks(meal, toddlerId) {
@@ -797,22 +940,45 @@ function buildRecipeLinks(meal, toddlerId) {
 }
 
 function navigateWeek(direction) {
+    if (isCompactWeeklyPlanView()) return;
     if (!currentWeekStart) return;
-    
+
     const current = parseLocalDate(currentWeekStart);
     current.setDate(current.getDate() + (direction * 7));
-    
+
     const toddlerId = document.body.dataset.toddlerId;
     loadWeeklyPlan(toddlerId, localDateISO(current));
 }
 
 async function regenerateWeeklyPlan(toddlerId) {
     try {
+        if (isCompactWeeklyPlanView()) {
+            const today = localDateISO();
+            const weekStarts = new Set();
+            [shiftDateISO(today, -1), today, shiftDateISO(today, 1)].forEach((iso) => {
+                const d = parseLocalDate(iso);
+                // Match API: normalize to Monday of that week
+                d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+                weekStarts.add(localDateISO(d));
+            });
+            for (const weekStart of weekStarts) {
+                await apiCall(
+                    `/meal-plan/weekly/${toddlerId}?week_start=${encodeURIComponent(weekStart)}&regenerate=true`
+                );
+            }
+            const plan = await buildCompactPlanDays(toddlerId);
+            lastWeeklyPlan = plan;
+            renderWeeklyPlan(plan);
+            showToast('Meal plan regenerated (past & logged meals kept).', 'success');
+            return;
+        }
+
         const qs = currentWeekStart
             ? `?week_start=${encodeURIComponent(currentWeekStart)}&regenerate=true`
             : '?regenerate=true';
         const plan = await apiCall(`/meal-plan/weekly/${toddlerId}${qs}`);
         currentWeekStart = plan.week_start;
+        lastWeeklyPlan = plan;
         renderWeeklyPlan(plan);
         showToast('Weekly plan regenerated (past & logged meals kept).', 'success');
     } catch (error) {

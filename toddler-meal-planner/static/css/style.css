@@ -1239,6 +1239,8 @@ body.nutrition-modal-open {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 2rem;
+    gap: 0.75rem;
+    flex: 1;
 }
 
 .week-nav-btn {
@@ -1265,6 +1267,33 @@ body.nutrition-modal-open {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    text-align: center;
+}
+
+.compact-plan-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.compact-plan-eyebrow {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.compact-plan-title {
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+}
+
+.weekly-plan-subtitle-mobile {
+    display: none;
 }
 
 .week-grid {
@@ -1274,13 +1303,13 @@ body.nutrition-modal-open {
 }
 
 @media (max-width: 1200px) {
-    .week-grid {
+    .week-grid:not(.is-compact) {
         grid-template-columns: repeat(4, 1fr);
     }
 }
 
-@media (max-width: 768px) {
-    .week-grid {
+@media (max-width: 900px) {
+    .week-grid:not(.is-compact) {
         grid-template-columns: repeat(2, 1fr);
     }
 }
@@ -1319,6 +1348,15 @@ body.nutrition-modal-open {
     animation: pulse-soft 1s ease-in-out infinite;
 }
 
+.day-relative {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.95;
+    margin-bottom: 0.2rem;
+}
+
 .day-name {
     font-weight: 800;
     font-size: 0.95rem;
@@ -1331,6 +1369,12 @@ body.nutrition-modal-open {
 
 .day-meals {
     padding: 1rem;
+}
+
+.day-meals-empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
 }
 
 .day-meal {
@@ -1352,6 +1396,9 @@ body.nutrition-modal-open {
 }
 
 .day-meal-type {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     font-weight: 700;
     color: var(--primary);
     font-size: 0.7rem;
@@ -1360,9 +1407,196 @@ body.nutrition-modal-open {
     letter-spacing: 0.5px;
 }
 
+.day-meal-icon {
+    font-style: normal;
+    font-size: 0.95rem;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
 .day-meal-food {
     font-weight: 600;
     color: var(--text-primary);
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.day-meal-recipes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+}
+
+.recipe-plan-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-decoration: none;
+    background: rgba(107, 143, 60, 0.1);
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+}
+
+.recipe-plan-link:hover {
+    background: rgba(107, 143, 60, 0.18);
+}
+
+.weekly-plan-footer p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.45;
+}
+
+/* Phone: 3-day stack (yesterday / today / tomorrow) */
+@media (max-width: 768px) {
+    .weekly-plan-header h1 {
+        font-size: 1.45rem;
+    }
+
+    .weekly-plan-subtitle-desktop {
+        display: none;
+    }
+
+    .weekly-plan-subtitle-mobile {
+        display: block;
+        margin: 0.35rem 0 0;
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        line-height: 1.4;
+    }
+
+    .weekly-plan-card {
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .weekly-plan-toolbar {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.75rem;
+        padding-bottom: 0.75rem;
+    }
+
+    .weekly-plan-toolbar .weekly-plan-regen {
+        width: auto;
+        flex-shrink: 0;
+        padding: 0.55rem 0.85rem;
+    }
+
+    .weekly-plan-toolbar .weekly-plan-regen span {
+        display: none;
+    }
+
+    .week-navigation {
+        display: none;
+        margin-bottom: 0;
+    }
+
+    .week-grid,
+    .week-grid.is-compact {
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+    }
+
+    .weekly-plan-body {
+        padding-top: 0.25rem;
+    }
+
+    .day-card {
+        border-radius: 1rem;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .day-card:hover {
+        transform: none;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .day-card.is-today {
+        border-color: transparent;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .day-card.is-yesterday,
+    .day-card.is-tomorrow {
+        opacity: 0.98;
+    }
+
+    .day-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.25rem 0.75rem;
+        text-align: left;
+        padding: 0.85rem 1rem;
+    }
+
+    .day-header.today::after {
+        display: none;
+    }
+
+    .day-relative {
+        width: 100%;
+        font-size: 0.68rem;
+        margin-bottom: 0;
+    }
+
+    .day-name {
+        font-size: 1.05rem;
+    }
+
+    .day-date {
+        font-size: 0.85rem;
+        margin-left: auto;
+    }
+
+    .day-meals {
+        padding: 0.65rem 0.75rem 0.85rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .day-meal {
+        margin-bottom: 0;
+        padding: 0.85rem 0.9rem;
+        border-radius: 0.85rem;
+        background: var(--bg-tertiary);
+    }
+
+    .day-meal:hover {
+        transform: none;
+    }
+
+    .day-meal-type {
+        font-size: 0.72rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .day-meal-food {
+        font-size: 0.98rem;
+        font-weight: 700;
+    }
+
+    .recipe-plan-link {
+        min-height: 1.75rem;
+        padding: 0.3rem 0.7rem;
+        font-size: 0.78rem;
+    }
+
+    .weekly-plan-howto {
+        display: none;
+    }
+
+    .weekly-plan-footer p {
+        font-size: 0.82rem;
+    }
 }
 
 /* ==================== Food Search ==================== */
@@ -1908,6 +2142,16 @@ a.mobile-avatar-link:active {
     .week-nav-btn {
         width: 100%;
         text-align: center;
+    }
+
+    /* Compact weekly plan owns its toolbar on phones — don't stretch regen full-width */
+    .weekly-plan-toolbar.card-header {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .weekly-plan-toolbar .btn {
+        width: auto;
     }
     
     body.sidebar-open {
