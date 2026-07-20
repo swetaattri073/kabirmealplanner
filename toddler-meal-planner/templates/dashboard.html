@@ -128,7 +128,7 @@
             <div class="card-header">
                 <h2>📊 Today's Nutrition</h2>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <button type="button" class="btn btn-primary btn-sm" onclick="openNutritionBreakdown({{ toddler.ref|tojson }})">
+                    <button type="button" class="btn btn-primary btn-sm" onclick='openNutritionBreakdown({{ toddler.ref|tojson }})'>
                         View Details
                     </button>
                     <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
@@ -181,7 +181,7 @@
                 </div>
             </div>
             <div class="card-footer">
-                <a href="#" onclick="loadFlavorExploration({{ toddler.ref|tojson }}); return false;" style="color: var(--primary); font-weight: 600;">
+                <a href="#" onclick='loadFlavorExploration({{ toddler.ref|tojson }}); return false;' style="color: var(--primary); font-weight: 600;">
                     🔍 Explore new flavors based on favorites →
                 </a>
             </div>
