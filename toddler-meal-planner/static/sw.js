@@ -1,8 +1,9 @@
 // Service Worker for Toddler Meal Planner PWA
-const CACHE_NAME = 'littlebowl-v4';
+const CACHE_NAME = 'littlebowl-v5';
 const STATIC_URLS = [
   '/static/css/style.css',
   '/static/js/app.js',
+  '/static/js/session-persist.js',
   '/static/js/a2hs-prompt.js',
   '/static/manifest.json',
   '/static/icons/icon-192.png'

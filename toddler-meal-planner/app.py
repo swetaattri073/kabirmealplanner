@@ -11,6 +11,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, g
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Resolve paths early so secrets on the Docker data volume are picked up.
 # Production: -v ~/meal-data:/app/instance  →  put secrets in ~/meal-data/.env
@@ -22,6 +23,15 @@ os.makedirs(_INSTANCE_DIR, exist_ok=True)
 # Project .env first (local/dev), then instance/.env (persistent Docker volume) wins.
 load_dotenv(os.path.join(_APP_DIR, '.env'))
 load_dotenv(os.path.join(_INSTANCE_DIR, '.env'), override=True)
+
+from session_persist import (
+    GUEST_COOKIE_MAX_AGE,
+    GUEST_COOKIE_NAME,
+    cookie_secure_for_request,
+    ensure_persistent_secret_key,
+    is_valid_guest_id,
+    new_guest_id,
+)
 
 from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe
 from admin_stats import build_admin_stats
@@ -59,8 +69,14 @@ import re as _re
 # Create Flask app
 app = Flask(__name__)
 
-# Configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'toddler-meal-planner-secret-key-change-in-production')
+# Trust reverse-proxy HTTPS headers (nginx / Cloudflare / Lightsail).
+# Without this, request.is_secure stays False behind TLS termination and
+# cookie Secure flags / redirects behave incorrectly.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Configuration — persist SECRET_KEY on the data volume so redeploys don't
+# wipe Flask sessions (which made guest onboarding look "reset").
+app.config['SECRET_KEY'] = ensure_persistent_secret_key(_INSTANCE_DIR)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Session cookies: only set Secure when HTTPS is actually used.
 # Docker commonly serves over HTTP (port 80) with FLASK_ENV=production —
@@ -75,7 +91,14 @@ else:
     app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SESSION_COOKIE_NAME'] = 'lb_session'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=400)
+# Flask-Login "remember me" — keep parents signed in across PWA reopen
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=400)
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = app.config['SESSION_COOKIE_SECURE']
+app.config['REMEMBER_COOKIE_NAME'] = 'lb_remember'
 
 # Database configuration - supports both SQLite and PostgreSQL.
 # SQLite defaults to instance/toddler_meals.db so Docker volume mounts at
@@ -117,12 +140,32 @@ def load_user(user_id):
 
 
 def get_session_id():
-    """Get or create a session ID for anonymous users"""
+    """Get or create a session ID for anonymous users.
+
+    Restores from the durable lb_guest_id cookie when the Flask session was
+    dropped (common on mobile PWAs / HTTP cookie issues).
+    """
     if 'anonymous_session_id' not in session:
-        session['anonymous_session_id'] = secrets.token_hex(32)
+        cookie_id = request.cookies.get(GUEST_COOKIE_NAME)
+        if is_valid_guest_id(cookie_id):
+            session['anonymous_session_id'] = cookie_id
+        else:
+            session['anonymous_session_id'] = new_guest_id()
         session.permanent = True
         session.modified = True
+    g._refresh_guest_cookie = session['anonymous_session_id']
     return session['anonymous_session_id']
+
+
+def adopt_guest_id(guest_id: str) -> str:
+    """Force the current anonymous session to use a known guest id."""
+    if not is_valid_guest_id(guest_id):
+        raise ValueError('invalid guest id')
+    session.permanent = True
+    session['anonymous_session_id'] = guest_id
+    session.modified = True
+    g._refresh_guest_cookie = guest_id
+    return guest_id
 
 
 def get_user_toddlers():
@@ -145,7 +188,7 @@ def owns_toddler(toddler):
 
 def _transfer_anonymous_toddlers(user):
     """Move guest session toddlers to a newly logged-in/signed-up user"""
-    session_id = session.get('anonymous_session_id')
+    session_id = session.get('anonymous_session_id') or request.cookies.get(GUEST_COOKIE_NAME)
     if not session_id:
         return 0
     anonymous_toddlers = Toddler.query.filter_by(
@@ -329,6 +372,32 @@ def _capture_request_for_audit():
 
 
 @app.after_request
+def _persist_guest_cookie(response):
+    """Keep a long-lived guest id cookie in sync with the anonymous session."""
+    if current_user.is_authenticated:
+        # Logged-in users don't need the guest cookie; clear if present.
+        if request.cookies.get(GUEST_COOKIE_NAME):
+            response.delete_cookie(GUEST_COOKIE_NAME, path='/')
+        return response
+
+    guest_id = getattr(g, '_refresh_guest_cookie', None) or session.get('anonymous_session_id')
+    if not is_valid_guest_id(guest_id):
+        return response
+
+    secure = cookie_secure_for_request(app.config.get('SESSION_COOKIE_SECURE'), request)
+    response.set_cookie(
+        GUEST_COOKIE_NAME,
+        guest_id,
+        max_age=GUEST_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite='Lax',
+        secure=secure,
+        path='/',
+    )
+    return response
+
+
+@app.after_request
 def _log_api_request(response):
     path = request.path or ''
     if path.startswith('/api/analytics/'):
@@ -469,7 +538,8 @@ def login():
                 return render_template('auth/login.html', email=email)
             
             _transfer_anonymous_toddlers(user)
-            login_user(user, remember=bool(remember))
+            # Always remember on sign-in so PWA reopen keeps the account session
+            login_user(user, remember=True)
             user.last_login = datetime.utcnow()
             db.session.commit()
             
@@ -505,15 +575,62 @@ def profile():
 def auth_status():
     """API endpoint to check authentication status"""
     if current_user.is_authenticated:
+        toddlers = get_user_toddlers()
         return jsonify({
             'authenticated': True,
             'user': current_user.to_dict(),
+            'toddlers': [t.to_dict() for t in toddlers],
+            'guest_id': None,
         })
-    else:
+
+    guest_id = get_session_id()
+    toddlers = get_user_toddlers()
+    return jsonify({
+        'authenticated': False,
+        'guest_id': guest_id,
+        'toddlers': [t.to_dict() for t in toddlers],
+        'session_id': guest_id[:8] + '...',
+    })
+
+
+@app.route('/api/auth/restore', methods=['POST'])
+def restore_guest_session():
+    """
+    Rehydrate an anonymous session from a client-stored guest id.
+
+    Used when the Flask session cookie was dropped but localStorage still has
+    the guest token from a previous visit (PWA / mobile cookie loss).
+    """
+    if current_user.is_authenticated:
+        toddlers = get_user_toddlers()
         return jsonify({
-            'authenticated': False,
-            'session_id': get_session_id()[:8] + '...',
+            'restored': True,
+            'authenticated': True,
+            'guest_id': None,
+            'toddlers': [t.to_dict() for t in toddlers],
         })
+
+    data = request.get_json(silent=True) or {}
+    guest_id = (data.get('guest_id') or '').strip()
+    if not is_valid_guest_id(guest_id):
+        # Fall back to cookie / existing session
+        guest_id = get_session_id()
+        toddlers = get_user_toddlers()
+        return jsonify({
+            'restored': bool(toddlers),
+            'authenticated': False,
+            'guest_id': guest_id,
+            'toddlers': [t.to_dict() for t in toddlers],
+        })
+
+    adopt_guest_id(guest_id)
+    toddlers = Toddler.query.filter_by(session_id=guest_id, user_id=None).all()
+    return jsonify({
+        'restored': True,
+        'authenticated': False,
+        'guest_id': guest_id,
+        'toddlers': [t.to_dict() for t in toddlers],
+    })
 
 
 # ==================== WEB ROUTES ====================
@@ -526,16 +643,27 @@ def index():
 
 @app.route('/home')
 def home():
-    """Home page - show dashboard if toddlers exist"""
+    """
+    App entry (PWA start_url).
+
+    If we already know toddlers for this browser session/cookie, go straight to
+    the dashboard. Otherwise render a tiny bridge page that restores guest id
+    from localStorage before deciding onboarding vs dashboard — this fixes the
+    common mobile bug where completed onboarding "resets" after reopen.
+    """
     toddlers = get_user_toddlers()
-    if not toddlers:
-        return redirect(url_for('onboarding'))
-    return redirect(url_for('dashboard', toddler_id=toddlers[0].id))
+    if toddlers:
+        return redirect(url_for('dashboard', toddler_id=toddlers[0].id))
+    return render_template('home_bridge.html')
 
 
 @app.route('/onboarding')
 def onboarding():
     """Onboarding page to add a toddler"""
+    # If this browser already has a profile (cookie restored), skip the form.
+    toddlers = get_user_toddlers()
+    if toddlers:
+        return redirect(url_for('dashboard', toddler_id=toddlers[0].id))
     return render_template('onboarding.html', allergens=COMMON_ALLERGENS)
 
 
@@ -738,7 +866,10 @@ def create_toddler():
         meta={'age_months': toddler.age_months},
     )
     
-    return jsonify(toddler.to_dict()), 201
+    payload = toddler.to_dict()
+    if not current_user.is_authenticated:
+        payload['guest_id'] = get_session_id()
+    return jsonify(payload), 201
 
 
 @app.route('/api/toddlers/<int:toddler_id>', methods=['GET'])
