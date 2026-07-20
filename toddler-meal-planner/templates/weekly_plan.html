@@ -4,44 +4,49 @@
 
 {% block content %}
 <body data-page="weekly-plan" data-toddler-id="{{ toddler.id }}">
-    <div class="page-header">
-        <h1>📅 Weekly Meal Plan</h1>
-        <p>Personalized meal suggestions for {{ toddler.name }} based on nutrition needs and preferences</p>
+    <div class="page-header weekly-plan-header">
+        <h1>📅 Meal Plan</h1>
+        <p class="weekly-plan-subtitle-desktop">Personalized meal suggestions for {{ toddler.name }} based on nutrition needs and preferences</p>
+        <p class="weekly-plan-subtitle-mobile">Yesterday, today &amp; tomorrow for {{ toddler.name }}</p>
     </div>
     
-    <div class="card">
-        <div class="card-header">
-            <div class="week-navigation">
-                <button class="week-nav-btn" onclick="navigateWeek(-1)">
-                    <i class="fas fa-chevron-left"></i> Previous Week
+    <div class="card weekly-plan-card">
+        <div class="card-header weekly-plan-toolbar">
+            <div class="week-navigation week-navigation-desktop">
+                <button type="button" class="week-nav-btn" onclick="navigateWeek(-1)">
+                    <i class="fas fa-chevron-left"></i> <span class="week-nav-label">Previous Week</span>
                 </button>
                 <span id="week-title" class="week-title">Loading...</span>
-                <button class="week-nav-btn" onclick="navigateWeek(1)">
-                    Next Week <i class="fas fa-chevron-right"></i>
+                <button type="button" class="week-nav-btn" onclick="navigateWeek(1)">
+                    <span class="week-nav-label">Next Week</span> <i class="fas fa-chevron-right"></i>
                 </button>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="regenerateWeeklyPlan({{ toddler.id }})">
-                <i class="fas fa-sync-alt"></i> Regenerate Plan
+            <div class="compact-plan-header" id="compact-plan-header" hidden>
+                <span class="compact-plan-eyebrow">Around today</span>
+                <span class="compact-plan-title" id="compact-plan-title">Loading…</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm weekly-plan-regen" onclick="regenerateWeeklyPlan({{ toddler.id }})">
+                <i class="fas fa-sync-alt"></i> <span>Regenerate</span>
             </button>
         </div>
-        <div class="card-body">
+        <div class="card-body weekly-plan-body">
             <div id="week-grid" class="week-grid">
                 <div class="loading">
                     <div class="spinner"></div>
                 </div>
             </div>
         </div>
-        <div class="card-footer">
-            <p style="font-size: 0.9rem; color: var(--text-secondary);">
-                💡 <strong>Tip:</strong> Plans respect {{ toddler.name }}'s dietary preference
-                (<strong>{{ toddler.dietary_preference or 'vegetarian' }}</strong>) and allergies
-                {% if toddler.allergies %}(<strong>{{ toddler.allergies | join(', ') }}</strong>){% else %}(none set){% endif %}.
-                After changing diet or allergies in the profile, click <strong>Regenerate Plan</strong> — existing weeks are not auto-updated.
+        <div class="card-footer weekly-plan-footer">
+            <p>
+                💡 Plans respect {{ toddler.name }}'s diet
+                (<strong>{{ toddler.dietary_preference or 'vegetarian' }}</strong>
+                {% if toddler.allergies %}and allergies <strong>{{ toddler.allergies | join(', ') }}</strong>{% endif %}.
+                After changing diet or allergies, tap <strong>Regenerate</strong>.
             </p>
         </div>
     </div>
     
-    <div class="card" style="margin-top: 1.5rem;">
+    <div class="card weekly-plan-howto" style="margin-top: 1.5rem;">
         <div class="card-header">
             <h2>📖 How the Meal Plan Works</h2>
         </div>
