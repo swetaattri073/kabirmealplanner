@@ -26,6 +26,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,  # 400 IU
         'vitamin_b12_mcg': 0.5,
         'folate_mcg': 80,
+        'omega3_mg': 500,  # Total n-3; breastmilk is a major source under 12 months
     },
     '12-24_months': {
         'calories': 1060,
@@ -41,6 +42,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,
         'vitamin_b12_mcg': 0.9,
         'folate_mcg': 120,
+        'omega3_mg': 700,
     },
     '24-36_months': {
         'calories': 1240,
@@ -56,6 +58,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,
         'vitamin_b12_mcg': 0.9,
         'folate_mcg': 150,
+        'omega3_mg': 700,
     },
     '36+_months': {
         'calories': 1360,
@@ -71,6 +74,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,
         'vitamin_b12_mcg': 1.2,
         'folate_mcg': 200,
+        'omega3_mg': 900,
     }
 }
 
@@ -89,6 +93,7 @@ NUTRIENT_INFO = {
     'vitamin_d_mcg': {'name': 'Vitamin D', 'unit': 'mcg', 'icon': '☀️'},
     'vitamin_b12_mcg': {'name': 'Vitamin B12', 'unit': 'mcg', 'icon': '🔴'},
     'folate_mcg': {'name': 'Folate', 'unit': 'mcg', 'icon': '🧬'},
+    'omega3_mg': {'name': 'Omega-3', 'unit': 'mg', 'icon': '🐟'},
 }
 
 # Priority nutrients to track (in order of importance for Indian toddlers)
@@ -100,18 +105,19 @@ PRIORITY_NUTRIENTS = [
     'vitamin_b12_mcg',
     'zinc_mg',
     'vitamin_a_mcg',
+    'omega3_mg',
 ]
 
 # Food recommendations for each nutrient deficiency
 NUTRIENT_FOOD_RECOMMENDATIONS = {
-    'iron_mg': {
-        'message': 'Iron is crucial for brain development and preventing anemia.',
-        'veg_foods': ['Ragi/Finger Millet Porridge', 'Spinach/Palak', 'Dates', 'Moong Dal', 'Masoor Dal', 'Jaggery', 'Beetroot'],
-        'non_veg_foods': ['Egg (Boiled)', 'Chicken (Boneless)', 'Fish (Rohu/Pomfret)'],
+    'calories': {
+        'message': 'Energy fuels growth, play, and brain development.',
+        'veg_foods': ['Ghee', 'Banana', 'Ragi/Finger Millet Porridge', 'Khichdi', 'Paneer', 'Dry Fruits Mix (soaked)', 'Milk (Whole)'],
+        'non_veg_foods': ['Egg (Boiled)', 'Chicken (Boneless)'],
         'tips': [
-            'Pair iron-rich foods with Vitamin C sources (orange, tomato) for better absorption',
-            'Avoid giving milk/dairy with iron-rich meals - calcium blocks iron absorption',
-            'Cook in iron kadai/pan to increase iron content'
+            'Add a tsp of ghee to dal, rice, or khichdi',
+            'Offer calorie-dense snacks: banana, peanut powder in milk, paneer',
+            'Don\'t dilute milk too much — full-fat is better for toddlers'
         ]
     },
     'protein_g': {
@@ -124,9 +130,49 @@ NUTRIENT_FOOD_RECOMMENDATIONS = {
             'Dry fruits powder in milk boosts protein'
         ]
     },
+    'fat_g': {
+        'message': 'Healthy fats support brain development and vitamin absorption.',
+        'veg_foods': ['Ghee', 'Milk (Whole)', 'Paneer', 'Peanuts (Roasted)', 'Dry Fruits Mix (soaked)'],
+        'non_veg_foods': ['Egg (Boiled)', 'Fish (Rohu/Pomfret)'],
+        'tips': [
+            'Cook toddler meals with a little ghee or oil',
+            'Full-fat dairy (not skim) is preferred under age 2',
+            'Ground nuts/seeds mixed into porridge add healthy fats'
+        ]
+    },
+    'carbs_g': {
+        'message': 'Carbohydrates are the main energy source for active toddlers.',
+        'veg_foods': ['Rice (Cooked)', 'Roti/Chapati', 'Idli', 'Poha', 'Banana', 'Sweet Potato', 'Oats Porridge'],
+        'non_veg_foods': [],
+        'tips': [
+            'Include a grain at every main meal (rice, roti, idli, poha)',
+            'Fruit makes a good carb-rich snack',
+            'Prefer whole grains like ragi, oats, and millets when possible'
+        ]
+    },
+    'fiber_g': {
+        'message': 'Fiber aids digestion and prevents constipation.',
+        'veg_foods': ['Daliya/Broken Wheat Porridge', 'Oats Porridge', 'Peas', 'Carrot', 'Apple', 'Banana'],
+        'non_veg_foods': [],
+        'tips': [
+            'Increase fiber gradually to prevent gas',
+            'Give plenty of water with fiber-rich foods',
+            'Whole grains are better than refined'
+        ]
+    },
+    'iron_mg': {
+        'message': 'Iron is crucial for brain development and preventing anemia.',
+        'veg_foods': ['Ragi/Finger Millet Porridge', 'Spinach/Palak', 'Dates', 'Moong Dal', 'Masoor Dal', 'Jaggery', 'Beetroot'],
+        'non_veg_foods': ['Egg (Boiled)', 'Chicken (Boneless)', 'Fish (Rohu/Pomfret)'],
+        'tips': [
+            'Pair iron-rich foods with Vitamin C sources (orange, tomato) for better absorption',
+            'Avoid giving milk/dairy with iron-rich meals - calcium blocks iron absorption',
+            'Cook in iron kadai/pan to increase iron content'
+        ]
+    },
     'calcium_mg': {
         'message': 'Calcium is vital for strong bones and teeth.',
-        'veg_foods': ['Milk (Whole)', 'Curd/Yogurt', 'Paneer', 'Cheese', 'Ragi/Finger Millet Porridge', 'Spinach/Palak'],
+        'veg_foods': ['Milk (Whole)', 'Curd/Yogurt', 'Paneer', 'Cheese', 'Ragi/Finger Millet Porridge', 'Spinach/Palak', 'Breast Milk'],
         'non_veg_foods': ['Fish (Rohu/Pomfret)'],
         'tips': [
             'Ragi is the best non-dairy calcium source',
@@ -136,12 +182,12 @@ NUTRIENT_FOOD_RECOMMENDATIONS = {
     },
     'vitamin_d_mcg': {
         'message': 'Vitamin D helps absorb calcium and supports immunity.',
-        'veg_foods': ['Milk (Whole)', 'Ghee'],
+        'veg_foods': ['Milk (Whole)', 'Ghee', 'Infant Formula'],
         'non_veg_foods': ['Egg (Boiled)', 'Fish (Rohu/Pomfret)'],
         'tips': [
             '10-15 minutes of morning sunlight (before 10am) is the best source',
             'Most Indian toddlers are Vitamin D deficient - consider supplements after consulting doctor',
-            'Fortified milk can help'
+            'Fortified milk or formula can help'
         ]
     },
     'vitamin_b12_mcg': {
@@ -156,7 +202,7 @@ NUTRIENT_FOOD_RECOMMENDATIONS = {
     },
     'zinc_mg': {
         'message': 'Zinc supports immune function and growth.',
-        'veg_foods': ['Pumpkin', 'Chickpeas', 'Lentils', 'Cheese', 'Oats Porridge', 'Dry Fruits Mix (soaked)'],
+        'veg_foods': ['Pumpkin', 'Chole/Chickpeas', 'Moong Dal', 'Cheese', 'Oats Porridge', 'Dry Fruits Mix (soaked)', 'Peanuts (Roasted)'],
         'non_veg_foods': ['Egg (Boiled)', 'Chicken (Boneless)'],
         'tips': [
             'Soaking and sprouting dals increases zinc availability',
@@ -194,16 +240,16 @@ NUTRIENT_FOOD_RECOMMENDATIONS = {
             'Most dals are good folate sources'
         ]
     },
-    'fiber_g': {
-        'message': 'Fiber aids digestion and prevents constipation.',
-        'veg_foods': ['Daliya/Broken Wheat Porridge', 'Oats Porridge', 'Peas', 'Carrot', 'Apple', 'Banana'],
-        'non_veg_foods': [],
+    'omega3_mg': {
+        'message': 'Omega-3 supports brain and eye development.',
+        'veg_foods': ['Breast Milk', 'Infant Formula', 'Dry Fruits Mix (soaked)', 'Peanuts (Roasted)', 'Milk (Whole)', 'Ghee'],
+        'non_veg_foods': ['Fish (Rohu/Pomfret)', 'Egg (Boiled)'],
         'tips': [
-            'Increase fiber gradually to prevent gas',
-            'Give plenty of water with fiber-rich foods',
-            'Whole grains are better than refined'
+            'Breast milk / DHA-fortified formula are top sources under 12 months',
+            'Fatty fish 1–2 times a week (fully deboned) is excellent after 10 months',
+            'Ground walnuts/flax in porridge or curd help vegetarian toddlers'
         ]
-    }
+    },
 }
 
 
@@ -212,6 +258,71 @@ class NutritionEngine:
     
     def __init__(self, db_session):
         self.db = db_session
+
+    def get_food_examples(self, nutrient, toddler=None, limit=6):
+        """
+        Examples of foods to include when a nutrient is low/missing.
+
+        Always returns name strings (even if not in DB). When a Food row
+        exists and is suitable, also includes id / hindi name.
+        """
+        from models import Food
+
+        rec = NUTRIENT_FOOD_RECOMMENDATIONS.get(nutrient) or {}
+        is_veg = bool(toddler and (toddler.dietary_preference or '').lower() == 'vegetarian')
+        names = list(rec.get('veg_foods') or [])
+        if not is_veg:
+            names.extend(rec.get('non_veg_foods') or [])
+
+        allergies = set((toddler.allergies or []) if toddler else [])
+        age = toddler.age_months if toddler else 24
+        examples = []
+        seen = set()
+
+        for name in names:
+            key = name.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            food = Food.query.filter(Food.name == name).first()
+            if not food:
+                # Loose match (e.g. "Chickpeas" vs "Chole/Chickpeas")
+                food = Food.query.filter(Food.name.ilike(f'%{name}%')).first()
+            if food:
+                allergens = set(food.allergens or [])
+                if allergies & allergens:
+                    continue
+                if (food.suitable_from_months or 0) > age:
+                    continue
+                examples.append({
+                    'id': food.id,
+                    'name': food.name,
+                    'name_hindi': food.name_hindi,
+                })
+            else:
+                examples.append({'id': None, 'name': name, 'name_hindi': None})
+            if len(examples) >= limit:
+                break
+
+        tip = (rec.get('tips') or [None])[0]
+        return {
+            'examples': examples,
+            'tip': tip,
+            'message': rec.get('message'),
+        }
+
+    def _attach_examples(self, status_dict, toddler):
+        """Add include-examples for nutrients that are low or moderate."""
+        for nutrient, entry in status_dict.items():
+            if entry.get('status') not in ('low', 'moderate'):
+                entry['include_examples'] = []
+                entry['include_tip'] = None
+                continue
+            data = self.get_food_examples(nutrient, toddler)
+            entry['include_examples'] = data['examples']
+            entry['include_tip'] = data['tip']
+            entry['include_message'] = data['message']
+        return status_dict
     
     def get_rda(self, age_months, toddler=None):
         """
@@ -300,8 +411,8 @@ class NutritionEngine:
                 'info': NUTRIENT_INFO.get(nutrient, {}),
                 'is_priority': nutrient in priorities
             }
-        
-        return status
+
+        return self._attach_examples(status, toddler)
     
     def get_daily_breakdown(self, toddler, target_date=None):
         """Per-item / per-meal contribution breakdown for a day's nutrition totals."""
@@ -455,7 +566,9 @@ class NutritionEngine:
                 'status': self._get_status_label((total_value / weekly_rda * 100) if weekly_rda > 0 else 0),
                 'info': NUTRIENT_INFO.get(nutrient, {})
             }
-        
+
+        self._attach_examples(weekly_status, toddler)
+
         return {
             'week_start': week_start.isoformat(),
             'week_end': week_end.isoformat(),
@@ -500,30 +613,8 @@ class NutritionEngine:
             
             nutrient_info = NUTRIENT_INFO.get(nutrient, {})
             recommendations = NUTRIENT_FOOD_RECOMMENDATIONS.get(nutrient, {})
-            
-            # Get recommended foods that the toddler can eat
-            is_veg = toddler.dietary_preference == 'vegetarian'
-            food_names = recommendations.get('veg_foods', [])
-            if not is_veg:
-                food_names.extend(recommendations.get('non_veg_foods', []))
-            
-            # Filter by allergens
-            safe_foods = []
-            for food_name in food_names:
-                food = Food.query.filter(Food.name == food_name).first()
-                if food:
-                    # Check allergens
-                    has_allergen = False
-                    for allergen in (toddler.allergies or []):
-                        if allergen in (food.allergens or []):
-                            has_allergen = True
-                            break
-                    if not has_allergen and food.suitable_from_months <= toddler.age_months:
-                        safe_foods.append({
-                            'id': food.id,
-                            'name': food.name,
-                            'name_hindi': food.name_hindi
-                        })
+            examples_data = self.get_food_examples(nutrient, toddler, limit=6)
+            safe_foods = examples_data['examples']
             
             alert = {
                 'type': 'deficiency',
@@ -533,9 +624,12 @@ class NutritionEngine:
                 'icon': nutrient_info.get('icon', ''),
                 'message': f"{nutrient_info.get('name', nutrient)} intake is low ({percentage:.0f}% of recommended). {recommendations.get('message', '')}",
                 'percentage': percentage,
-                'recommendation': recommendations.get('tips', [''])[0] if recommendations.get('tips') else '',
+                'recommendation': examples_data.get('tip') or (
+                    recommendations.get('tips', [''])[0] if recommendations.get('tips') else ''
+                ),
                 'all_tips': recommendations.get('tips', []),
-                'recommended_foods': safe_foods[:5]  # Top 5 foods
+                'recommended_foods': safe_foods,
+                'include_label': f"Try including: {', '.join(f['name'] for f in safe_foods[:5])}" if safe_foods else '',
             }
             alerts.append(alert)
         
