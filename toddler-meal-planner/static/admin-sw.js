@@ -1,5 +1,5 @@
 /* LittleBowl Admin PWA service worker — scope /admin */
-const CACHE = 'littlebowl-admin-v1';
+const CACHE = 'littlebowl-admin-v2';
 const PRECACHE = [
   '/static/css/style.css',
   '/static/css/admin.css',
@@ -8,6 +8,7 @@ const PRECACHE = [
   '/static/js/a2hs-admin-prompt.js',
   '/static/manifest-admin.json',
   '/static/icons/icon-192.png',
+  '/static/icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {

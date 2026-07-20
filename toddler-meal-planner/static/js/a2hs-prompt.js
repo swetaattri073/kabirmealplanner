@@ -225,7 +225,7 @@
     wrap.innerHTML = `
       <div class="lb-a2hs-card">
         <div class="lb-a2hs-top">
-          <img class="lb-a2hs-icon" src="/static/icons/icon-192.png" alt="${APP_NAME}" width="56" height="56">
+          <img class="lb-a2hs-icon" src="/static/images/littlebowl-mark.png" alt="${APP_NAME}" width="56" height="56">
           <div>
             <h2 class="lb-a2hs-title" id="lb-a2hs-heading">
               <span class="lb-little">Little</span><span class="lb-bowl">Bowl</span>
