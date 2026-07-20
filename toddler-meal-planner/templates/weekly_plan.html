@@ -3,7 +3,7 @@
 {% block title %}Weekly Plan - {{ toddler.name }} | LittleBowl{% endblock %}
 
 {% block content %}
-<body data-page="weekly-plan" data-toddler-id="{{ toddler.id }}">
+<body data-page="weekly-plan" data-toddler-id="{{ toddler.ref }}">
     <div class="page-header weekly-plan-header">
         <h1>📅 Meal Plan</h1>
         <p class="weekly-plan-subtitle-desktop">Personalized meal suggestions for {{ toddler.name }} based on nutrition needs and preferences</p>
@@ -25,7 +25,7 @@
                 <span class="compact-plan-eyebrow">Around today</span>
                 <span class="compact-plan-title" id="compact-plan-title">Loading…</span>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm weekly-plan-regen" onclick="regenerateWeeklyPlan({{ toddler.id }})">
+            <button type="button" class="btn btn-secondary btn-sm weekly-plan-regen" onclick="regenerateWeeklyPlan({{ toddler.ref|tojson }})">
                 <i class="fas fa-sync-alt"></i> <span>Regenerate</span>
             </button>
         </div>

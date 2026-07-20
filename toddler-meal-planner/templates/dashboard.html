@@ -3,7 +3,7 @@
 {% block title %}Dashboard - {{ toddler.name }} | LittleBowl{% endblock %}
 
 {% block content %}
-<body data-page="dashboard" data-toddler-id="{{ toddler.id }}">
+<body data-page="dashboard" data-toddler-id="{{ toddler.ref }}">
     <div class="page-header">
         <h1>Good {{ 'Morning' if now().hour < 12 else 'Afternoon' if now().hour < 17 else 'Evening' }}, {{ toddler.name }}! 👋</h1>
         <p>{{ now().strftime('%A, %B %d, %Y') }} • Track meals and ensure balanced nutrition</p>
@@ -39,6 +39,39 @@
                 <p>Months Old</p>
             </div>
         </a>
+    </div>
+
+    <!-- Logging history -->
+    <div class="stats-row logging-stats-row" aria-label="Meal logging history">
+        <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="stat-card stat-card-link" aria-label="Total meals logged">
+            <div class="stat-icon success">📝</div>
+            <div class="stat-content">
+                <h3 id="total-meals-logged">0</h3>
+                <p>Meals Logged</p>
+            </div>
+        </a>
+        <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="stat-card stat-card-link" aria-label="Days with meal logs">
+            <div class="stat-icon primary">📆</div>
+            <div class="stat-content">
+                <h3 id="days-logged">0</h3>
+                <p>Days Logged</p>
+            </div>
+        </a>
+        <a href="{{ url_for('log_meal_page', toddler_id=toddler.id) }}" class="stat-card stat-card-link" aria-label="Current logging streak">
+            <div class="stat-icon warning">🔥</div>
+            <div class="stat-content">
+                <h3 id="logging-streak">0</h3>
+                <p>Day Streak</p>
+                <span class="stat-sub" id="logging-streak-hint">Log today to start</span>
+            </div>
+        </a>
+        <div class="stat-card" aria-label="Longest logging streak">
+            <div class="stat-icon primary">🏆</div>
+            <div class="stat-content">
+                <h3 id="longest-streak">0</h3>
+                <p>Best Streak</p>
+            </div>
+        </div>
     </div>
     
     <!-- Health Status Card (if weight provided) -->
@@ -95,7 +128,7 @@
             <div class="card-header">
                 <h2>📊 Today's Nutrition</h2>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <button type="button" class="btn btn-primary btn-sm" onclick="openNutritionBreakdown({{ toddler.id }})">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openNutritionBreakdown({{ toddler.ref|tojson }})">
                         View Details
                     </button>
                     <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
@@ -148,7 +181,7 @@
                 </div>
             </div>
             <div class="card-footer">
-                <a href="#" onclick="loadFlavorExploration({{ toddler.id }}); return false;" style="color: var(--primary); font-weight: 600;">
+                <a href="#" onclick="loadFlavorExploration({{ toddler.ref|tojson }}); return false;" style="color: var(--primary); font-weight: 600;">
                     🔍 Explore new flavors based on favorites →
                 </a>
             </div>
@@ -182,7 +215,7 @@
     <script>
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
-            loadDashboard({{ toddler.id }});
+            loadDashboard({{ toddler.ref|tojson }});
         });
         
         // Helper to get current time
@@ -205,6 +238,27 @@
         const scores = Object.values(nutrition).map(n => n.percentage).filter(p => p !== undefined);
         const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : '--';
         document.getElementById('nutrition-score').textContent = avgScore + (avgScore !== '--' ? '%' : '');
+
+        const stats = data.logging_stats || {};
+        const totalEl = document.getElementById('total-meals-logged');
+        const daysEl = document.getElementById('days-logged');
+        const streakEl = document.getElementById('logging-streak');
+        const longestEl = document.getElementById('longest-streak');
+        const hintEl = document.getElementById('logging-streak-hint');
+        if (totalEl) totalEl.textContent = stats.total_meals_logged ?? 0;
+        if (daysEl) daysEl.textContent = stats.days_logged ?? 0;
+        if (streakEl) streakEl.textContent = stats.current_streak ?? 0;
+        if (longestEl) longestEl.textContent = stats.longest_streak ?? 0;
+        if (hintEl) {
+            const streak = stats.current_streak || 0;
+            if (streak <= 0) {
+                hintEl.textContent = 'Log a meal today to start';
+            } else if (streak === 1) {
+                hintEl.textContent = 'Great start — keep going tomorrow';
+            } else {
+                hintEl.textContent = `${streak} days in a row`;
+            }
+        }
     }
     
     // Override renderDashboard to also update stats
@@ -325,8 +379,8 @@
     
     // Load on page load
     document.addEventListener('DOMContentLoaded', function() {
-        loadDailyTip({{ toddler.id }});
-        loadFlavorExploration({{ toddler.id }});
+        loadDailyTip({{ toddler.ref|tojson }});
+        loadFlavorExploration({{ toddler.ref|tojson }});
     });
 </script>
 {% endblock %}

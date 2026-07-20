@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-header">
     <h1>🍽️ Log Today's Meals</h1>
-    <p>Start with what we recommended for {{ toddler.name }}, then tell us how it went</p>
+    <p>Log what {{ toddler.name }} ate for each meal — you can add more foods if they refused one option and tried another, and edit any entry anytime.</p>
 </div>
 
 {# ==================== TODAY'S RECOMMENDED PLAN ==================== #}
@@ -42,7 +42,7 @@
                         <div>
                             <span class="plan-meal-type">{{ meal_labels.get(meal_type, meal_type) }}</span>
                             {% if already_logged %}
-                            <span class="badge badge-success">✓ Logged</span>
+                            <span class="badge badge-success">✓ {{ logged_by_meal[meal_type]|length }} logged</span>
                             {% else %}
                             <span class="badge badge-primary">Recommended</span>
                             {% endif %}
@@ -66,49 +66,63 @@
                     
                     {% if already_logged %}
                     <div class="logged-summary" id="logged-summary-{{ meal_type }}">
-                        {% for log in logged_by_meal[meal_type] %}
-                        <p>
-                            Ate {{ log.portion_eaten_percent }}%
-                            {% if log.toddler_reaction %} · {{ log.toddler_reaction }}{% endif %}
-                            {% if log.food %} · {{ log.food.name }}{% elif log.custom_food_name %} · {{ log.custom_food_name }}{% endif %}
+                        <p class="logged-entry-count" style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.5rem;">
+                            {{ logged_by_meal[meal_type]|length }} food{{ 's' if logged_by_meal[meal_type]|length != 1 else '' }} logged
+                            — add more if they tried something else after refusing.
                         </p>
-                        {% if log.nutrients %}
-                        <div class="nutrient-preview">
-                            <span>{{ log.nutrients.calories|round|int }} kcal</span>
-                            <span>{{ '%.1f'|format(log.nutrients.protein_g or 0) }}g protein</span>
-                            <span>{{ '%.1f'|format(log.nutrients.iron_mg or 0) }}mg iron</span>
-                            <span>{{ (log.nutrients.calcium_mg or 0)|round|int }}mg calcium</span>
+                        {% for log in logged_by_meal[meal_type] %}
+                        <div class="logged-entry-row">
+                            <p>
+                                Ate {{ log.portion_eaten_percent }}%
+                                {% if log.toddler_reaction %} · {{ log.toddler_reaction }}{% endif %}
+                                {% if log.food %} · {{ log.food.name }}{% elif log.custom_food_name %} · {{ log.custom_food_name }}{% endif %}
+                            </p>
+                            {% if log.nutrients %}
+                            <div class="nutrient-preview">
+                                <span>{{ log.nutrients.calories|round|int }} kcal</span>
+                                <span>{{ '%.1f'|format(log.nutrients.protein_g or 0) }}g protein</span>
+                                <span>{{ '%.1f'|format(log.nutrients.iron_mg or 0) }}mg iron</span>
+                                <span>{{ (log.nutrients.calcium_mg or 0)|round|int }}mg calcium</span>
+                            </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
                         {% endfor %}
-                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-top:0.5rem;">
+                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-top:0.75rem;">
                             <button type="button" class="btn btn-sm btn-primary" onclick="showEditLoggedMeal('{{ meal_type }}')">
-                                <i class="fas fa-pen"></i> Edit logged meal
+                                <i class="fas fa-pen"></i> Edit entries
                             </button>
-                            <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
-                                Log a different meal instead
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="showAlternateForm('{{ meal_type }}', 'append')">
+                                <i class="fas fa-plus"></i> Add more foods
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}', 'replace')">
+                                Replace entire meal
                             </button>
                         </div>
                     </div>
                     <div class="plan-feedback" id="edit-logged-{{ meal_type }}" style="display:none;">
                         <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:0.75rem;">
-                            Update portion and reaction for each logged food. Remove an item if it was logged by mistake.
+                            Change portion/reaction, remove a food, or search below to add another item
+                            (e.g. they refused the first option, then ate something else).
                         </p>
                         <div id="edit-items-{{ meal_type }}" class="meal-items-panel"></div>
+                        <div class="edit-add-food" style="margin-top:0.75rem;">
+                            <label class="form-label">Add another food to this meal</label>
+                            <input type="text" class="form-input" id="edit-search-{{ meal_type }}"
+                                   placeholder="Search or type a food to add…"
+                                   oninput="filterEditFoods('{{ meal_type }}', this.value)">
+                            <div class="food-list alt-food-list" id="edit-list-{{ meal_type }}" style="max-height:160px;margin-top:0.5rem;"></div>
+                        </div>
                         <div class="form-group" style="margin: 0.75rem 0;">
                             <label class="form-label">Notes <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
                             <input type="text" class="form-input" id="edit-notes-{{ meal_type }}"
-                                   placeholder="E.g., ate more roti than usual">
+                                   placeholder="E.g., refused dal first, then ate khichdi">
                         </div>
                         <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
-                            <button type="button" class="btn btn-primary" onclick="saveEditedMealLogs({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-primary" onclick="saveEditedMealLogs({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-save"></i> Save changes
                             </button>
                             <button type="button" class="btn btn-outline" onclick="hideEditLoggedMeal('{{ meal_type }}')">
                                 Cancel
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
-                                Replace with different meal
                             </button>
                         </div>
                     </div>
@@ -127,23 +141,23 @@
                         </div>
                         
                         <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
-                            <button type="button" class="btn btn-primary" onclick="logPlannedMeal({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-primary" onclick="logPlannedMeal({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-check"></i> Save feedback
                             </button>
-                            <button type="button" class="btn btn-outline" onclick="showAlternateForm('{{ meal_type }}')">
+                            <button type="button" class="btn btn-outline" onclick="showAlternateForm('{{ meal_type }}', 'replace')">
                                 Ate something else instead
                             </button>
                         </div>
                     </div>
                     {% endif %}
                     
-                    {# ---- Alternate meal form: Search | Describe | Photo ---- #}
-                    <div class="alternate-meal-form" id="alternate-{{ meal_type }}" style="display:none;">
+                    {# ---- Alternate / add-more meal form: Search | Describe | Photo ---- #}
+                    <div class="alternate-meal-form" id="alternate-{{ meal_type }}" style="display:none;" data-alt-mode="replace">
                         <div class="alternate-header">
-                            <strong>Log a different meal</strong>
+                            <strong id="alt-title-{{ meal_type }}">Log a different meal</strong>
                             <button type="button" class="btn btn-sm btn-outline" onclick="hideAlternateForm('{{ meal_type }}')">Cancel</button>
                         </div>
-                        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                        <p id="alt-desc-{{ meal_type }}" style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;">
                             Pick a food, describe what they ate, or snap a photo. This replaces today's plan for {{ meal_labels.get(meal_type, meal_type) }}.
                         </p>
 
@@ -172,11 +186,11 @@
                         {# NLP / describe tab #}
                         <div class="alt-panel" id="alt-panel-nlp-{{ meal_type }}" style="display:none;">
                             <div class="form-group">
-                                <label class="form-label">What did they eat instead?</label>
+                                <label class="form-label">What did they eat?</label>
                                 <textarea class="form-input form-textarea" id="alt-nlp-{{ meal_type }}" rows="2"
                                           placeholder="E.g., ate only roti and cucumber, refused dal"></textarea>
                             </div>
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="parseAltNlp({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="parseAltNlp({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-magic"></i> Find matching foods
                             </button>
                             <div class="food-list alt-food-list" id="alt-nlp-list-{{ meal_type }}" style="max-height:180px;margin-top:0.75rem;"></div>
@@ -206,7 +220,7 @@
                                 <input type="text" class="form-input" id="alt-photo-caption-{{ meal_type }}"
                                        placeholder="E.g., khichdi with curd">
                             </div>
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="recognizeAltPhoto({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="recognizeAltPhoto({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-images"></i> Suggest foods from photo
                             </button>
                             <div class="food-list alt-food-list" id="alt-photo-list-{{ meal_type }}" style="max-height:180px;margin-top:0.75rem;"></div>
@@ -217,7 +231,8 @@
                             No foods selected yet — tap items above. Combos like “Lobia with Roti” split into separate rows.
                         </p>
                         
-                        <button type="button" class="btn btn-primary" style="margin-top:0.75rem;" onclick="logAlternateMeal({{ toddler.id }}, '{{ meal_type }}')">
+                        <button type="button" class="btn btn-primary" style="margin-top:0.75rem;" id="alt-submit-{{ meal_type }}"
+                                onclick="logAlternateMeal({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                             <i class="fas fa-sync"></i> Log & update weekly plan
                         </button>
                     </div>
@@ -254,10 +269,10 @@
                 </select>
             </div>
             <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
-                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }}, false)">
+                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.ref|tojson }}, false)">
                     <i class="fas fa-magic"></i> Show Adaptations
                 </button>
-                <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.id }}, true)">
+                <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.ref|tojson }}, true)">
                     <i class="fas fa-plus-circle"></i> Adapt & Replace Today's Plan
                 </button>
             </div>
@@ -277,10 +292,10 @@
             <textarea id="natural-language-input" class="form-input form-textarea"
                       placeholder="E.g., He had banana and dahi for evening snack, loved the banana"></textarea>
             <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                <button class="btn btn-secondary" onclick="parseAndPreview({{ toddler.id }})" style="flex:1;">
+                <button class="btn btn-secondary" onclick="parseAndPreview({{ toddler.ref|tojson }})" style="flex:1;">
                     <i class="fas fa-magic"></i> Parse & Preview
                 </button>
-                <button class="btn btn-primary" onclick="quickLog({{ toddler.id }})" style="flex:1;">
+                <button class="btn btn-primary" onclick="quickLog({{ toddler.ref|tojson }})" style="flex:1;">
                     <i class="fas fa-bolt"></i> Quick Log
                 </button>
             </div>
@@ -370,6 +385,17 @@
 }
 .meal-item-row .meal-item-name { font-weight: 700; margin-bottom: 0.5rem; }
 .meal-item-row .item-portion-label { text-align: center; font-weight: 700; font-size: 0.9rem; margin-top: 0.25rem; }
+.logged-entry-row {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+.logged-entry-row:last-of-type { border-bottom: none; }
+.edit-add-food {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    border: 1px dashed var(--border-color);
+}
 </style>
 
 <script>
@@ -382,6 +408,7 @@ const altItemState = {};
 const editItemState = {};
 const altPhotos = {};
 const editNotesSeed = {};
+const altModeByMeal = {}; // 'append' | 'replace'
 
 const REACTIONS = [
     { id: 'loved', label: '😍 Loved', short: '😍' },
@@ -619,6 +646,9 @@ function showEditLoggedMeal(mealType) {
         const notes = document.getElementById('edit-notes-' + mealType);
         if (notes) notes.value = editNotesSeed[mealType] || '';
         renderItemRows(mealType, 'edit');
+        const search = document.getElementById('edit-search-' + mealType);
+        if (search) search.value = '';
+        filterEditFoods(mealType, '');
     }
 }
 
@@ -629,13 +659,109 @@ function hideEditLoggedMeal(mealType) {
     if (summary) summary.style.display = 'block';
 }
 
+function addEditItems(mealType, foods) {
+    if (!editItemState[mealType]) editItemState[mealType] = [];
+    for (const food of foods) {
+        const expanded = expandComboFood(food);
+        for (const item of expanded) {
+            editItemState[mealType].push({
+                ...item,
+                log_id: null,
+                reaction: item.reaction || null,
+            });
+        }
+    }
+    renderItemRows(mealType, 'edit');
+}
+
+function toggleEditFood(mealType, foodId) {
+    const food = allFoods.find(f => f.id === foodId);
+    if (!food) return;
+    addEditItems(mealType, [food]);
+    const search = document.getElementById('edit-search-' + mealType);
+    if (search) search.value = '';
+    filterEditFoods(mealType, '');
+}
+
+function filterEditFoods(mealType, query) {
+    const list = document.getElementById('edit-list-' + mealType);
+    if (!list) return;
+    const q = (query || '').toLowerCase().trim();
+    if (!q) {
+        list.innerHTML = '<p style="padding:0.5rem;color:var(--text-muted);font-size:0.85rem;">Type to search foods to add to this meal.</p>';
+        return;
+    }
+    const matches = allFoods.filter(f =>
+        f.name.toLowerCase().includes(q) || (f.name_hindi || '').toLowerCase().includes(q)
+    ).slice(0, 30);
+    const exact = allFoods.some(f => f.name.toLowerCase() === q);
+    let html = matches.map(f => `
+        <div class="food-item" data-food-id="${f.id}" onclick="toggleEditFood('${mealType}', ${f.id})">
+            <div class="food-item-info">
+                <div class="food-item-name">+ ${escapeHtml(f.name)}</div>
+                ${f.name_hindi ? `<div class="food-item-hindi">${escapeHtml(f.name_hindi)}</div>` : ''}
+            </div>
+            <span class="food-item-category">${escapeHtml(f.category)}</span>
+        </div>
+    `).join('');
+    if (!exact && looksLikeFoodName(q)) {
+        html += `
+        <div class="food-item add-food-item" role="button"
+             data-meal-type="${escapeHtml(mealType)}"
+             data-add-name="${encodeURIComponent(query.trim())}"
+             onclick="addCustomEditFoodFromBtn(this)">
+            <div class="food-item-info">
+                <div class="food-item-name"><i class="fas fa-plus-circle"></i> Add “${escapeHtml(query.trim())}”</div>
+            </div>
+        </div>`;
+    }
+    list.innerHTML = html || '<p style="padding:0.5rem;color:var(--text-muted);">No matches</p>';
+}
+
+function addCustomEditFoodFromBtn(el) {
+    if (!el) return;
+    const mealType = el.getAttribute('data-meal-type');
+    const name = decodeURIComponent(el.getAttribute('data-add-name') || '');
+    return addCustomEditFood(mealType, name);
+}
+
+async function addCustomEditFood(mealType, name) {
+    const foodName = (name || '').trim();
+    if (!foodName || !looksLikeFoodName(foodName)) {
+        showToast('Use a short food name to add', 'error');
+        return;
+    }
+    try {
+        const result = await apiCall('/foods', 'POST', { name: foodName, enrich: true });
+        const existingIdx = allFoods.findIndex(f => f.id === result.id);
+        if (existingIdx >= 0) allFoods[existingIdx] = result;
+        else allFoods.push(result);
+        addEditItems(mealType, [result]);
+        const search = document.getElementById('edit-search-' + mealType);
+        if (search) search.value = '';
+        filterEditFoods(mealType, '');
+        showToast(result.message || `Added ${result.name}`, 'success');
+    } catch (e) {
+        console.error(e);
+        if (!editItemState[mealType]) editItemState[mealType] = [];
+        editItemState[mealType].push({
+            log_id: null,
+            food_id: null,
+            custom_food_name: foodName,
+            name: foodName,
+            portion: 100,
+            reaction: null,
+        });
+        renderItemRows(mealType, 'edit');
+    }
+}
+
 async function saveEditedMealLogs(toddlerId, mealType) {
     const items = getItemState(mealType, 'edit');
     const original = loggedByMeal[mealType] || [];
     const notes = document.getElementById('edit-notes-' + mealType)?.value || '';
 
     if (!items.length) {
-        // Delete all remaining original logs
         try {
             for (const log of original) {
                 await apiCall('/meal-logs/' + log.id, 'DELETE');
@@ -654,23 +780,39 @@ async function saveEditedMealLogs(toddlerId, mealType) {
         return;
     }
 
-    const keepIds = new Set(items.map(i => i.log_id).filter(Boolean));
+    const existingItems = items.filter(i => i.log_id);
+    const newItems = items.filter(i => !i.log_id);
+    const keepIds = new Set(existingItems.map(i => i.log_id));
     const toDelete = original.filter(l => !keepIds.has(l.id));
 
     try {
         for (const log of toDelete) {
             await apiCall('/meal-logs/' + log.id, 'DELETE');
         }
-        const payload = {
-            items: items.map(i => ({
-                id: i.log_id,
+        if (existingItems.length) {
+            await apiCall('/meal-logs/batch', 'PUT', {
+                items: existingItems.map(i => ({
+                    id: i.log_id,
+                    food_id: i.food_id,
+                    portion_eaten_percent: i.portion,
+                    toddler_reaction: i.reaction,
+                    notes: notes,
+                })),
+            });
+        }
+        if (newItems.length) {
+            await submitMealLogs(toddlerId, mealType, newItems.map(i => ({
                 food_id: i.food_id,
+                custom_food_name: i.custom_food_name || (!i.food_id ? i.name : null),
+                name: i.name,
                 portion_eaten_percent: i.portion,
                 toddler_reaction: i.reaction,
-                notes: notes,
-            })),
-        };
-        await apiCall('/meal-logs/batch', 'PUT', payload);
+            })), {
+                notes: notes || 'Added while editing meal',
+                update_plan: false,
+                replace_existing: false,
+            });
+        }
         showToast('Updated logged meal', 'success');
         setTimeout(() => location.reload(), 700);
     } catch (e) {
@@ -771,6 +913,7 @@ function collectItemsFromState(mealType, mode) {
     }
     return items.map(i => ({
         food_id: i.food_id,
+        custom_food_name: i.custom_food_name || (!i.food_id ? i.name : null),
         name: i.name,
         portion_eaten_percent: i.portion,
         toddler_reaction: i.reaction,
@@ -802,7 +945,10 @@ function toggleSection(id) {
     if (icon) icon.className = open ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
 }
 
-function showAlternateForm(mealType) {
+function showAlternateForm(mealType, mode) {
+    const altMode = mode === 'append' ? 'append' : 'replace';
+    altModeByMeal[mealType] = altMode;
+
     const feedback = document.getElementById('feedback-' + mealType);
     const summary = document.getElementById('logged-summary-' + mealType);
     const edit = document.getElementById('edit-logged-' + mealType);
@@ -812,6 +958,33 @@ function showAlternateForm(mealType) {
     if (edit) edit.style.display = 'none';
     if (alt) {
         alt.style.display = 'block';
+        alt.dataset.altMode = altMode;
+        const title = document.getElementById('alt-title-' + mealType);
+        const desc = document.getElementById('alt-desc-' + mealType);
+        const submit = document.getElementById('alt-submit-' + mealType);
+        if (altMode === 'append') {
+            if (title) title.textContent = 'Add more foods to this meal';
+            if (desc) {
+                desc.textContent = 'They refused one option or ate something extra? Add foods here — existing logs stay; this does not wipe what you already saved.';
+            }
+            if (submit) {
+                submit.innerHTML = '<i class="fas fa-plus"></i> Add to this meal';
+            }
+        } else {
+            if (title) title.textContent = loggedByMeal[mealType] ? 'Replace entire meal' : 'Log a different meal';
+            if (desc) {
+                desc.textContent = loggedByMeal[mealType]
+                    ? 'This replaces everything already logged for this meal slot and can update today\'s plan.'
+                    : 'Pick a food, describe what they ate, or snap a photo. This replaces today\'s plan for this meal.';
+            }
+            if (submit) {
+                submit.innerHTML = loggedByMeal[mealType]
+                    ? '<i class="fas fa-sync"></i> Replace & update plan'
+                    : '<i class="fas fa-sync"></i> Log & update weekly plan';
+            }
+        }
+        altItemState[mealType] = [];
+        renderItemRows(mealType, 'alt');
         switchAltTab(mealType, 'search');
         filterAltFoods(mealType, '');
     }
@@ -1162,6 +1335,11 @@ async function logAlternateMeal(toddlerId, mealType) {
         return;
     }
 
+    const altMode = altModeByMeal[mealType]
+        || document.getElementById('alternate-' + mealType)?.dataset.altMode
+        || 'replace';
+    const isAppend = altMode === 'append';
+
     const nlpNote = document.getElementById('alt-nlp-' + mealType)?.value || '';
     const caption = document.getElementById('alt-photo-caption-' + mealType)?.value || '';
     const extra = [nlpNote, caption].filter(Boolean).join(' · ');
@@ -1169,23 +1347,29 @@ async function logAlternateMeal(toddlerId, mealType) {
 
     try {
         const result = await submitMealLogs(toddlerId, mealType, items, {
-            notes: `Different from plan; weekly plan updated to ${names}` + (extra ? ` · ${extra}` : ''),
-            update_plan: true,
+            notes: isAppend
+                ? (`Added to meal: ${names}` + (extra ? ` · ${extra}` : ''))
+                : (`Different from plan; weekly plan updated to ${names}` + (extra ? ` · ${extra}` : '')),
+            update_plan: !isAppend,
             plan_food_id: items[0].food_id,
-            plan_reason: `Logged different meal: ${names}`,
+            plan_reason: isAppend ? '' : `Logged different meal: ${names}`,
             photo_data: altPhotos[mealType] || null,
-            replace_existing: !!(loggedByMeal[mealType] && loggedByMeal[mealType].length),
+            replace_existing: !isAppend && !!(loggedByMeal[mealType] && loggedByMeal[mealType].length),
         });
 
         const swaps = result.plan_updated?.future_plans_adjusted || 0;
         const photoMsg = result.photo_path ? ' Photo saved.' : '';
         const count = result.count || items.length;
-        showToast(
-            swaps > 0
-                ? `Logged ${count} item(s). Weekly plan updated (${swaps} future meal(s) adjusted).${photoMsg}`
-                : `Logged ${count} item(s) and updated today's plan.${photoMsg}`,
-            'success'
-        );
+        if (isAppend) {
+            showToast(`Added ${count} more food(s) to this meal.${photoMsg}`, 'success');
+        } else {
+            showToast(
+                swaps > 0
+                    ? `Logged ${count} item(s). Weekly plan updated (${swaps} future meal(s) adjusted).${photoMsg}`
+                    : `Logged ${count} item(s) and updated today's plan.${photoMsg}`,
+                'success'
+            );
+        }
         setTimeout(() => location.reload(), 900);
     } catch (e) {
         console.error(e);

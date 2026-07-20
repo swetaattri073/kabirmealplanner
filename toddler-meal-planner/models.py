@@ -268,9 +268,19 @@ class Toddler(db.Model):
                 'milk_feeds': 1
             }
     
+    @property
+    def ref(self):
+        """Opaque signed id for URLs (never expose raw primary key in the address bar)."""
+        from toddler_refs import encode_toddler_ref
+        try:
+            return encode_toddler_ref(self.id)
+        except Exception:
+            return str(self.id)
+
     def to_dict(self):
         return {
             'id': self.id,
+            'ref': self.ref,
             'name': self.name,
             'age_months': self.age_months,
             'birth_date': self.birth_date.isoformat() if self.birth_date else None,

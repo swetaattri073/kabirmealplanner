@@ -29,7 +29,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     {% block extra_css %}{% endblock %}
 </head>
-<body{% if toddler %} data-toddler-id="{{ toddler.id }}" data-toddler-name="{{ toddler.name }}"{% endif %}>
+<body{% if toddler %} data-toddler-id="{{ toddler.ref }}" data-toddler-name="{{ toddler.name }}"{% endif %}>
     <div class="app-container">
         <!-- Mobile Header -->
         <header class="mobile-header">
@@ -76,7 +76,7 @@
                 {% if toddlers and toddlers|length > 1 %}
                 <select class="toddler-switch" onchange="switchToddler(this.value)">
                     {% for t in toddlers %}
-                    <option value="{{ t.id }}" {% if t.id == toddler.id %}selected{% endif %}>
+                    <option value="{{ t.ref }}" {% if t.id == toddler.id %}selected{% endif %}>
                         {{ t.name }}
                     </option>
                     {% endfor %}
@@ -223,7 +223,7 @@
     {% if chat_assistant_available and toddler %}
     <script>
         window.LITTLEBOWL_CHAT = {
-            toddlerId: {{ toddler.id }},
+            toddlerId: {{ toddler.ref|tojson }},
             toddlerName: {{ toddler.name|tojson }}
         };
     </script>

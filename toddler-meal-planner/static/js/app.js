@@ -335,7 +335,7 @@ function renderMealSchedule(data) {
     let html = '';
     allMeals.forEach(mealType => {
         const isEaten = data.meals_eaten?.includes(mealType);
-        const log = todayLogs.find(l => l.meal_type === mealType);
+        const logs = todayLogs.filter(l => l.meal_type === mealType);
         const plannedName = getPlannedMealDisplayName(plannedMeals[mealType]);
         const suggestion = suggestions[mealType]?.[0];
         let pendingLabel = 'Not planned yet';
@@ -343,6 +343,25 @@ function renderMealSchedule(data) {
             pendingLabel = plannedName;
         } else if (suggestion?.food?.name) {
             pendingLabel = `Suggested: ${suggestion.food.name}`;
+        }
+
+        let eatenLabel = 'Logged';
+        let kcalPreview = '';
+        if (logs.length === 1) {
+            const log = logs[0];
+            eatenLabel = log?.food?.name || log?.custom_food_name || 'Logged';
+            if (log?.nutrients) {
+                kcalPreview = `<div class="nutrient-preview"><span>${Math.round(log.nutrients.calories || 0)} kcal</span></div>`;
+            }
+        } else if (logs.length > 1) {
+            const names = logs.map(l => l.food?.name || l.custom_food_name || 'Food').filter(Boolean);
+            eatenLabel = names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3}` : '');
+            const kcal = logs.reduce((sum, l) => sum + (l.nutrients?.calories || 0), 0);
+            if (kcal) {
+                kcalPreview = `<div class="nutrient-preview"><span>${Math.round(kcal)} kcal · ${logs.length} foods</span></div>`;
+            } else {
+                kcalPreview = `<div class="nutrient-preview"><span>${logs.length} foods</span></div>`;
+            }
         }
         
         html += `
@@ -352,14 +371,14 @@ function renderMealSchedule(data) {
                     <div class="meal-type">${formatMealType(mealType)}</div>
                     ${isEaten 
                     ? `<div class="meal-food">
-                        ${log?.food?.name || log?.custom_food_name || 'Logged'}
-                        ${log?.nutrients ? `<div class="nutrient-preview"><span>${Math.round(log.nutrients.calories || 0)} kcal</span></div>` : ''}
+                        ${escapeHtml(eatenLabel)}
+                        ${kcalPreview}
                        </div>`
-                    : `<div class="meal-food">${pendingLabel}</div>`}
+                    : `<div class="meal-food">${escapeHtml(pendingLabel)}</div>`}
                 </div>
                 ${isEaten 
-                    ? '<span class="meal-action done"><i class="fas fa-check"></i></span>'
-                    : `<a href="/log-meal/${data.toddler.id}?meal=${mealType}" class="meal-action log-btn">Log</a>`
+                    ? `<a href="/log-meal/${data.toddler.ref || data.toddler.id}?meal=${mealType}&edit=1" class="meal-action log-btn" title="Edit meal">Edit</a>`
+                    : `<a href="/log-meal/${data.toddler.ref || data.toddler.id}?meal=${mealType}" class="meal-action log-btn">Log</a>`
                 }
             </div>
         `;
@@ -1246,9 +1265,9 @@ async function createToddler(event) {
 
         if (toddler.guest_id && window.LittleBowlSession) {
             window.LittleBowlSession.writeGuestId(toddler.guest_id);
-            window.LittleBowlSession.rememberToddler(toddler.id);
+            window.LittleBowlSession.rememberToddler(toddler.ref || toddler.id);
         } else if (window.LittleBowlSession) {
-            window.LittleBowlSession.rememberToddler(toddler.id);
+            window.LittleBowlSession.rememberToddler(toddler.ref || toddler.id);
             window.LittleBowlSession.syncFromStatus();
         }
         
@@ -1259,7 +1278,7 @@ async function createToddler(event) {
         showToast(message, 'success');
         
         // Navigate immediately — don't rely on delayed redirect on mobile
-        window.location.assign(`/dashboard/${toddler.id}`);
+        window.location.assign(`/dashboard/${toddler.ref || toddler.id}`);
     } catch (error) {
         console.error('Failed to create toddler:', error);
         if (submitBtn) {
