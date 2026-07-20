@@ -2407,6 +2407,68 @@ def recognize_food():
 
 # --- Dashboard Data ---
 
+def _logging_stats_for_toddler(toddler_id, today=None):
+    """
+    Lifetime logging analytics for the dashboard.
+    - total_meals: distinct meal occasions (date + meal_type)
+    - days_logged: distinct calendar days with ≥1 log
+    - current_streak: consecutive days ending today (or yesterday if today empty)
+    """
+    today = today or date.today()
+    rows = (
+        db.session.query(MealLog.date, MealLog.meal_type)
+        .filter(MealLog.toddler_id == toddler_id)
+        .distinct()
+        .all()
+    )
+    if not rows:
+        return {
+            'total_meals_logged': 0,
+            'days_logged': 0,
+            'current_streak': 0,
+            'longest_streak': 0,
+            'last_logged_date': None,
+        }
+
+    meal_keys = {(r.date, r.meal_type) for r in rows}
+    days = sorted({r.date for r in rows})
+    day_set = set(days)
+
+    # Current streak: walk backward from today if logged, else from yesterday
+    if today in day_set:
+        cursor = today
+    elif (today - timedelta(days=1)) in day_set:
+        cursor = today - timedelta(days=1)
+    else:
+        cursor = None
+
+    current_streak = 0
+    if cursor is not None:
+        while cursor in day_set:
+            current_streak += 1
+            cursor -= timedelta(days=1)
+
+    # Longest streak across all history
+    longest = 0
+    run = 0
+    prev = None
+    for d in days:
+        if prev is not None and d == prev + timedelta(days=1):
+            run += 1
+        else:
+            run = 1
+        longest = max(longest, run)
+        prev = d
+
+    return {
+        'total_meals_logged': len(meal_keys),
+        'days_logged': len(days),
+        'current_streak': current_streak,
+        'longest_streak': longest,
+        'last_logged_date': days[-1].isoformat() if days else None,
+    }
+
+
 @app.route('/api/dashboard/<int:toddler_id>', methods=['GET'])
 def get_dashboard_data(toddler_id):
     """Get all dashboard data in one call"""
@@ -2448,6 +2510,7 @@ def get_dashboard_data(toddler_id):
     schedule = toddler.get_recommended_schedule()
     all_meals = schedule['meals'] + schedule['snacks']
     eaten_meals = set(log.meal_type for log in today_logs)
+    logging_stats = _logging_stats_for_toddler(toddler_id, today)
     
     return jsonify({
         'toddler': toddler.to_dict(),
@@ -2460,7 +2523,8 @@ def get_dashboard_data(toddler_id):
         'nutrition': nutrition,
         'alerts': alerts[:3],  # Top 3 alerts
         'alerts_total': len(alerts),
-        'suggestions': fallback_suggestions
+        'suggestions': fallback_suggestions,
+        'logging_stats': logging_stats,
     })
 
 
