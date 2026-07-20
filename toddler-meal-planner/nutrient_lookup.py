@@ -24,54 +24,63 @@ CATEGORY_ESTIMATES: Dict[str, Dict[str, float]] = {
         "calcium_mg": 15, "iron_mg": 1.2, "zinc_mg": 0.8,
         "vitamin_a_mcg": 0, "vitamin_c_mg": 0, "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0, "folate_mcg": 20,
+        "omega3_mg": 0,
     },
     "dal": {
         "calories": 110, "protein_g": 7.0, "carbs_g": 18, "fat_g": 1.5, "fiber_g": 4.0,
         "calcium_mg": 30, "iron_mg": 2.5, "zinc_mg": 1.2,
         "vitamin_a_mcg": 10, "vitamin_c_mg": 1, "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0, "folate_mcg": 60,
+        "omega3_mg": 0,
     },
     "vegetable": {
         "calories": 45, "protein_g": 2.0, "carbs_g": 8, "fat_g": 0.5, "fiber_g": 2.5,
         "calcium_mg": 40, "iron_mg": 1.0, "zinc_mg": 0.4,
         "vitamin_a_mcg": 200, "vitamin_c_mg": 20, "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0, "folate_mcg": 40,
+        "omega3_mg": 0,
     },
     "fruit": {
         "calories": 60, "protein_g": 0.8, "carbs_g": 14, "fat_g": 0.2, "fiber_g": 2.0,
         "calcium_mg": 15, "iron_mg": 0.3, "zinc_mg": 0.1,
         "vitamin_a_mcg": 30, "vitamin_c_mg": 25, "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0, "folate_mcg": 15,
+        "omega3_mg": 0,
     },
     "dairy": {
         "calories": 90, "protein_g": 4.5, "carbs_g": 6, "fat_g": 5.0, "fiber_g": 0,
         "calcium_mg": 150, "iron_mg": 0.1, "zinc_mg": 0.5,
         "vitamin_a_mcg": 40, "vitamin_c_mg": 1, "vitamin_d_mcg": 0.5,
         "vitamin_b12_mcg": 0.5, "folate_mcg": 10,
+        "omega3_mg": 25,
     },
     "protein": {
         "calories": 150, "protein_g": 15, "carbs_g": 2, "fat_g": 9.0, "fiber_g": 0,
         "calcium_mg": 20, "iron_mg": 1.5, "zinc_mg": 2.0,
         "vitamin_a_mcg": 20, "vitamin_c_mg": 0, "vitamin_d_mcg": 0.5,
         "vitamin_b12_mcg": 1.0, "folate_mcg": 15,
+        "omega3_mg": 80,
     },
     "snack": {
         "calories": 120, "protein_g": 3.0, "carbs_g": 18, "fat_g": 4.0, "fiber_g": 1.5,
         "calcium_mg": 25, "iron_mg": 0.8, "zinc_mg": 0.5,
         "vitamin_a_mcg": 10, "vitamin_c_mg": 2, "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0, "folate_mcg": 15,
+        "omega3_mg": 0,
     },
     "beverage": {
         "calories": 40, "protein_g": 1.0, "carbs_g": 8, "fat_g": 0.5, "fiber_g": 0,
         "calcium_mg": 40, "iron_mg": 0.1, "zinc_mg": 0.1,
         "vitamin_a_mcg": 5, "vitamin_c_mg": 5, "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0.1, "folate_mcg": 5,
+        "omega3_mg": 20,
     },
     "combo": {
         "calories": 120, "protein_g": 5.0, "carbs_g": 18, "fat_g": 3.0, "fiber_g": 2.5,
         "calcium_mg": 40, "iron_mg": 1.5, "zinc_mg": 0.8,
         "vitamin_a_mcg": 80, "vitamin_c_mg": 8, "vitamin_d_mcg": 0.1,
         "vitamin_b12_mcg": 0.2, "folate_mcg": 30,
+        "omega3_mg": 0,
     },
 }
 
@@ -93,6 +102,8 @@ CATEGORY_KEYWORDS = {
 def guess_category(name: str, fallback: str = "snack") -> str:
     """Guess a food category from the name."""
     text = (name or "").lower()
+    if any(k in text for k in ("breast milk", "breastmilk", "breast-milk", "human milk", "infant formula", "baby formula")):
+        return "beverage"
     for category, keywords in CATEGORY_KEYWORDS.items():
         if any(k in text for k in keywords):
             return category
@@ -142,6 +153,8 @@ def _from_off_product(product: dict) -> Optional[Dict[str, Any]]:
         "vitamin_d_mcg": _num(nutriments, "vitamin-d_100g") or 0,
         "vitamin_b12_mcg": _num(nutriments, "vitamin-b12_100g") or 0,
         "folate_mcg": _num(nutriments, "folates_100g", "vitamin-b9_100g") or 0,
+        "omega3_mg": _num(nutriments, "omega-3-fat_100g", "omega-3-fatty-acids_100g") or 0,
+        "omega3_mg": 0,
         "matched_name": product.get("product_name") or product.get("generic_name"),
         "source": "openfoodfacts",
     }

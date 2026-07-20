@@ -326,6 +326,7 @@ class Food(db.Model):
     vitamin_d_mcg = db.Column(db.Float, default=0)
     vitamin_b12_mcg = db.Column(db.Float, default=0)
     folate_mcg = db.Column(db.Float, default=0)
+    omega3_mg = db.Column(db.Float, default=0)  # Total omega-3 (ALA + EPA + DHA), mg per 100g
     
     # Food characteristics
     is_indian = db.Column(db.Boolean, default=True)
@@ -375,7 +376,8 @@ class Food(db.Model):
             'vitamin_c_mg': self.vitamin_c_mg * factor,
             'vitamin_d_mcg': self.vitamin_d_mcg * factor,
             'vitamin_b12_mcg': self.vitamin_b12_mcg * factor,
-            'folate_mcg': self.folate_mcg * factor
+            'folate_mcg': self.folate_mcg * factor,
+            'omega3_mg': (self.omega3_mg or 0) * factor,
         }
     
     def to_dict(self):
@@ -397,6 +399,7 @@ class Food(db.Model):
             'vitamin_d_mcg': self.vitamin_d_mcg,
             'vitamin_b12_mcg': self.vitamin_b12_mcg,
             'folate_mcg': self.folate_mcg,
+            'omega3_mg': self.omega3_mg or 0,
             'serving_size_6_12': self.serving_size_6_12,
             'serving_size_12_24': self.serving_size_12_24,
             'serving_size_24_36': self.serving_size_24_36,
@@ -489,6 +492,7 @@ class MealLog(db.Model):
             'vitamin_d_mcg': 0.0,
             'vitamin_b12_mcg': 0.0,
             'folate_mcg': 0.0,
+            'omega3_mg': 0.0,
         }
         return {
             'nutrients': {k: round(v or 0, 2) for k, v in nutrients.items()},

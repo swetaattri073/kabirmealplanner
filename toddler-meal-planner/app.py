@@ -231,6 +231,7 @@ with app.app_context():
                 ('nutrition_source', 'VARCHAR(50)'),
                 ('nutrition_enriched_at', 'DATETIME'),
                 ('nutrition_match_name', 'VARCHAR(200)'),
+                ('omega3_mg', 'FLOAT DEFAULT 0'),
             ]
             for col_name, col_type in patches:
                 if col_name not in food_cols:
@@ -826,7 +827,35 @@ def nutrition_page(toddler_id):
     toddlers = get_user_toddlers()
     engine = NutritionEngine(db.session)
     rda = engine.get_rda(toddler.age_months)
-    return render_template('nutrition.html', toddler=toddler, toddlers=toddlers, rda=rda)
+
+    milk_names = ['Breast Milk', 'Infant Formula', 'Milk (Whole)']
+    milk_foods = {
+        f.name: f
+        for f in Food.query.filter(Food.name.in_(milk_names)).all()
+    }
+    milk_options = []
+    for name in milk_names:
+        food = milk_foods.get(name)
+        if not food:
+            continue
+        # Cow milk is for 12+ months; still show but flag
+        milk_options.append({
+            'id': food.id,
+            'name': food.name,
+            'name_hindi': food.name_hindi,
+            'suitable_from_months': food.suitable_from_months or 0,
+            'serving_ml': food.get_serving_for_age(toddler.age_months) or 100,
+            'omega3_mg_per_100': food.omega3_mg or 0,
+            'disabled': toddler.age_months < (food.suitable_from_months or 0),
+        })
+
+    return render_template(
+        'nutrition.html',
+        toddler=toddler,
+        toddlers=toddlers,
+        rda=rda,
+        milk_options=milk_options,
+    )
 
 
 @app.route('/preferences/<toddler_ref:toddler_id>')
@@ -1160,6 +1189,7 @@ def _enrich_food_record(food_id):
     food.vitamin_d_mcg = nutrients.get('vitamin_d_mcg', 0) or 0
     food.vitamin_b12_mcg = nutrients.get('vitamin_b12_mcg', 0) or 0
     food.folate_mcg = nutrients.get('folate_mcg', 0) or 0
+    food.omega3_mg = nutrients.get('omega3_mg', 0) or 0
     food.nutrition_source = nutrients.get('source')
     food.nutrition_match_name = nutrients.get('matched_name')
     food.nutrition_pending = False

@@ -636,6 +636,19 @@ button.nutrient-card-btn {
     color: var(--text-secondary);
 }
 
+.milk-option-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.milk-type-btn.active {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.45);
+    color: var(--primary-dark, #4f46e5);
+    font-weight: 700;
+}
+
 .nutrient-card:hover {
     transform: scale(1.03);
     box-shadow: var(--shadow-md);

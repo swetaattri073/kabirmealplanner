@@ -26,6 +26,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,  # 400 IU
         'vitamin_b12_mcg': 0.5,
         'folate_mcg': 80,
+        'omega3_mg': 500,  # Total n-3; breastmilk is a major source under 12 months
     },
     '12-24_months': {
         'calories': 1060,
@@ -41,6 +42,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,
         'vitamin_b12_mcg': 0.9,
         'folate_mcg': 120,
+        'omega3_mg': 700,
     },
     '24-36_months': {
         'calories': 1240,
@@ -56,6 +58,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,
         'vitamin_b12_mcg': 0.9,
         'folate_mcg': 150,
+        'omega3_mg': 700,
     },
     '36+_months': {
         'calories': 1360,
@@ -71,6 +74,7 @@ RDA_BY_AGE = {
         'vitamin_d_mcg': 10,
         'vitamin_b12_mcg': 1.2,
         'folate_mcg': 200,
+        'omega3_mg': 900,
     }
 }
 
@@ -89,6 +93,7 @@ NUTRIENT_INFO = {
     'vitamin_d_mcg': {'name': 'Vitamin D', 'unit': 'mcg', 'icon': '☀️'},
     'vitamin_b12_mcg': {'name': 'Vitamin B12', 'unit': 'mcg', 'icon': '🔴'},
     'folate_mcg': {'name': 'Folate', 'unit': 'mcg', 'icon': '🧬'},
+    'omega3_mg': {'name': 'Omega-3', 'unit': 'mg', 'icon': '🐟'},
 }
 
 # Priority nutrients to track (in order of importance for Indian toddlers)
@@ -100,6 +105,7 @@ PRIORITY_NUTRIENTS = [
     'vitamin_b12_mcg',
     'zinc_mg',
     'vitamin_a_mcg',
+    'omega3_mg',
 ]
 
 # Food recommendations for each nutrient deficiency
@@ -192,6 +198,16 @@ NUTRIENT_FOOD_RECOMMENDATIONS = {
             'Dark leafy greens are excellent folate sources',
             'Don\'t overcook vegetables - it destroys folate',
             'Most dals are good folate sources'
+        ]
+    },
+    'omega3_mg': {
+        'message': 'Omega-3 supports brain and eye development.',
+        'veg_foods': ['Breast Milk', 'Dry Fruits Mix (soaked)', 'Peanuts (Roasted)', 'Milk (Whole)', 'Ghee'],
+        'non_veg_foods': ['Fish (Rohu/Pomfret)', 'Egg (Boiled)'],
+        'tips': [
+            'Breast milk / DHA-fortified formula are top sources under 12 months',
+            'Fatty fish 1–2 times a week (fully deboned) is excellent after 10 months',
+            'Ground walnuts/flax in porridge or curd help vegetarian toddlers'
         ]
     },
     'fiber_g': {
