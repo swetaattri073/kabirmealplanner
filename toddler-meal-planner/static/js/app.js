@@ -1243,6 +1243,14 @@ async function createToddler(event) {
     
     try {
         const toddler = await apiCall('/toddlers', 'POST', data);
+
+        if (toddler.guest_id && window.LittleBowlSession) {
+            window.LittleBowlSession.writeGuestId(toddler.guest_id);
+            window.LittleBowlSession.rememberToddler(toddler.id);
+        } else if (window.LittleBowlSession) {
+            window.LittleBowlSession.rememberToddler(toddler.id);
+            window.LittleBowlSession.syncFromStatus();
+        }
         
         let message = `Welcome, ${toddler.name}!`;
         if (toddler.weight_status && toddler.weight_status !== 'normal') {

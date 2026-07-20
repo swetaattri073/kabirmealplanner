@@ -505,7 +505,8 @@
                         <span>Start Planning Meals!</span>
                     </button>
                     <p class="privacy-note">
-                        <i class="fas fa-lock"></i> Your data stays on your device. 100% private.
+                        <i class="fas fa-lock"></i> We'll keep this profile on this phone.
+                        <a href="{{ url_for('signup') }}">Create a free account</a> so it also survives reinstalls and works on other devices.
                     </p>
                 </div>
             </form>
@@ -513,9 +514,22 @@
     </div>
     
     <div id="toast-container"></div>
+    <script src="{{ url_for('static', filename='js/session-persist.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/a2hs-prompt.js') }}" defer></script>
     <script>
+        // If guest cookies were dropped, restore from localStorage before the form is used.
+        (async function () {
+            if (!window.LittleBowlSession) return;
+            try {
+                const data = await window.LittleBowlSession.restore();
+                const toddlers = (data && data.toddlers) || [];
+                if (toddlers.length) {
+                    window.location.replace('/dashboard/' + toddlers[0].id);
+                }
+            } catch (e) { /* stay on form */ }
+        })();
+
         // Add selected state to checkboxes and radio buttons
         document.querySelectorAll('.health-option, .radio-item, .checkbox-item').forEach(item => {
             const input = item.querySelector('input');

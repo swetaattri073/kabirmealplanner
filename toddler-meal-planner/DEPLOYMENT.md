@@ -231,7 +231,8 @@ The `-v ~/meal-data:/app/instance` mount keeps **all of that** across rebuilds. 
 | `ADMIN_EMAILS` | Emails allowed on `/admin` login (comma-separated) | empty (disabled) |
 | `ADMIN_PASSWORD` | Shared password for `/admin` login | empty (disabled) |
 | `USDA_FDC_API_KEY` | Optional USDA lookups | DEMO_KEY |
-| `SESSION_COOKIE_SECURE` | `true` only behind HTTPS | unset/false for HTTP IP access |
+| `SESSION_COOKIE_SECURE` | `true` only behind HTTPS | unset/false for HTTP IP access. **Never set `true` on plain `http://` IP deploys** — cookies won't stick on phones and onboarding will reset. |
+| `SECRET_KEY` | Flask sessions / cookies | Auto-generated into `~/meal-data/.env` on first boot if missing — keep the volume so it does not change on redeploy |
 | `FLASK_ENV` | Environment mode | production (Docker) |
 
 Put secrets in **`~/meal-data/.env`** (same folder as the DB). Pass them with `--env-file ~/meal-data/.env`, and/or rely on the app loading `/app/instance/.env` from the volume.
@@ -267,6 +268,14 @@ Push to GitHub → GitHub Actions auto-deploys
 ---
 
 ## Troubleshooting
+
+### Onboarding keeps showing after you already created a profile?
+Usually the guest session cookie was lost (common on phone PWAs, or when `SESSION_COOKIE_SECURE=true` on plain HTTP).
+
+1. Confirm `~/meal-data/.env` has a stable `SECRET_KEY` and is mounted via `-v ~/meal-data:/app/instance`.
+2. On HTTP IP access, set `SESSION_COOKIE_SECURE=false` (or omit it). Only use `true` behind real HTTPS.
+3. Create a free account (Sign up) so the toddler is tied to your login — that survives cookie clears and reinstalls.
+4. Redeploy this app version: `/home` restores guest id from localStorage before sending you to onboarding.
 
 ### App not loading?
 ```bash

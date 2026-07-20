@@ -37,8 +37,12 @@ def normalize_path(path):
 def _ensure_anon_session_id():
     """Match app.get_session_id without importing app (avoids circular imports)."""
     if 'anonymous_session_id' not in session:
-        import secrets
-        session['anonymous_session_id'] = secrets.token_hex(32)
+        from session_persist import GUEST_COOKIE_NAME, is_valid_guest_id, new_guest_id
+        cookie_id = request.cookies.get(GUEST_COOKIE_NAME)
+        if is_valid_guest_id(cookie_id):
+            session['anonymous_session_id'] = cookie_id
+        else:
+            session['anonymous_session_id'] = new_guest_id()
         session.permanent = True
         session.modified = True
     return session['anonymous_session_id']
