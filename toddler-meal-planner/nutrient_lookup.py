@@ -139,7 +139,7 @@ def _from_off_product(product: dict) -> Optional[Dict[str, Any]]:
     if calories is None and protein is None and carbs is None and fat is None:
         return None
 
-    return {
+    result = {
         "calories": calories or 0,
         "protein_g": protein or 0,
         "carbs_g": carbs or 0,
@@ -153,11 +153,17 @@ def _from_off_product(product: dict) -> Optional[Dict[str, Any]]:
         "vitamin_d_mcg": _num(nutriments, "vitamin-d_100g") or 0,
         "vitamin_b12_mcg": _num(nutriments, "vitamin-b12_100g") or 0,
         "folate_mcg": _num(nutriments, "folates_100g", "vitamin-b9_100g") or 0,
-        "omega3_mg": _num(nutriments, "omega-3-fat_100g", "omega-3-fatty-acids_100g") or 0,
-        "omega3_mg": 0,
+        "omega3_mg": _num(nutriments, "omega-3-fat_100g", "omega-3-fatty-acids_100g"),
         "matched_name": product.get("product_name") or product.get("generic_name"),
         "source": "openfoodfacts",
     }
+    # Open Food Facts stores omega-3 fat in grams/100g — convert to mg
+    raw_o3 = result["omega3_mg"]
+    if raw_o3 is None:
+        result["omega3_mg"] = 0
+    else:
+        result["omega3_mg"] = round(float(raw_o3) * 1000, 2) if float(raw_o3) < 20 else round(float(raw_o3), 2)
+    return result
 
 
 def lookup_open_food_facts(food_name: str, timeout: float = 8.0) -> Optional[Dict[str, Any]]:

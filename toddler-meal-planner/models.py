@@ -12,6 +12,52 @@ import bcrypt
 db = SQLAlchemy()
 
 
+# Typical total omega-3 (mg/100g) when a food has no stored value.
+# Used so meals logged before omega-3 tracking still contribute to daily totals.
+_OMEGA3_BY_CATEGORY = {
+    'grain': 15,
+    'dal': 30,
+    'vegetable': 12,
+    'fruit': 8,
+    'dairy': 25,
+    'protein': 80,
+    'snack': 25,
+    'beverage': 10,
+    'combo': 40,
+}
+
+
+def estimate_omega3_mg(food) -> float:
+    """
+    Estimate omega-3 mg per 100g from category and fat.
+
+    Prefer stored Food.omega3_mg via Food.effective_omega3_mg(); this is the
+    fallback for catalog foods that still have 0 after the column was added.
+    """
+    category = (getattr(food, 'category', None) or 'snack').lower()
+    base = float(_OMEGA3_BY_CATEGORY.get(category, 20))
+    fat = float(getattr(food, 'fat_g', 0) or 0)
+    name = (getattr(food, 'name', '') or '').lower()
+
+    # Name-based bumps for foods that are usually richer than their category
+    if any(k in name for k in ('fish', 'machli', 'salmon', 'rohu', 'pomfret')):
+        return max(base, 350.0)
+    if any(k in name for k in ('walnut', 'flax', 'almond', 'dry fruit', 'meva', 'peanut')):
+        return max(base, 400.0)
+    if 'ghee' in name or 'butter' in name:
+        return max(base, 80.0)
+    if any(k in name for k in ('breast milk', 'breastmilk', 'formula')):
+        return max(base, 40.0)
+    if any(k in name for k in ('egg', 'anda')):
+        return max(base, 50.0)
+    if any(k in name for k in ('milk', 'doodh', 'curd', 'dahi', 'paneer', 'cheese')):
+        return max(base, 25.0)
+
+    # ~1% of fat as omega-3 for typical cooked Indian meals (ALA from oils)
+    from_fat = fat * 10.0 if fat > 0 else 0.0
+    return round(max(base, from_fat), 1)
+
+
 class User(UserMixin, db.Model):
     """User model for authentication - optional for app usage"""
     __tablename__ = 'users'
@@ -359,7 +405,20 @@ class Food(db.Model):
             return self.serving_size_12_24
         else:
             return self.serving_size_24_36
-    
+
+    def effective_omega3_mg(self):
+        """
+        Omega-3 per 100g for nutrition math.
+
+        Prefer the stored value. When missing/zero (common for foods logged
+        before omega-3 tracking), fall back to a category/fat estimate so
+        existing meal logs still contribute to daily omega-3 totals.
+        """
+        stored = float(self.omega3_mg or 0)
+        if stored > 0:
+            return stored
+        return estimate_omega3_mg(self)
+
     def get_nutrients_for_serving(self, serving_grams):
         """Returns nutrients for a given serving size"""
         factor = serving_grams / 100.0
@@ -377,7 +436,7 @@ class Food(db.Model):
             'vitamin_d_mcg': self.vitamin_d_mcg * factor,
             'vitamin_b12_mcg': self.vitamin_b12_mcg * factor,
             'folate_mcg': self.folate_mcg * factor,
-            'omega3_mg': (self.omega3_mg or 0) * factor,
+            'omega3_mg': self.effective_omega3_mg() * factor,
         }
     
     def to_dict(self):
@@ -399,7 +458,7 @@ class Food(db.Model):
             'vitamin_d_mcg': self.vitamin_d_mcg,
             'vitamin_b12_mcg': self.vitamin_b12_mcg,
             'folate_mcg': self.folate_mcg,
-            'omega3_mg': self.omega3_mg or 0,
+            'omega3_mg': self.effective_omega3_mg(),
             'serving_size_6_12': self.serving_size_6_12,
             'serving_size_12_24': self.serving_size_12_24,
             'serving_size_24_36': self.serving_size_24_36,

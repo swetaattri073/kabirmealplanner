@@ -22,7 +22,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 3,
-        "omega3_mg": 0,
+        "omega3_mg": 12,
         "spice_level": 0,
         "texture": "soft",
         "allergens": [],
@@ -50,7 +50,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 20,
-        "omega3_mg": 0,
+        "omega3_mg": 20,
         "spice_level": 0,
         "texture": "soft",
         "allergens": ["gluten"],
@@ -103,7 +103,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 10,
-        "omega3_mg": 0,
+        "omega3_mg": 15,
         "spice_level": 0,
         "texture": "soft",
         "allergens": [],
@@ -156,7 +156,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 12,
-        "omega3_mg": 0,
+        "omega3_mg": 25,
         "spice_level": 1,
         "texture": "soft",
         "allergens": ["gluten"],
@@ -181,7 +181,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 10,
-        "omega3_mg": 0,
+        "omega3_mg": 20,
         "spice_level": 1,
         "texture": "soft",
         "allergens": [],
@@ -206,7 +206,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 25,
-        "omega3_mg": 0,
+        "omega3_mg": 35,
         "spice_level": 0,
         "texture": "mashed",
         "allergens": [],
@@ -308,7 +308,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 150,
-        "omega3_mg": 0,
+        "omega3_mg": 30,
         "spice_level": 1,
         "texture": "soft",
         "allergens": [],
@@ -333,7 +333,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 140,
-        "omega3_mg": 0,
+        "omega3_mg": 30,
         "spice_level": 1,
         "texture": "soft",
         "allergens": [],
@@ -358,7 +358,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 160,
-        "omega3_mg": 0,
+        "omega3_mg": 30,
         "spice_level": 1,
         "texture": "soft",
         "allergens": [],
@@ -560,7 +560,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 195,
-        "omega3_mg": 0,
+        "omega3_mg": 40,
         "spice_level": 0,
         "texture": "puree",
         "allergens": [],
@@ -862,7 +862,7 @@ INDIAN_FOODS = [
         "vitamin_d_mcg": 0,
         "vitamin_b12_mcg": 0,
         "folate_mcg": 20,
-        "omega3_mg": 0,
+        "omega3_mg": 10,
         "spice_level": 0,
         "texture": "soft",
         "allergens": [],
@@ -5057,26 +5057,36 @@ def _add_missing_foods(db_session, Food):
 
 
 def _sync_seeded_omega3(db_session, Food):
-    """Backfill omega3_mg on seeded foods from INDIAN_FOODS (idempotent)."""
+    """
+    Backfill omega3_mg so existing meal logs contribute to nutrition totals.
+
+    1) Apply explicit INDIAN_FOODS values to matching foods (any source).
+    2) For foods still at 0, persist a category/name estimate.
+    """
+    from models import estimate_omega3_mg
+
     by_name = {
         (f["name"] or "").strip().lower(): float(f.get("omega3_mg") or 0)
         for f in INDIAN_FOODS
     }
     updated = 0
-    for food in Food.query.filter(
-        (Food.nutrition_source == 'seeded') | (Food.nutrition_source.is_(None))
-    ).all():
+    for food in Food.query.all():
         key = (food.name or '').strip().lower()
-        if key not in by_name:
-            continue
-        target = by_name[key]
+        target = by_name.get(key)
+        if target is None or target <= 0:
+            target = estimate_omega3_mg(food)
         current = float(food.omega3_mg or 0)
-        if abs(current - target) > 0.01:
+        # Only write when missing/zero, or seed has a richer explicit value
+        seed_explicit = by_name.get(key, 0) > 0
+        if seed_explicit and abs(current - by_name[key]) > 0.01:
+            food.omega3_mg = by_name[key]
+            updated += 1
+        elif current <= 0 and target > 0:
             food.omega3_mg = target
             updated += 1
     if updated:
         db_session.commit()
-        print(f"Synced omega3_mg on {updated} seeded food(s).")
+        print(f"Synced omega3_mg on {updated} food(s) for existing meal nutrition.")
     return updated
 
 
