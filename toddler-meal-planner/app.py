@@ -32,6 +32,12 @@ from session_persist import (
     is_valid_guest_id,
     new_guest_id,
 )
+from toddler_refs import (
+    ToddlerRefConverter,
+    configure_toddler_refs,
+    encode_toddler_ref,
+    resolve_toddler_id,
+)
 
 from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe
 from admin_stats import build_admin_stats
@@ -99,6 +105,10 @@ app.config['REMEMBER_COOKIE_HTTPONLY'] = True
 app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
 app.config['REMEMBER_COOKIE_SECURE'] = app.config['SESSION_COOKIE_SECURE']
 app.config['REMEMBER_COOKIE_NAME'] = 'lb_remember'
+
+# Opaque toddler IDs in URLs (signed tokens, not sequential integers)
+configure_toddler_refs(app.config['SECRET_KEY'])
+app.url_map.converters['toddler_ref'] = ToddlerRefConverter
 
 # Database configuration - supports both SQLite and PostgreSQL.
 # SQLite defaults to instance/toddler_meals.db so Docker volume mounts at
@@ -358,6 +368,39 @@ def inject_globals():
 
 _MUTATING_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
 _AUDIT_PATH_PREFIXES = ('/api/', '/meal-plan/', '/nutrition/', '/log-meal', '/toddlers')
+
+
+@app.before_request
+def _redirect_numeric_toddler_urls():
+    """
+    Legacy bookmarks used /dashboard/1 etc. Redirect to the opaque form so the
+    address bar never keeps showing the raw profile number.
+    """
+    path = request.path or ''
+    m = _re.match(
+        r'^/('
+        r'dashboard|log-meal|weekly-plan|nutrition|preferences|recipes|'
+        r'api/dashboard|api/nutrition/daily|api/nutrition/breakdown|api/nutrition/weekly|'
+        r'api/nutrition/alerts|api/meal-plan/weekly|api/meal-plan/daily|'
+        r'api/audit-logs|api/adapt-meal|api/preferences|api/enhance|api/enhance/liked|'
+        r'api/explore-flavors|api/daily-tip|api/toddlers'
+        r')/(\d+)(/.*)?$',
+        path,
+    )
+    if not m:
+        return None
+    prefix, raw_id, rest = m.group(1), m.group(2), m.group(3) or ''
+    try:
+        tid = int(raw_id)
+    except ValueError:
+        return None
+    if Toddler.query.get(tid) is None:
+        return None
+    token = encode_toddler_ref(tid)
+    new_path = f'/{prefix}/{token}{rest}'
+    if request.query_string:
+        new_path = f'{new_path}?{request.query_string.decode()}'
+    return redirect(new_path, code=302)
 
 
 @app.before_request
@@ -683,7 +726,7 @@ def onboarding():
     return render_template('onboarding.html', allergens=COMMON_ALLERGENS)
 
 
-@app.route('/dashboard/<int:toddler_id>')
+@app.route('/dashboard/<toddler_ref:toddler_id>')
 def dashboard(toddler_id):
     """Main dashboard for a specific toddler"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -714,7 +757,7 @@ def _meal_log_components(meal):
     return components
 
 
-@app.route('/log-meal/<int:toddler_id>')
+@app.route('/log-meal/<toddler_ref:toddler_id>')
 def log_meal_page(toddler_id):
     """Page to log a meal — defaults to today's recommended plan"""
 
@@ -762,7 +805,7 @@ def log_meal_page(toddler_id):
     )
 
 
-@app.route('/weekly-plan/<int:toddler_id>')
+@app.route('/weekly-plan/<toddler_ref:toddler_id>')
 def weekly_plan_page(toddler_id):
     """Weekly meal plan page"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -773,7 +816,7 @@ def weekly_plan_page(toddler_id):
     return render_template('weekly_plan.html', toddler=toddler, toddlers=toddlers)
 
 
-@app.route('/nutrition/<int:toddler_id>')
+@app.route('/nutrition/<toddler_ref:toddler_id>')
 def nutrition_page(toddler_id):
     """Nutrition analysis page"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -786,7 +829,7 @@ def nutrition_page(toddler_id):
     return render_template('nutrition.html', toddler=toddler, toddlers=toddlers, rda=rda)
 
 
-@app.route('/preferences/<int:toddler_id>')
+@app.route('/preferences/<toddler_ref:toddler_id>')
 def preferences_page(toddler_id):
     """Food preferences page"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -797,7 +840,7 @@ def preferences_page(toddler_id):
     return render_template('preferences.html', toddler=toddler, toddlers=toddlers)
 
 
-@app.route('/recipes/<int:toddler_id>')
+@app.route('/recipes/<toddler_ref:toddler_id>')
 def recipes_page(toddler_id):
     """Recipe ideas — curated + one card per food in the database"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -888,7 +931,7 @@ def create_toddler():
     return jsonify(payload), 201
 
 
-@app.route('/api/toddlers/<int:toddler_id>', methods=['GET'])
+@app.route('/api/toddlers/<toddler_ref:toddler_id>', methods=['GET'])
 def get_toddler(toddler_id):
     """Get a specific toddler"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -897,7 +940,7 @@ def get_toddler(toddler_id):
     return jsonify(toddler.to_dict())
 
 
-@app.route('/api/toddlers/<int:toddler_id>', methods=['PUT'])
+@app.route('/api/toddlers/<toddler_ref:toddler_id>', methods=['PUT'])
 def update_toddler(toddler_id):
     """Update a toddler profile"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -933,7 +976,7 @@ def update_toddler(toddler_id):
     return jsonify(toddler.to_dict())
 
 
-@app.route('/api/toddlers/<int:toddler_id>/health', methods=['PUT'])
+@app.route('/api/toddlers/<toddler_ref:toddler_id>/health', methods=['PUT'])
 def update_toddler_health(toddler_id):
     """Update toddler's health information"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -966,7 +1009,7 @@ def update_toddler_health(toddler_id):
     })
 
 
-@app.route('/api/toddlers/<int:toddler_id>', methods=['DELETE'])
+@app.route('/api/toddlers/<toddler_ref:toddler_id>', methods=['DELETE'])
 def delete_toddler(toddler_id):
     """Delete a toddler profile"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1202,7 +1245,7 @@ def _normalize_portion_for_reaction(portion_eaten_percent, toddler_reaction):
 @app.route('/api/meal-logs', methods=['GET'])
 def get_meal_logs():
     """Get meal logs with optional filtering"""
-    toddler_id = request.args.get('toddler_id', type=int)
+    toddler_id = resolve_toddler_id(request.args.get('toddler_id'))
     date_str = request.args.get('date')
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
@@ -1243,10 +1286,11 @@ def create_meal_log():
     """
     data = request.json
     
-    if not data.get('toddler_id') or not data.get('meal_type'):
+    tid = resolve_toddler_id(data.get('toddler_id') or data.get('toddler_ref'))
+    if not tid or not data.get('meal_type'):
         return jsonify({'error': 'Toddler ID and meal type are required'}), 400
     
-    toddler = Toddler.query.get_or_404(data['toddler_id'])
+    toddler = Toddler.query.get_or_404(tid)
     if not owns_toddler(toddler):
         return jsonify({'error': 'Not authorized'}), 403
     
@@ -1344,7 +1388,7 @@ def create_meal_log():
         db.session,
         event_type='action',
         action_name='meal.logged',
-        path=f'/log-meal/{toddler.id}',
+        path=f'/log-meal/{encode_toddler_ref(toddler.id)}',
         toddler_id=toddler.id,
         meta={
             'meal_type': meal_type,
@@ -1594,7 +1638,7 @@ def update_meal_logs_batch():
 
 # --- Nutrition Analysis ---
 
-@app.route('/api/nutrition/daily/<int:toddler_id>', methods=['GET'])
+@app.route('/api/nutrition/daily/<toddler_ref:toddler_id>', methods=['GET'])
 def get_daily_nutrition(toddler_id):
     """Get daily nutrition status"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1614,7 +1658,7 @@ def get_daily_nutrition(toddler_id):
     })
 
 
-@app.route('/api/nutrition/breakdown/<int:toddler_id>', methods=['GET'])
+@app.route('/api/nutrition/breakdown/<toddler_ref:toddler_id>', methods=['GET'])
 def get_nutrition_breakdown(toddler_id):
     """Per-item / per-meal nutrient calculation breakdown for a day."""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1633,7 +1677,7 @@ def get_nutrition_breakdown(toddler_id):
     })
 
 
-@app.route('/api/nutrition/weekly/<int:toddler_id>', methods=['GET'])
+@app.route('/api/nutrition/weekly/<toddler_ref:toddler_id>', methods=['GET'])
 def get_weekly_nutrition(toddler_id):
     """Get weekly nutrition analysis"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1657,7 +1701,7 @@ def get_weekly_nutrition(toddler_id):
     })
 
 
-@app.route('/api/nutrition/alerts/<int:toddler_id>', methods=['GET'])
+@app.route('/api/nutrition/alerts/<toddler_ref:toddler_id>', methods=['GET'])
 def get_nutrition_alerts(toddler_id):
     """Get nutrition alerts and recommendations"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1687,7 +1731,7 @@ def get_rda(age_months):
 
 # --- Meal Planning ---
 
-@app.route('/api/meal-plan/weekly/<int:toddler_id>', methods=['GET'])
+@app.route('/api/meal-plan/weekly/<toddler_ref:toddler_id>', methods=['GET'])
 def get_weekly_plan(toddler_id):
     """Get or generate weekly meal plan"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1713,7 +1757,7 @@ def get_weekly_plan(toddler_id):
     })
 
 
-@app.route('/api/audit-logs/<int:toddler_id>', methods=['GET'])
+@app.route('/api/audit-logs/<toddler_ref:toddler_id>', methods=['GET'])
 def get_audit_logs(toddler_id):
     """List recent audit log entries for a toddler (plan changes + API mutations)."""
     Toddler.query.get_or_404(toddler_id)
@@ -1730,7 +1774,7 @@ def get_audit_logs(toddler_id):
     })
 
 
-@app.route('/api/meal-plan/daily/<int:toddler_id>', methods=['GET'])
+@app.route('/api/meal-plan/daily/<toddler_ref:toddler_id>', methods=['GET'])
 def get_daily_suggestions(toddler_id):
     """Get daily meal suggestions"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1767,7 +1811,7 @@ def update_plan_item(plan_id):
 
 # --- Adult Meal Adaptation ---
 
-@app.route('/api/adapt-meal/<int:toddler_id>', methods=['POST'])
+@app.route('/api/adapt-meal/<toddler_ref:toddler_id>', methods=['POST'])
 def adapt_meal(toddler_id):
     """
     Adapt an adult meal for toddler.
@@ -1910,7 +1954,7 @@ def _add_adult_meal_to_plan(toddler, food, meal_type, adult_meal_description, ad
 
 # --- Food Preferences ---
 
-@app.route('/api/preferences/<int:toddler_id>', methods=['GET'])
+@app.route('/api/preferences/<toddler_ref:toddler_id>', methods=['GET'])
 def get_preferences(toddler_id):
     """Get food preferences for a toddler"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -1963,7 +2007,7 @@ def get_preferences(toddler_id):
     })
 
 
-@app.route('/api/preferences/<int:toddler_id>/<int:food_id>', methods=['PUT'])
+@app.route('/api/preferences/<toddler_ref:toddler_id>/<int:food_id>', methods=['PUT'])
 def update_preference(toddler_id, food_id):
     """Manually update a food preference"""
     data = request.json
@@ -1989,7 +2033,7 @@ def update_preference(toddler_id, food_id):
 
 # --- Food Enhancement & Flavor Exploration ---
 
-@app.route('/api/enhance/<int:toddler_id>', methods=['GET'])
+@app.route('/api/enhance/<toddler_ref:toddler_id>', methods=['GET'])
 def get_food_enhancements(toddler_id):
     """Get enhancement suggestions for a specific food"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -2002,7 +2046,7 @@ def get_food_enhancements(toddler_id):
     return jsonify(suggestions)
 
 
-@app.route('/api/enhance/liked/<int:toddler_id>', methods=['GET'])
+@app.route('/api/enhance/liked/<toddler_ref:toddler_id>', methods=['GET'])
 def get_liked_food_enhancements(toddler_id):
     """Get enhancement suggestions for all liked foods"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -2031,7 +2075,7 @@ def get_liked_food_enhancements(toddler_id):
     })
 
 
-@app.route('/api/explore-flavors/<int:toddler_id>', methods=['GET'])
+@app.route('/api/explore-flavors/<toddler_ref:toddler_id>', methods=['GET'])
 def explore_flavors(toddler_id):
     """Get flavor exploration suggestions based on liked foods"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -2054,7 +2098,7 @@ def explore_flavors(toddler_id):
     })
 
 
-@app.route('/api/daily-tip/<int:toddler_id>', methods=['GET'])
+@app.route('/api/daily-tip/<toddler_ref:toddler_id>', methods=['GET'])
 def get_daily_tip(toddler_id):
     """Get a daily enhancement tip"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -2140,7 +2184,7 @@ def smart_meal_log():
     }
     """
     data = request.json
-    toddler_id = data.get('toddler_id')
+    toddler_id = resolve_toddler_id(data.get('toddler_id') or data.get('toddler_ref'))
     text = data.get('text', '')
     
     if not toddler_id or not text:
@@ -2299,7 +2343,7 @@ def recognize_food():
     caption = (data.get('caption') or data.get('text') or '').strip()
     predictions = data.get('predictions') or []
     meal_type = data.get('meal_type')
-    toddler_id = data.get('toddler_id')
+    toddler_id = resolve_toddler_id(data.get('toddler_id') or data.get('toddler_ref'))
 
     toddler = Toddler.query.get(toddler_id) if toddler_id else None
     age_months = toddler.age_months if toddler else 24
@@ -2469,7 +2513,7 @@ def _logging_stats_for_toddler(toddler_id, today=None):
     }
 
 
-@app.route('/api/dashboard/<int:toddler_id>', methods=['GET'])
+@app.route('/api/dashboard/<toddler_ref:toddler_id>', methods=['GET'])
 def get_dashboard_data(toddler_id):
     """Get all dashboard data in one call"""
     toddler = Toddler.query.get_or_404(toddler_id)
@@ -2734,7 +2778,7 @@ def api_chat():
         return _chat_access_denied_response()
 
     data = request.json or {}
-    toddler_id = data.get('toddler_id')
+    toddler_id = resolve_toddler_id(data.get('toddler_id') or data.get('toddler_ref'))
     messages = data.get('messages') or []
     summary = (data.get('summary') or '').strip()
     if not toddler_id:
@@ -2841,7 +2885,7 @@ def api_chat_summarize():
         return _chat_access_denied_response()
 
     data = request.json or {}
-    toddler_id = data.get('toddler_id')
+    toddler_id = resolve_toddler_id(data.get('toddler_id') or data.get('toddler_ref'))
     messages = data.get('messages') or []
     prior_summary = data.get('prior_summary') or data.get('summary') or ''
 
@@ -3206,11 +3250,7 @@ def api_analytics_collect():
     if str(path).startswith('/admin'):
         return jsonify({'ok': True, 'skipped': True})
 
-    toddler_id = data.get('toddler_id')
-    try:
-        toddler_id = int(toddler_id) if toddler_id not in (None, '', 'null') else None
-    except (TypeError, ValueError):
-        toddler_id = None
+    toddler_id = resolve_toddler_id(data.get('toddler_id') or data.get('toddler_ref'))
 
     # Soft rate limit: skip if this session sent >120 events in the last minute
     sid = get_session_id()

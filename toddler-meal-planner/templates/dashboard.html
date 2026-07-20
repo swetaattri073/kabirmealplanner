@@ -3,7 +3,7 @@
 {% block title %}Dashboard - {{ toddler.name }} | LittleBowl{% endblock %}
 
 {% block content %}
-<body data-page="dashboard" data-toddler-id="{{ toddler.id }}">
+<body data-page="dashboard" data-toddler-id="{{ toddler.ref }}">
     <div class="page-header">
         <h1>Good {{ 'Morning' if now().hour < 12 else 'Afternoon' if now().hour < 17 else 'Evening' }}, {{ toddler.name }}! 👋</h1>
         <p>{{ now().strftime('%A, %B %d, %Y') }} • Track meals and ensure balanced nutrition</p>
@@ -128,7 +128,7 @@
             <div class="card-header">
                 <h2>📊 Today's Nutrition</h2>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <button type="button" class="btn btn-primary btn-sm" onclick="openNutritionBreakdown({{ toddler.id }})">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openNutritionBreakdown({{ toddler.ref|tojson }})">
                         View Details
                     </button>
                     <a href="{{ url_for('nutrition_page', toddler_id=toddler.id) }}" class="btn btn-secondary btn-sm">
@@ -181,7 +181,7 @@
                 </div>
             </div>
             <div class="card-footer">
-                <a href="#" onclick="loadFlavorExploration({{ toddler.id }}); return false;" style="color: var(--primary); font-weight: 600;">
+                <a href="#" onclick="loadFlavorExploration({{ toddler.ref|tojson }}); return false;" style="color: var(--primary); font-weight: 600;">
                     🔍 Explore new flavors based on favorites →
                 </a>
             </div>
@@ -215,7 +215,7 @@
     <script>
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
-            loadDashboard({{ toddler.id }});
+            loadDashboard({{ toddler.ref|tojson }});
         });
         
         // Helper to get current time
@@ -379,8 +379,8 @@
     
     // Load on page load
     document.addEventListener('DOMContentLoaded', function() {
-        loadDailyTip({{ toddler.id }});
-        loadFlavorExploration({{ toddler.id }});
+        loadDailyTip({{ toddler.ref|tojson }});
+        loadFlavorExploration({{ toddler.ref|tojson }});
     });
 </script>
 {% endblock %}

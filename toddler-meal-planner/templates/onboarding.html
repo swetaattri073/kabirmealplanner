@@ -526,7 +526,7 @@
                 const data = await window.LittleBowlSession.restore();
                 const toddlers = (data && data.toddlers) || [];
                 if (toddlers.length) {
-                    window.location.replace('/dashboard/' + toddlers[0].id);
+                    window.location.replace('/dashboard/' + (toddlers[0].ref || toddlers[0].id));
                 }
             } catch (e) { /* stay on form */ }
         })();

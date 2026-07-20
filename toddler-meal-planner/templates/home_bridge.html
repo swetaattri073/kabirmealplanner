@@ -82,7 +82,7 @@
           const data = await window.LittleBowlSession.restore();
           const toddlers = (data && data.toddlers) || [];
           if (toddlers.length) {
-            const id = toddlers[0].id;
+            const id = toddlers[0].ref || toddlers[0].id;
             window.LittleBowlSession.rememberToddler(id);
             window.location.replace('/dashboard/' + id);
             return;

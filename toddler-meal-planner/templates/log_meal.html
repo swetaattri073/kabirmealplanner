@@ -118,7 +118,7 @@
                                    placeholder="E.g., refused dal first, then ate khichdi">
                         </div>
                         <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
-                            <button type="button" class="btn btn-primary" onclick="saveEditedMealLogs({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-primary" onclick="saveEditedMealLogs({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-save"></i> Save changes
                             </button>
                             <button type="button" class="btn btn-outline" onclick="hideEditLoggedMeal('{{ meal_type }}')">
@@ -141,7 +141,7 @@
                         </div>
                         
                         <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
-                            <button type="button" class="btn btn-primary" onclick="logPlannedMeal({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-primary" onclick="logPlannedMeal({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-check"></i> Save feedback
                             </button>
                             <button type="button" class="btn btn-outline" onclick="showAlternateForm('{{ meal_type }}', 'replace')">
@@ -190,7 +190,7 @@
                                 <textarea class="form-input form-textarea" id="alt-nlp-{{ meal_type }}" rows="2"
                                           placeholder="E.g., ate only roti and cucumber, refused dal"></textarea>
                             </div>
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="parseAltNlp({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="parseAltNlp({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-magic"></i> Find matching foods
                             </button>
                             <div class="food-list alt-food-list" id="alt-nlp-list-{{ meal_type }}" style="max-height:180px;margin-top:0.75rem;"></div>
@@ -220,7 +220,7 @@
                                 <input type="text" class="form-input" id="alt-photo-caption-{{ meal_type }}"
                                        placeholder="E.g., khichdi with curd">
                             </div>
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="recognizeAltPhoto({{ toddler.id }}, '{{ meal_type }}')">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="recognizeAltPhoto({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                                 <i class="fas fa-images"></i> Suggest foods from photo
                             </button>
                             <div class="food-list alt-food-list" id="alt-photo-list-{{ meal_type }}" style="max-height:180px;margin-top:0.75rem;"></div>
@@ -232,7 +232,7 @@
                         </p>
                         
                         <button type="button" class="btn btn-primary" style="margin-top:0.75rem;" id="alt-submit-{{ meal_type }}"
-                                onclick="logAlternateMeal({{ toddler.id }}, '{{ meal_type }}')">
+                                onclick="logAlternateMeal({{ toddler.ref|tojson }}, '{{ meal_type }}')">
                             <i class="fas fa-sync"></i> Log & update weekly plan
                         </button>
                     </div>
@@ -269,10 +269,10 @@
                 </select>
             </div>
             <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
-                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.id }}, false)">
+                <button class="btn btn-secondary" onclick="adaptAdultMeal({{ toddler.ref|tojson }}, false)">
                     <i class="fas fa-magic"></i> Show Adaptations
                 </button>
-                <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.id }}, true)">
+                <button class="btn btn-primary" onclick="adaptAdultMeal({{ toddler.ref|tojson }}, true)">
                     <i class="fas fa-plus-circle"></i> Adapt & Replace Today's Plan
                 </button>
             </div>
@@ -292,10 +292,10 @@
             <textarea id="natural-language-input" class="form-input form-textarea"
                       placeholder="E.g., He had banana and dahi for evening snack, loved the banana"></textarea>
             <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                <button class="btn btn-secondary" onclick="parseAndPreview({{ toddler.id }})" style="flex:1;">
+                <button class="btn btn-secondary" onclick="parseAndPreview({{ toddler.ref|tojson }})" style="flex:1;">
                     <i class="fas fa-magic"></i> Parse & Preview
                 </button>
-                <button class="btn btn-primary" onclick="quickLog({{ toddler.id }})" style="flex:1;">
+                <button class="btn btn-primary" onclick="quickLog({{ toddler.ref|tojson }})" style="flex:1;">
                     <i class="fas fa-bolt"></i> Quick Log
                 </button>
             </div>

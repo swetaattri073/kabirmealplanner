@@ -377,8 +377,8 @@ function renderMealSchedule(data) {
                     : `<div class="meal-food">${escapeHtml(pendingLabel)}</div>`}
                 </div>
                 ${isEaten 
-                    ? `<a href="/log-meal/${data.toddler.id}?meal=${mealType}&edit=1" class="meal-action log-btn" title="Edit meal">Edit</a>`
-                    : `<a href="/log-meal/${data.toddler.id}?meal=${mealType}" class="meal-action log-btn">Log</a>`
+                    ? `<a href="/log-meal/${data.toddler.ref || data.toddler.id}?meal=${mealType}&edit=1" class="meal-action log-btn" title="Edit meal">Edit</a>`
+                    : `<a href="/log-meal/${data.toddler.ref || data.toddler.id}?meal=${mealType}" class="meal-action log-btn">Log</a>`
                 }
             </div>
         `;
@@ -1265,9 +1265,9 @@ async function createToddler(event) {
 
         if (toddler.guest_id && window.LittleBowlSession) {
             window.LittleBowlSession.writeGuestId(toddler.guest_id);
-            window.LittleBowlSession.rememberToddler(toddler.id);
+            window.LittleBowlSession.rememberToddler(toddler.ref || toddler.id);
         } else if (window.LittleBowlSession) {
-            window.LittleBowlSession.rememberToddler(toddler.id);
+            window.LittleBowlSession.rememberToddler(toddler.ref || toddler.id);
             window.LittleBowlSession.syncFromStatus();
         }
         
@@ -1278,7 +1278,7 @@ async function createToddler(event) {
         showToast(message, 'success');
         
         // Navigate immediately — don't rely on delayed redirect on mobile
-        window.location.assign(`/dashboard/${toddler.id}`);
+        window.location.assign(`/dashboard/${toddler.ref || toddler.id}`);
     } catch (error) {
         console.error('Failed to create toddler:', error);
         if (submitBtn) {
