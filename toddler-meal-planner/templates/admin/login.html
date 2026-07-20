@@ -4,16 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#1a1f16">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="LB Admin">
-    <meta name="application-name" content="LittleBowl Admin">
-    <meta name="description" content="LittleBowl Admin — operator login">
     <title>Admin Sign In · LittleBowl Admin</title>
-    <link rel="manifest" href="{{ url_for('static', filename='manifest-admin.json') }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    {% with apple_title='LB Admin', theme_color='#1a1f16', apple_status_bar='black', manifest_file='manifest-admin.json' %}
+    {% include 'includes/pwa_head.html' %}
+    {% endwith %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

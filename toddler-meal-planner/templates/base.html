@@ -12,16 +12,13 @@
     
     <title>{% block title %}LittleBowl{% endblock %}</title>
     
-    <!-- PWA Manifest -->
-    {% block pwa_manifest %}
+    <!-- PWA manifest + iOS home-screen icon (Safari uses apple-touch-icon, not manifest) -->
+    {% block pwa_head %}
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('apple_touch_icon') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('apple_touch_icon') }}">
     {% endblock %}
-    
-    <!-- Favicon & App Icons -->
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
-    <link rel="apple-touch-icon" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     
     <!-- Stylesheets -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">

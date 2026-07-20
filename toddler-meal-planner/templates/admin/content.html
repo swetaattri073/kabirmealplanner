@@ -6,8 +6,10 @@
 {% block apple_app_title %}LB Admin{% endblock %}
 {% block application_name %}LittleBowl Admin{% endblock %}
 {% block meta_description %}LittleBowl Admin — recipes and catalog management.{% endblock %}
-{% block pwa_manifest %}
-<link rel="manifest" href="{{ url_for('static', filename='manifest-admin.json') }}">
+{% block pwa_head %}
+{% with apple_title='LB Admin', theme_color='#1a1f16', apple_status_bar='black', manifest_file='manifest-admin.json' %}
+{% include 'includes/pwa_head.html' %}
+{% endwith %}
 {% endblock %}
 {% block a2hs_script %}
 <script src="{{ url_for('static', filename='js/a2hs-admin-prompt.js') }}" defer></script>

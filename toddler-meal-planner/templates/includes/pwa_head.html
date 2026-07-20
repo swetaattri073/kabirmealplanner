@@ -1,0 +1,16 @@
+{# iOS home-screen icons + PWA meta.
+   iOS Safari ignores manifest icons — it uses apple-touch-icon from the page
+   (or fetches /apple-touch-icon.png at the site root). Include on every page
+   users might Add to Home Screen from. #}
+{% set _apple_title = apple_title|default('LittleBowl') %}
+{% set _theme = theme_color|default('#6b8f3c') %}
+{% set _manifest = manifest_file|default('manifest.json') %}
+<meta name="theme-color" content="{{ _theme }}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="{{ apple_status_bar|default('black-translucent') }}">
+<meta name="apple-mobile-web-app-title" content="{{ _apple_title }}">
+<meta name="application-name" content="{{ _apple_title }}">
+<link rel="manifest" href="{{ url_for('static', filename=_manifest) }}">
+<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('apple_touch_icon') }}">
+<link rel="apple-touch-icon" href="{{ url_for('apple_touch_icon') }}">

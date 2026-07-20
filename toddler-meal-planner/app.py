@@ -641,6 +641,22 @@ def index():
     return render_template('landing.html')
 
 
+@app.route('/apple-touch-icon.png')
+@app.route('/apple-touch-icon-precomposed.png')
+def apple_touch_icon():
+    """iOS Safari requests this at the site root for Add to Home Screen icons."""
+    from flask import send_from_directory
+    icons_dir = os.path.join(app.root_path, 'static', 'icons')
+    response = send_from_directory(
+        icons_dir,
+        'apple-touch-icon.png',
+        mimetype='image/png',
+    )
+    response.cache_control.max_age = 86400
+    response.cache_control.public = True
+    return response
+
+
 @app.route('/home')
 def home():
     """
