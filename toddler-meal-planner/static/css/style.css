@@ -636,6 +636,52 @@ button.nutrient-card-btn {
     color: var(--text-secondary);
 }
 
+.nutrient-include {
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px dashed var(--border-color);
+    text-align: left;
+}
+
+.nutrient-include-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    margin-bottom: 0.2rem;
+}
+
+.nutrient-include-foods {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+}
+
+.nutrient-include-tip {
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.alert-include-label {
+    margin: 0.65rem 0 0.35rem;
+    font-size: 0.85rem;
+}
+
+.alert-tips {
+    margin: 0.65rem 0 0;
+    padding-left: 1.15rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.alert-tips li {
+    margin-bottom: 0.25rem;
+}
+
 .milk-option-row {
     display: flex;
     flex-wrap: wrap;
