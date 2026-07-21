@@ -503,7 +503,7 @@ def _log_api_request(response):
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    """User registration page"""
+    """User registration — form lives at the bottom of the landing page."""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
     
@@ -528,7 +528,13 @@ def signup():
         if errors:
             for error in errors:
                 flash(error, 'error')
-            return render_template('auth/signup.html', email=email, name=name)
+            # Re-show landing with the register section open
+            return render_template(
+                'landing.html',
+                show_register=True,
+                signup_email=email,
+                signup_name=name,
+            ), 400
         
         # Create user
         user = User(email=email, name=name or None)
@@ -558,7 +564,8 @@ def signup():
         flash(msg, 'success')
         return redirect(url_for('home'))
     
-    return render_template('auth/signup.html')
+    # GET /signup → landing register section
+    return redirect(url_for('index') + '#register')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -681,7 +688,12 @@ def restore_guest_session():
 @app.route('/')
 def index():
     """Landing page - marketing page for new visitors"""
-    return render_template('landing.html')
+    return render_template(
+        'landing.html',
+        show_register=request.args.get('register') == '1',
+        signup_email='',
+        signup_name='',
+    )
 
 
 @app.route('/apple-touch-icon.png')

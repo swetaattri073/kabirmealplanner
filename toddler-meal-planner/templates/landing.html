@@ -663,6 +663,238 @@
         .cta-note i {
             color: var(--success);
         }
+
+        /* ===== LANDING REGISTRATION ===== */
+        .register-section {
+            padding: 5rem 1.5rem 5.5rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f8f5ff 100%);
+            scroll-margin-top: 0.5rem;
+        }
+
+        .register-wrap {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .register-intro {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .register-intro .section-tag {
+            display: inline-block;
+            margin-bottom: 0.75rem;
+        }
+
+        .register-intro h2 {
+            font-size: 2rem;
+            font-weight: 900;
+            margin: 0 0 0.5rem;
+        }
+
+        .register-intro p {
+            color: var(--text-light);
+            margin: 0;
+            font-size: 1.05rem;
+        }
+
+        .register-card {
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 16px 48px rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(99, 102, 241, 0.12);
+            overflow: hidden;
+        }
+
+        .register-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            color: white;
+            text-align: center;
+            padding: 1.75rem 1.5rem 1.5rem;
+        }
+
+        .register-header h3 {
+            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 800;
+        }
+
+        .register-header p {
+            margin: 0.4rem 0 0;
+            opacity: 0.92;
+            font-size: 0.95rem;
+        }
+
+        .register-body {
+            padding: 1.75rem 1.5rem 1.5rem;
+        }
+
+        .register-features {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.6rem;
+            margin-bottom: 1.15rem;
+        }
+
+        .register-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: var(--text-light);
+        }
+
+        .register-feature i {
+            color: var(--success);
+        }
+
+        .register-form .form-group {
+            margin-bottom: 1rem;
+            text-align: left;
+        }
+
+        .register-form label {
+            display: block;
+            margin-bottom: 0.35rem;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .register-form input {
+            width: 100%;
+            padding: 0.85rem 1rem;
+            border: 2px solid rgba(99, 102, 241, 0.15);
+            border-radius: 12px;
+            font-size: 1rem;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        .register-form input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+        }
+
+        .register-form .input-hint {
+            font-size: 0.78rem;
+            color: var(--text-light);
+            margin: 0.3rem 0 0;
+        }
+
+        .register-password-strength {
+            height: 4px;
+            background: rgba(99, 102, 241, 0.12);
+            border-radius: 2px;
+            margin-top: 0.45rem;
+            overflow: hidden;
+        }
+
+        .register-password-bar {
+            height: 100%;
+            width: 0;
+            border-radius: 2px;
+            transition: width 0.25s ease, background 0.25s ease;
+        }
+
+        .register-password-bar.weak { width: 33%; background: #ef4444; }
+        .register-password-bar.medium { width: 66%; background: #f59e0b; }
+        .register-password-bar.strong { width: 100%; background: #10b981; }
+
+        .register-submit {
+            width: 100%;
+            margin-top: 0.35rem;
+            padding: 1rem;
+            border: none;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            color: white;
+            font-size: 1rem;
+            font-weight: 800;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+        }
+
+        .register-submit:hover {
+            filter: brightness(1.05);
+        }
+
+        .register-terms {
+            margin: 0.85rem 0 0;
+            font-size: 0.78rem;
+            color: var(--text-light);
+            text-align: center;
+        }
+
+        .register-footer {
+            margin-top: 1.15rem;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        .register-footer a {
+            color: var(--primary);
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .register-guest {
+            display: block;
+            margin-top: 1rem;
+            text-align: center;
+            padding: 0.75rem;
+            color: var(--text-light);
+            text-decoration: none;
+            border: 2px dashed rgba(99, 102, 241, 0.25);
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+
+        .register-guest:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .register-alert {
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        .register-alert.error {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+        }
+
+        .register-alert.success {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+        }
+
+        .register-transfer-note {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 1px solid #fcd34d;
+            border-radius: 10px;
+            padding: 0.75rem 0.9rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: #92400e;
+            text-align: left;
+            display: flex;
+            gap: 0.6rem;
+            align-items: flex-start;
+        }
+
+        .register-transfer-note i {
+            margin-top: 0.15rem;
+            color: #d97706;
+        }
         
         /* ===== MOBILE FIXES (buttons / nav / spacing) ===== */
         @media (max-width: 768px) {
@@ -758,6 +990,22 @@
                 white-space: nowrap;
                 gap: 0.5rem;
             }
+
+            .register-section {
+                padding: 3rem 1rem 4rem;
+            }
+
+            .register-intro h2 {
+                font-size: 1.55rem;
+            }
+
+            .register-body {
+                padding: 1.35rem 1.15rem 1.25rem;
+            }
+
+            .register-features {
+                grid-template-columns: 1fr;
+            }
             
             .pain-points {
                 padding: 3.5rem 1rem;
@@ -833,7 +1081,7 @@
                 </a>
                 {% else %}
                 <a href="{{ url_for('login') }}" class="nav-link">Sign In</a>
-                <a href="{{ url_for('signup') }}" class="nav-cta">Get Started Free</a>
+                <a href="#register" class="nav-cta">Get Started Free</a>
                 {% endif %}
             </div>
         </nav>
@@ -855,7 +1103,7 @@
                         menu struggles. No more nutrition worries.
                     </p>
                     <div class="hero-cta-group">
-                        <a href="{{ url_for('onboarding') }}" class="hero-cta hero-cta-primary">
+                        <a href="#register" class="hero-cta hero-cta-primary">
                             <i class="fas fa-rocket"></i>
                             Start Free Now
                         </a>
@@ -1057,29 +1305,100 @@
         </div>
     </section>
     
-    <!-- FINAL CTA -->
-    <section class="final-cta">
-        <div class="cta-box animate-on-scroll">
-            <span class="cta-emoji">🎉</span>
-            <h2>Ready to End Mealtime Stress?</h2>
-            <p>
-                Join parents who've transformed their toddler's eating habits. 
-                It takes just 2 minutes to get started.
-            </p>
-            <a href="{{ url_for('onboarding') }}" class="cta-button">
-                <i class="fas fa-rocket"></i>
-                Create Free Meal Plan
-            </a>
-            <p class="cta-note">
-                <i class="fas fa-lock"></i> No signup required. Your data stays private.
-            </p>
+    <!-- REGISTER (end of landing) -->
+    <section class="register-section" id="register">
+        <div class="register-wrap animate-on-scroll">
+            <div class="register-intro">
+                <span class="section-tag">Get Started Free</span>
+                <h2>Create your account</h2>
+                <p>Save meal plans, track nutrition, and sync across devices.</p>
+            </div>
+
+            <div class="register-card">
+                <div class="register-header">
+                    <h3>Create Your Account</h3>
+                    <p>It takes about a minute</p>
+                </div>
+                <div class="register-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="register-alert {{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <div class="register-features">
+                        <div class="register-feature"><i class="fas fa-check-circle"></i> Cloud sync</div>
+                        <div class="register-feature"><i class="fas fa-check-circle"></i> Meal history</div>
+                        <div class="register-feature"><i class="fas fa-check-circle"></i> Smart plans</div>
+                        <div class="register-feature"><i class="fas fa-check-circle"></i> Multi-device</div>
+                    </div>
+
+                    <div class="register-transfer-note">
+                        <i class="fas fa-info-circle"></i>
+                        <p style="margin:0;">Any guest toddler profiles on this device will transfer to your account automatically.</p>
+                    </div>
+
+                    <form class="register-form" method="POST" action="{{ url_for('signup') }}">
+                        <input type="hidden" name="next" value="landing">
+                        <div class="form-group">
+                            <label for="landing-name">Your Name <span style="font-weight:400;color:var(--text-light);">(optional)</span></label>
+                            <input type="text" id="landing-name" name="name"
+                                   value="{{ signup_name or '' }}"
+                                   placeholder="What should we call you?"
+                                   autocomplete="name">
+                        </div>
+                        <div class="form-group">
+                            <label for="landing-email">Email Address</label>
+                            <input type="email" id="landing-email" name="email"
+                                   value="{{ signup_email or '' }}"
+                                   placeholder="you@example.com" required
+                                   autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="landing-password">Password</label>
+                            <input type="password" id="landing-password" name="password"
+                                   placeholder="Create a strong password" required
+                                   autocomplete="new-password"
+                                   oninput="checkLandingPasswordStrength(this.value)">
+                            <div class="register-password-strength">
+                                <div class="register-password-bar" id="landing-password-bar"></div>
+                            </div>
+                            <p class="input-hint">At least 8 characters</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="landing-confirm">Confirm Password</label>
+                            <input type="password" id="landing-confirm" name="confirm_password"
+                                   placeholder="Repeat your password" required
+                                   autocomplete="new-password">
+                        </div>
+                        <button type="submit" class="register-submit">
+                            <i class="fas fa-user-plus"></i> Create Account
+                        </button>
+                        <p class="register-terms">
+                            By signing up, you agree to our Terms of Service and Privacy Policy
+                        </p>
+                    </form>
+
+                    <div class="register-footer">
+                        Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+                    </div>
+
+                    <a href="{{ url_for('onboarding') }}" class="register-guest">
+                        <i class="fas fa-arrow-right"></i> Continue without an account
+                    </a>
+                </div>
+            </div>
         </div>
     </section>
     
     <footer>
         <p>
             Made with ❤️ for Indian families<br>
-            <a href="{{ url_for('onboarding') }}">Start Planning</a>
+            <a href="#register">Create account</a>
+            ·
+            <a href="{{ url_for('onboarding') }}">Start as guest</a>
         </p>
     </footer>
     
@@ -1133,6 +1452,30 @@
                 }
             });
         });
+
+        function checkLandingPasswordStrength(password) {
+            const bar = document.getElementById('landing-password-bar');
+            if (!bar) return;
+            bar.className = 'register-password-bar';
+            if (!password) return;
+            if (password.length < 8) {
+                bar.classList.add('weak');
+            } else if (password.length < 12 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+                bar.classList.add('medium');
+            } else {
+                bar.classList.add('strong');
+            }
+        }
+
+        // If redirected here after a failed signup, open the register section
+        if (window.location.hash === '#register' || {{ 'true' if show_register|default(false) else 'false' }}) {
+            const register = document.getElementById('register');
+            if (register) {
+                requestAnimationFrame(() => {
+                    register.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+        }
     </script>
     <script src="{{ url_for('static', filename='js/a2hs-prompt.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/analytics.js') }}" defer></script>
