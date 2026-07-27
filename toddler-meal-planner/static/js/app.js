@@ -105,6 +105,11 @@ async function loadDashboard(toddlerId) {
     try {
         const data = await apiCall(`/dashboard/${toddlerId}`);
         renderDashboard(data);
+        if (window.LittleBowlNotifications) {
+            LittleBowlNotifications.syncFromDashboard(data).catch((err) => {
+                console.warn('Notification sync failed', err);
+            });
+        }
     } catch (error) {
         console.error('Failed to load dashboard:', error);
     }
@@ -1017,6 +1022,17 @@ async function loadWeeklyNutrition(toddlerId) {
         
         const alerts = await apiCall(`/nutrition/alerts/${toddlerId}`);
         renderAlerts(alerts.alerts);
+
+        if (window.LittleBowlNotifications) {
+            LittleBowlNotifications.syncFromDashboard({
+                toddler: {
+                    ref: toddlerId,
+                    id: toddlerId,
+                    name: document.body.dataset.toddlerName || LittleBowlNotifications.loadPrefs().toddlerName,
+                },
+                alerts: alerts.alerts || [],
+            }).catch((err) => console.warn('Notification sync failed', err));
+        }
 
         if (window.location.hash === '#alerts') {
             requestAnimationFrame(() => {

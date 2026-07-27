@@ -2,6 +2,12 @@
   "appId": "com.littlebowl.app",
   "appName": "LittleBowl",
   "webDir": "www",
+  "server": {
+    "allowNavigation": [
+      "*"
+    ],
+    "cleartext": true
+  },
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 1500,
@@ -12,6 +18,11 @@
     "StatusBar": {
       "style": "DARK",
       "backgroundColor": "#6b8f3c"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_littlebowl",
+      "iconColor": "#6b8f3c",
+      "sound": "default"
     }
   },
   "android": {
