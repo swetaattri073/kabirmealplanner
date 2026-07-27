@@ -1,14 +1,12 @@
 {
-  "name": "scripts",
+  "name": "littlebowl-sandbox-scripts",
+  "private": true,
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Sandbox tests for LittleBowl notifications UI",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:notifications": "node test-notifications.js",
+    "sandbox:notify": "node sandbox-notify-ui.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "puppeteer-core": "^25.4.0"
   }

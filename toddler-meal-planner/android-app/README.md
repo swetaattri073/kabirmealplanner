@@ -53,16 +53,21 @@ That prefills the field; users can still override it on device.
 
 ## Notifications
 
-The Android app can remind you to **log meals** and surface **nutrition alerts**:
+Notifications are **on by default** (meal reminders + nutrition alerts).
 
-- Open **My Account → Notifications** (or visit `/profile#notifications`)
-- Enable meal reminders and/or nutrition alerts
-- Adjust reminder times (defaults: 8:00 breakfast … 19:00 dinner)
-- Allow notification permission when Android asks
+- Open **My Account → Notifications** to review times or send a test
+- Opening **Dashboard** requests permission on first visit and schedules reminders
+- If the system blocks permission, a banner points you to Settings
 
-Meal reminder taps open Log Meal for that slot. Nutrition alert taps open the Nutrition alerts section.
+Sandbox checks:
 
-Reminders are scheduled on-device (Capacitor Local Notifications). Alert notices are sent when the Dashboard or Nutrition page loads and finds a new warning/critical alert (at most once per day per alert).
+```bash
+# unit
+node scripts/test-notifications.js
+
+# UI (Flask must be running on :5000)
+cd scripts && npm install && BASE_URL=http://127.0.0.1:5000 npm run sandbox:notify
+```
 
 ## What this app includes
 
