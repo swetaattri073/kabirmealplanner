@@ -1,69 +1,55 @@
 # LittleBowl Android app
 
-Native Android shell for the LittleBowl Flask web app, built with
-[Capacitor](https://capacitorjs.com/). The app is a full-screen WebView that
-loads your **deployed** LittleBowl server (same UI, login, meal logs, nutrition).
+Native Android app for LittleBowl, built with
+[Capacitor](https://capacitorjs.com/).
+
+On first launch the app asks for your **LittleBowl server URL**, saves it, then
+opens the full web app (login, meal logs, nutrition, plans) inside a native
+WebView — same backend as your Docker/VPS deploy.
 
 ## Prerequisites
 
 - Node.js 18+
-- [Android Studio](https://developer.android.com/studio) (includes Android SDK + emulator)
-- A running LittleBowl server URL (HTTPS preferred; HTTP IP works for local testing)
+- [Android Studio](https://developer.android.com/studio) (SDK + emulator or USB device)
+- A running LittleBowl server (your VPS IP or HTTPS domain)
 
-## One-time setup
+## Quick start
 
 ```bash
 cd toddler-meal-planner/android-app
 npm install
-
-# Point the app at your live server (VPS / Render / etc.)
-npm run configure -- https://YOUR_DOMAIN_OR_IP
-
-# Sync config + plugins into the Android project
 npm run sync
+npm run open          # Android Studio → Run ▶
 ```
 
-Examples:
-
-```bash
-# Production domain
-npm run configure -- https://meals.example.com
-
-# Local Docker / VPS over HTTP (cleartext enabled)
-npm run configure -- http://192.168.1.20
-```
-
-## Build & run
-
-### Option A — Android Studio (recommended)
-
-```bash
-npm run open
-# or: npx cap open android
-```
-
-Then in Android Studio:
-
-1. Wait for Gradle sync
-2. Pick an emulator or USB device (enable Developer options + USB debugging)
-3. Click **Run** ▶
-
-### Option B — command line APK
+Or build an APK from the command line:
 
 ```bash
 npm run sync
 npm run build:debug
-```
-
-Debug APK path:
-
-`android/app/build/outputs/apk/debug/app-debug.apk`
-
-Install on a phone:
-
-```bash
+# → android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+### First launch on the phone
+
+1. Open **LittleBowl**
+2. Enter your server address, e.g. `http://203.0.113.10` or `https://meals.example.com`
+3. Tap **Open LittleBowl**
+
+To change the server later: clear app storage, or open the setup screen again by
+uninstalling/reinstalling, or (advanced) visit the setup asset with `?setup=1`
+after resetting.
+
+### Optional: bake a default URL into the APK
+
+```bash
+npm run configure -- https://YOUR_DOMAIN
+npm run sync
+npm run build:debug
+```
+
+That prefills the field; users can still override it on device.
 
 ## What this app includes
 
@@ -73,51 +59,46 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 | Launcher name | LittleBowl |
 | Permissions | Internet, camera (optional) for meal photos |
 | Splash / theme | Cream + green LittleBowl branding |
-| Backend | Your existing Flask API + templates |
-
-Meal logging, nutrition, plans, and auth all stay on the server — no second database.
+| Backend | Your existing Flask server |
 
 ## Updating after web changes
 
-Redeploy the Flask app as usual. The Android shell picks up UI/API changes on
-next launch (no APK rebuild needed for normal web updates).
+Redeploy the Flask app as usual. The Android app picks up UI/API changes on the
+next open — **no APK rebuild** needed for normal website updates.
 
-Rebuild the APK only when you change:
-
-- Server URL (`npm run configure` + `npm run sync`)
-- Capacitor plugins / native permissions
-- App icons, package id, or version
+Rebuild the APK only when you change icons, permissions, package id, or the
+baked default URL.
 
 Bump version in `android/app/build.gradle`:
 
 ```gradle
 versionCode 2
-versionName "1.1"
+versionName "1.1.0"
 ```
 
 ## Play Store (release)
 
 1. Create a keystore and configure signing in Android Studio
-2. `npm run build:release` (or Build → Generate Signed Bundle / APK)
-3. Upload the AAB/APK to Google Play Console
+2. Build → Generate Signed Bundle / APK (or `npm run build:release`)
+3. Upload to Google Play Console
 
-Use HTTPS for production so cookies / sessions work reliably on Android.
+Prefer **HTTPS** in production for reliable cookies/sessions.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| Splash / “set your server URL” page | Run `npm run configure -- https://…` then `npm run sync` |
-| Blank / ERR_CLEARTEXT | For HTTP hosts, cleartext is already enabled; confirm the phone can reach the IP |
-| Camera upload fails | Grant camera / photos permission when prompted |
-| Login cookie issues | Prefer HTTPS; avoid mixing `http://IP` and a domain |
+| Can’t reach server | Phone and server must be on reachable network; try the same URL in Chrome |
+| Cleartext / HTTP blocked | HTTP is allowed in this app; confirm the IP and port |
+| Camera upload fails | Grant camera / photos when prompted |
+| Want to change server | Clear app data, or reinstall, then enter the new URL |
 
 ## Project layout
 
 ```
 android-app/
-  capacitor.config.json   # app id + server.url
+  www/                 # first-launch setup + redirect
+  android/             # Android Studio project
   scripts/configure-server.js
-  www/                    # offline fallback page
-  android/                # Android Studio project
+  capacitor.config.json
 ```
