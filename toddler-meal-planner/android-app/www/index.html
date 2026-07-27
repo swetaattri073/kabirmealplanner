@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#6b8f3c" />
+  <title>LittleBowl</title>
+  <style>
+    :root {
+      --bg: #fffaf0;
+      --green: #6b8f3c;
+      --ink: #2c3a1f;
+      --muted: #6b7a5a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Nunito", "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(ellipse at top, #f3f7e8 0%, var(--bg) 55%, #f5efe0 100%);
+      color: var(--ink);
+    }
+    main {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 2rem 1.25rem;
+      text-align: center;
+    }
+    .mark {
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 1rem;
+      border-radius: 24px;
+      background: linear-gradient(145deg, #6b8f3c, #8fb85a);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 12px 28px rgba(107, 143, 60, 0.28);
+      font-size: 2.5rem;
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.85rem;
+      letter-spacing: -0.02em;
+    }
+    p {
+      margin: 0 auto 1.25rem;
+      max-width: 28rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    code {
+      display: inline-block;
+      margin-top: 0.35rem;
+      padding: 0.2rem 0.45rem;
+      border-radius: 6px;
+      background: rgba(107, 143, 60, 0.12);
+      color: var(--green);
+      font-size: 0.85rem;
+      word-break: break-all;
+    }
+    .hint {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div>
+      <div class="mark" aria-hidden="true">🥗</div>
+      <h1>LittleBowl</h1>
+      <p>
+        This Android shell loads your live LittleBowl server.
+        If you still see this page, set your server URL and sync again.
+      </p>
+      <p class="hint">
+        From <code>toddler-meal-planner/android-app</code> run:
+        <br />
+        <code>npm run configure -- https://your-domain</code>
+        <br />
+        then <code>npm run sync</code>
+      </p>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "appId": "com.littlebowl.app",
+  "appName": "LittleBowl",
+  "webDir": "www",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "launchAutoHide": true,
+      "backgroundColor": "#fffaf0",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#6b8f3c"
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#fffaf0"
+  }
+}

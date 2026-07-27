@@ -13,6 +13,8 @@
 | AWS App Runner | ⭐⭐ Medium | $5-15/mo | 20 min |
 | AWS EC2 | ⭐⭐⭐ Advanced | $0-10/mo | 30 min |
 
+After the web app is live, build the **Android APK** from [`android-app/`](android-app/) (`npm run configure -- https://YOUR_DOMAIN` → Android Studio). See [`android-app/README.md`](android-app/README.md).
+
 ---
 
 ## Option 1: Render.com (Recommended for Beginners)

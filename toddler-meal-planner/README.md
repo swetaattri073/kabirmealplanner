@@ -119,6 +119,24 @@ More hosts (Render, App Runner, Fly): see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ---
 
+## Android app
+
+LittleBowl ships with a Capacitor Android shell under [`android-app/`](android-app/). It wraps your deployed web app in a native installable APK (home-screen icon, camera permission for meal photos).
+
+```bash
+cd android-app
+npm install
+npm run configure -- https://YOUR_SERVER   # or http://YOUR_VPS_IP
+npm run sync
+npm run open                               # opens Android Studio
+```
+
+Full build / Play Store steps: [`android-app/README.md`](android-app/README.md).
+
+Android users can also **Add to Home Screen** from Chrome (existing PWA). The native APK is better when you want a Play Store listing or offline-looking launcher without relying on the browser prompt.
+
+---
+
 ## Environment variables
 
 Put these in **`~/meal-data/.env`** in production (or `toddler-meal-planner/.env` locally).

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">LittleBowl</string>
+    <string name="title_activity_main">LittleBowl</string>
+    <string name="package_name">com.littlebowl.app</string>
+    <string name="custom_url_scheme">com.littlebowl.app</string>
+</resources>
