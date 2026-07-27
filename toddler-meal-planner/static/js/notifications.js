@@ -1,12 +1,13 @@
 /**
  * LittleBowl notifications — meal log reminders + nutrition alerts.
  *
- * Uses Capacitor Local Notifications inside the Android app, with a
- * Web Notification API fallback for installed PWAs / desktop Chrome.
+ * Defaults: notifications ON (meal reminders + nutrition alerts).
+ * Android: Capacitor Local Notifications. Web/PWA: Notification API fallback.
  */
 (function (global) {
-  const PREF_KEY = 'littlebowl_notify_prefs_v1';
+  const PREF_KEY = 'littlebowl_notify_prefs_v2';
   const ALERT_SEEN_KEY = 'littlebowl_alert_notified_v1';
+  const BOOTSTRAP_KEY = 'littlebowl_notify_bootstrapped_v2';
 
   const DEFAULT_TIMES = {
     breakfast: '08:00',
@@ -24,7 +25,6 @@
     dinner: 'Dinner',
   };
 
-  // Stable notification ids (Android requires int ids)
   const MEAL_ID_BASE = 1100;
   const MEAL_ORDER = [
     'breakfast',
@@ -46,10 +46,34 @@
     };
   }
 
+  function migrateLegacyPrefs() {
+    try {
+      if (localStorage.getItem(PREF_KEY)) return;
+      const legacy = localStorage.getItem('littlebowl_notify_prefs_v1');
+      if (!legacy) return;
+      const parsed = JSON.parse(legacy);
+      // Preserve explicit user choices; if they never set anything useful, keep defaults ON
+      const merged = {
+        ...defaultPrefs(),
+        ...parsed,
+        times: { ...DEFAULT_TIMES, ...(parsed.times || {}) },
+      };
+      if (parsed.enabled == null) merged.enabled = true;
+      if (parsed.mealReminders == null) merged.mealReminders = true;
+      if (parsed.nutritionAlerts == null) merged.nutritionAlerts = true;
+      localStorage.setItem(PREF_KEY, JSON.stringify(merged));
+    } catch (e) { /* ignore */ }
+  }
+
   function loadPrefs() {
+    migrateLegacyPrefs();
     try {
       const raw = localStorage.getItem(PREF_KEY);
-      if (!raw) return defaultPrefs();
+      if (!raw) {
+        const defaults = defaultPrefs();
+        localStorage.setItem(PREF_KEY, JSON.stringify(defaults));
+        return defaults;
+      }
       const parsed = JSON.parse(raw);
       return {
         ...defaultPrefs(),
@@ -100,6 +124,20 @@
     return ALERT_ID_BASE + (Math.abs(h) % 700);
   }
 
+  async function checkPermissionState() {
+    const LN = getLocalNotifications();
+    if (LN) {
+      try {
+        const status = await LN.checkPermissions();
+        return status.display || 'prompt';
+      } catch (e) {
+        return 'prompt';
+      }
+    }
+    if (!('Notification' in global)) return 'unsupported';
+    return Notification.permission; // granted | denied | default
+  }
+
   async function ensurePermissions() {
     const LN = getLocalNotifications();
     if (LN) {
@@ -127,12 +165,36 @@
     }
   }
 
+  async function ensureChannels(LN) {
+    if (!LN || typeof LN.createChannel !== 'function') return;
+    try {
+      await LN.createChannel({
+        id: 'meal-reminders',
+        name: 'Meal reminders',
+        description: 'Reminders to log breakfast, lunch, dinner, and snacks',
+        importance: 4,
+        visibility: 1,
+        sound: 'default',
+      });
+    } catch (e) { /* already exists */ }
+    try {
+      await LN.createChannel({
+        id: 'nutrition-alerts',
+        name: 'Nutrition alerts',
+        description: 'Warnings when key nutrients look low',
+        importance: 5,
+        visibility: 1,
+        sound: 'default',
+      });
+    } catch (e) { /* already exists */ }
+  }
+
   async function scheduleMealReminders(prefs) {
     await cancelMealReminders();
-    if (!prefs.enabled || !prefs.mealReminders) return;
+    if (!prefs.enabled || !prefs.mealReminders) return { scheduled: 0 };
 
     const granted = await ensurePermissions();
-    if (!granted) return;
+    if (!granted) return { scheduled: 0, permissionDenied: true };
 
     const LN = getLocalNotifications();
     const name = prefs.toddlerName || 'your toddler';
@@ -161,26 +223,16 @@
       });
     });
 
-    if (!notifications.length) return;
+    if (!notifications.length) return { scheduled: 0 };
 
     if (LN) {
-      try {
-        await LN.createChannel?.({
-          id: 'meal-reminders',
-          name: 'Meal reminders',
-          description: 'Reminders to log breakfast, lunch, dinner, and snacks',
-          importance: 4,
-          visibility: 1,
-          sound: 'default',
-        });
-      } catch (e) { /* older plugin */ }
+      await ensureChannels(LN);
       await LN.schedule({ notifications });
-      return;
+      return { scheduled: notifications.length };
     }
 
-    // Web fallback: cannot schedule exact daily alarms without a service worker push
-    // backend. Show a one-shot toast-like notification only if a meal is due soon.
     maybeWebMealNudge(prefs);
+    return { scheduled: 0, webFallback: true };
   }
 
   function minutesNow() {
@@ -195,7 +247,6 @@
       const t = parseTime(prefs.times[mealType]);
       if (!t) return;
       const target = t.hour * 60 + t.minute;
-      // Within 5 minutes after the scheduled time, once per day per meal
       if (now < target || now > target + 5) return;
       const dayKey = `web_nudge_${mealType}_${new Date().toISOString().slice(0, 10)}`;
       if (sessionStorage.getItem(dayKey)) return;
@@ -232,16 +283,16 @@
   }
 
   async function notifyNutritionAlerts(alerts, prefs) {
-    if (!prefs.enabled || !prefs.nutritionAlerts) return;
-    if (!alerts || !alerts.length) return;
+    if (!prefs.enabled || !prefs.nutritionAlerts) return { sent: 0 };
+    if (!alerts || !alerts.length) return { sent: 0 };
 
     const actionable = alerts.filter((a) =>
       a && (a.severity === 'critical' || a.severity === 'warning')
     );
-    if (!actionable.length) return;
+    if (!actionable.length) return { sent: 0 };
 
     const granted = await ensurePermissions();
-    if (!granted) return;
+    if (!granted) return { sent: 0, permissionDenied: true };
 
     const seen = loadAlertSeen();
     const now = Date.now();
@@ -279,6 +330,7 @@
       } else if ('Notification' in global) {
         try {
           new Notification(title, { body, tag: `alert-${id}` });
+          toSchedule.push({ id });
         } catch (e) { /* ignore */ }
       }
     }
@@ -286,18 +338,10 @@
     saveAlertSeen(seen);
 
     if (LN && toSchedule.length) {
-      try {
-        await LN.createChannel?.({
-          id: 'nutrition-alerts',
-          name: 'Nutrition alerts',
-          description: 'Warnings when key nutrients look low',
-          importance: 5,
-          visibility: 1,
-          sound: 'default',
-        });
-      } catch (e) { /* ignore */ }
+      await ensureChannels(LN);
       await LN.schedule({ notifications: toSchedule });
     }
+    return { sent: toSchedule.length };
   }
 
   function handleNotificationAction(notification) {
@@ -323,20 +367,68 @@
       LN.addListener('localNotificationActionPerformed', (event) => {
         handleNotificationAction(event.notification || {});
       });
-      LN.addListener('localNotificationReceived', () => {
-        /* delivered while app in foreground — no-op */
-      });
+      LN.addListener('localNotificationReceived', () => {});
     } catch (e) {
       console.warn('notification listeners', e);
     }
   }
 
+  function updateDashboardBanner(state) {
+    const host = document.getElementById('notify-dashboard-banner');
+    if (!host) return;
+    const prefs = loadPrefs();
+    if (!prefs.enabled) {
+      host.hidden = true;
+      return;
+    }
+    if (state === 'granted') {
+      host.hidden = true;
+      return;
+    }
+    if (state === 'denied') {
+      host.hidden = false;
+      host.className = 'notify-banner notify-banner-warn';
+      host.innerHTML = `
+        <div class="notify-banner-icon"><i class="fas fa-bell-slash"></i></div>
+        <div class="notify-banner-copy">
+          <strong>Notifications are blocked</strong>
+          <p>Enable them in system settings so meal reminders and nutrition alerts can reach you.</p>
+        </div>
+        <a class="btn btn-sm btn-outline" href="/profile#notifications">Settings</a>
+      `;
+      return;
+    }
+    // prompt / default
+    host.hidden = false;
+    host.className = 'notify-banner notify-banner-info';
+    host.innerHTML = `
+      <div class="notify-banner-icon"><i class="fas fa-bell"></i></div>
+      <div class="notify-banner-copy">
+        <strong>Meal reminders are on</strong>
+        <p>Allow notifications so we can nudge you to log meals and flag nutrition gaps.</p>
+      </div>
+      <button type="button" class="btn btn-sm btn-primary" id="notify-banner-allow">Allow</button>
+    `;
+    host.querySelector('#notify-banner-allow')?.addEventListener('click', async () => {
+      const ok = await ensurePermissions();
+      updateDashboardBanner(ok ? 'granted' : await checkPermissionState());
+      if (ok) {
+        await scheduleMealReminders(loadPrefs());
+        if (typeof showToast === 'function') showToast('Notifications enabled', 'success');
+      }
+    });
+  }
+
   /**
    * Sync reminders + alerts from dashboard (or nutrition) payload.
+   * Notifications are ON by default — first visit requests permission.
    */
   async function syncFromDashboard(data) {
     if (!data || !data.toddler) return;
     const prefs = loadPrefs();
+    prefs.enabled = prefs.enabled !== false;
+    prefs.mealReminders = prefs.mealReminders !== false;
+    prefs.nutritionAlerts = prefs.nutritionAlerts !== false;
     prefs.toddlerRef = data.toddler.ref || data.toddler.id;
     prefs.toddlerName = data.toddler.name || prefs.toddlerName;
     savePrefs(prefs);
@@ -345,23 +437,31 @@
 
     if (!prefs.enabled) {
       await cancelMealReminders();
+      updateDashboardBanner('denied');
       return;
     }
 
-    // Prefer schedule meal list from toddler profile when present
     const schedule = data.toddler.meal_schedule || data.schedule || {};
     const slots = []
       .concat(schedule.meals || [])
       .concat(schedule.snacks || []);
-    // Keep default times for known slots; leave prefs.times as configured
     if (slots.length) {
-      // Ensure times exist for each scheduled slot
       slots.forEach((slot) => {
         if (!prefs.times[slot] && DEFAULT_TIMES[slot]) {
           prefs.times[slot] = DEFAULT_TIMES[slot];
         }
       });
       savePrefs(prefs);
+    }
+
+    const perm = await checkPermissionState();
+    updateDashboardBanner(perm === 'granted' ? 'granted' : perm === 'denied' ? 'denied' : 'prompt');
+
+    // First successful dashboard visit: actively request permission (defaults are ON)
+    if (!localStorage.getItem(BOOTSTRAP_KEY) && perm !== 'denied') {
+      localStorage.setItem(BOOTSTRAP_KEY, '1');
+      await ensurePermissions();
+      updateDashboardBanner(await checkPermissionState());
     }
 
     await scheduleMealReminders(prefs);
@@ -408,46 +508,122 @@
       return { ok: false, error: 'Allow notifications in system settings to enable reminders.', prefs };
     }
     bindNativeListeners();
-    await scheduleMealReminders(prefs);
-    return { ok: true, prefs };
+    const result = await scheduleMealReminders(prefs);
+    return { ok: true, prefs, scheduled: result.scheduled };
   }
 
-  function renderSettings(container) {
+  async function sendTestNotification() {
+    const prefs = loadPrefs();
+    const granted = await ensurePermissions();
+    if (!granted) {
+      return { ok: false, error: 'Notification permission is required for a test.' };
+    }
+    const LN = getLocalNotifications();
+    const title = 'LittleBowl test';
+    const body = prefs.mealReminders
+      ? 'Reminders are working. You will get nudges at meal times.'
+      : 'Notifications are working.';
+    if (LN) {
+      await ensureChannels(LN);
+      await LN.schedule({
+        notifications: [{
+          id: 9999,
+          title,
+          body,
+          schedule: { at: new Date(Date.now() + 1000) },
+          channelId: 'meal-reminders',
+          smallIcon: 'ic_stat_littlebowl',
+          extra: { type: 'test', toddlerRef: prefs.toddlerRef },
+        }],
+      });
+      return { ok: true };
+    }
+    if ('Notification' in global) {
+      new Notification(title, { body, tag: 'littlebowl-test' });
+      return { ok: true };
+    }
+    return { ok: false, error: 'Notifications are not supported in this browser.' };
+  }
+
+  function permissionBadgeHtml(state) {
+    if (state === 'granted') {
+      return '<span class="notify-badge notify-badge-on"><i class="fas fa-check-circle"></i> Allowed</span>';
+    }
+    if (state === 'denied') {
+      return '<span class="notify-badge notify-badge-off"><i class="fas fa-times-circle"></i> Blocked</span>';
+    }
+    if (state === 'unsupported') {
+      return '<span class="notify-badge notify-badge-off">Not supported</span>';
+    }
+    return '<span class="notify-badge notify-badge-pending"><i class="fas fa-clock"></i> Permission needed</span>';
+  }
+
+  async function renderSettings(container) {
     if (!container) return;
     const prefs = loadPrefs();
     const native = isNative();
+    const perm = await checkPermissionState();
 
     container.innerHTML = `
       <div class="notify-settings">
-        <p class="notify-lead">
-          ${native
-            ? 'Get Android reminders to log meals and warnings when nutrition looks low.'
-            : 'Enable browser notifications for meal reminders (while LittleBowl is open) and nutrition alerts.'}
-        </p>
-        <label class="notify-toggle">
-          <input type="checkbox" id="notify-enabled" ${prefs.enabled ? 'checked' : ''}>
-          <span>Enable notifications</span>
-        </label>
-        <label class="notify-toggle">
-          <input type="checkbox" id="notify-meals" ${prefs.mealReminders ? 'checked' : ''} ${prefs.enabled ? '' : 'disabled'}>
-          <span>Meal log reminders</span>
-        </label>
-        <label class="notify-toggle">
-          <input type="checkbox" id="notify-alerts" ${prefs.nutritionAlerts ? 'checked' : ''} ${prefs.enabled ? '' : 'disabled'}>
-          <span>Nutrition alerts</span>
-        </label>
-        <div class="notify-times" id="notify-times" style="${prefs.enabled && prefs.mealReminders ? '' : 'opacity:0.55;pointer-events:none;'}">
-          <h4>Reminder times</h4>
-          ${MEAL_ORDER.map((meal) => `
-            <label class="notify-time-row">
-              <span>${MEAL_LABELS[meal]}</span>
-              <input type="time" data-meal="${meal}" value="${prefs.times[meal] || DEFAULT_TIMES[meal]}">
-            </label>
-          `).join('')}
+        <div class="notify-hero">
+          <div class="notify-hero-text">
+            <p class="notify-lead">
+              ${native
+                ? 'Meal log reminders and nutrition alerts are <strong>on by default</strong> for this Android app.'
+                : 'Meal log reminders and nutrition alerts are <strong>on by default</strong>. Allow browser notifications to receive them.'}
+            </p>
+          </div>
+          ${permissionBadgeHtml(perm)}
         </div>
-        <button type="button" class="btn btn-primary" id="notify-save">
-          <i class="fas fa-bell"></i> Save notification settings
-        </button>
+
+        <div class="notify-toggles">
+          <label class="notify-toggle notify-toggle-card">
+            <input type="checkbox" id="notify-enabled" ${prefs.enabled ? 'checked' : ''}>
+            <span class="notify-toggle-copy">
+              <strong>Notifications</strong>
+              <small>Master switch for all LittleBowl alerts</small>
+            </span>
+          </label>
+          <label class="notify-toggle notify-toggle-card">
+            <input type="checkbox" id="notify-meals" ${prefs.mealReminders ? 'checked' : ''} ${prefs.enabled ? '' : 'disabled'}>
+            <span class="notify-toggle-copy">
+              <strong>Meal log reminders</strong>
+              <small>Daily nudges at breakfast, snacks, lunch, and dinner</small>
+            </span>
+          </label>
+          <label class="notify-toggle notify-toggle-card">
+            <input type="checkbox" id="notify-alerts" ${prefs.nutritionAlerts ? 'checked' : ''} ${prefs.enabled ? '' : 'disabled'}>
+            <span class="notify-toggle-copy">
+              <strong>Nutrition alerts</strong>
+              <small>Warn when iron, protein, or other nutrients look low</small>
+            </span>
+          </label>
+        </div>
+
+        <div class="notify-times" id="notify-times">
+          <div class="notify-times-head">
+            <h4>Reminder times</h4>
+            <span class="notify-times-hint">Local device time</span>
+          </div>
+          <div class="notify-time-grid">
+            ${MEAL_ORDER.map((meal) => `
+              <label class="notify-time-row">
+                <span>${MEAL_LABELS[meal]}</span>
+                <input type="time" data-meal="${meal}" value="${prefs.times[meal] || DEFAULT_TIMES[meal]}">
+              </label>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="notify-actions">
+          <button type="button" class="btn btn-primary" id="notify-save">
+            <i class="fas fa-bell"></i> Save settings
+          </button>
+          <button type="button" class="btn btn-outline" id="notify-test">
+            <i class="fas fa-vial"></i> Send test
+          </button>
+        </div>
         <p class="notify-status" id="notify-status" hidden></p>
       </div>
     `;
@@ -462,15 +638,22 @@
       const on = enabledEl.checked;
       mealsEl.disabled = !on;
       alertsEl.disabled = !on;
-      timesWrap.style.opacity = on && mealsEl.checked ? '1' : '0.55';
-      timesWrap.style.pointerEvents = on && mealsEl.checked ? 'auto' : 'none';
+      const showTimes = on && mealsEl.checked;
+      timesWrap.classList.toggle('is-disabled', !showTimes);
     }
+    refreshDisabled();
     enabledEl.addEventListener('change', refreshDisabled);
     mealsEl.addEventListener('change', refreshDisabled);
 
-    container.querySelector('#notify-save').addEventListener('click', async () => {
+    function setStatus(msg, ok) {
       statusEl.hidden = false;
-      statusEl.textContent = 'Saving…';
+      statusEl.textContent = msg;
+      statusEl.classList.toggle('is-error', !ok);
+      statusEl.classList.toggle('is-ok', !!ok);
+    }
+
+    container.querySelector('#notify-save').addEventListener('click', async () => {
+      setStatus('Saving…', true);
       const times = {};
       container.querySelectorAll('input[type="time"][data-meal]').forEach((input) => {
         times[input.dataset.meal] = input.value;
@@ -486,36 +669,66 @@
         toddlerName,
       });
       if (result.ok) {
-        statusEl.textContent = 'Saved. Meal reminders are scheduled on this device.';
+        const n = result.scheduled || 0;
+        setStatus(
+          enabledEl.checked
+            ? (n ? `Saved. ${n} daily meal reminder(s) scheduled.` : 'Saved. Notifications stay on for this device.')
+            : 'Saved. Notifications are turned off.',
+          true
+        );
         if (typeof showToast === 'function') showToast('Notification settings saved', 'success');
+        // refresh badge
+        const badgeHost = container.querySelector('.notify-hero');
+        if (badgeHost) {
+          const old = badgeHost.querySelector('.notify-badge');
+          if (old) old.outerHTML = permissionBadgeHtml(await checkPermissionState());
+        }
       } else {
-        statusEl.textContent = result.error || 'Could not save settings.';
+        setStatus(result.error || 'Could not save settings.', false);
         if (typeof showToast === 'function') showToast(result.error || 'Permission needed', 'error');
+      }
+    });
+
+    container.querySelector('#notify-test').addEventListener('click', async () => {
+      setStatus('Sending test…', true);
+      const result = await sendTestNotification();
+      if (result.ok) {
+        setStatus('Test notification sent. Check your notification shade.', true);
+        if (typeof showToast === 'function') showToast('Test notification sent', 'success');
+      } else {
+        setStatus(result.error || 'Test failed.', false);
+        if (typeof showToast === 'function') showToast(result.error || 'Test failed', 'error');
       }
     });
   }
 
-  // Public API
   global.LittleBowlNotifications = {
     loadPrefs,
     savePrefs,
+    defaultPrefs,
     ensurePermissions,
+    checkPermissionState,
     syncFromDashboard,
     enableAndSchedule,
     disableAll,
     saveSettingsFromForm,
+    sendTestNotification,
     renderSettings,
+    parseTime,
+    mealId,
+    alertFingerprint,
     DEFAULT_TIMES,
     MEAL_LABELS,
     MEAL_ORDER,
   };
 
   document.addEventListener('DOMContentLoaded', () => {
+    // Persist ON-by-default prefs immediately
+    loadPrefs();
     bindNativeListeners();
     const mount = document.getElementById('notification-settings');
     if (mount) renderSettings(mount);
 
-    // Lightweight web nudge when prefs already enabled
     const prefs = loadPrefs();
     if (prefs.enabled && prefs.mealReminders && !isNative()) {
       maybeWebMealNudge(prefs);
