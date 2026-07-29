@@ -707,14 +707,25 @@ class MealPlanner:
         }
     
     def _get_nutritious_addins(self, toddler, nutrition_gaps, main, carb, side):
-        """Suggest nutritious add-ins based on gaps"""
+        """Suggest nutritious add-ins based on gaps and parent cooking habits."""
         add_ins = []
+        hide_veggies = bool(getattr(toddler, 'always_hides_veggies', lambda: False)())
+
+        hidden_veggie_pool = [
+            {'name': 'Spinach puree', 'add_to': 'dal, khichdi, or roti dough', 'benefit': 'Hidden veggies + iron', 'style': 'hidden_veggies'},
+            {'name': 'Carrot puree/grated', 'add_to': 'dal, raita, or paratha', 'benefit': 'Hidden veggies + vitamin A', 'style': 'hidden_veggies'},
+            {'name': 'Beetroot puree', 'add_to': 'roti dough or dal', 'benefit': 'Hidden veggies + iron', 'style': 'hidden_veggies'},
+            {'name': 'Zucchini/lauki puree', 'add_to': 'dal, khichdi, or idli batter', 'benefit': 'Hidden veggies + moisture', 'style': 'hidden_veggies'},
+            {'name': 'Pumpkin puree', 'add_to': 'khichdi, dal, or porridge', 'benefit': 'Hidden veggies + vitamin A', 'style': 'hidden_veggies'},
+            {'name': 'Cauliflower puree', 'add_to': 'roti dough or gravy', 'benefit': 'Hidden veggies', 'style': 'hidden_veggies'},
+            {'name': 'Methi leaves (finely chopped)', 'add_to': 'roti/paratha dough', 'benefit': 'Hidden greens + fiber', 'style': 'hidden_veggies'},
+        ]
         
         # Common nutritious add-ins
         addin_suggestions = {
             'iron_mg': [
                 {'name': 'Jaggery powder', 'add_to': 'dahi or roti', 'benefit': 'Boosts iron'},
-                {'name': 'Spinach puree', 'add_to': 'dal or roti dough', 'benefit': 'Iron rich'},
+                {'name': 'Spinach puree', 'add_to': 'dal or roti dough', 'benefit': 'Iron rich', 'style': 'hidden_veggies'},
                 {'name': 'Dates (chopped)', 'add_to': 'dahi', 'benefit': 'Iron & energy'}
             ],
             'calcium_mg': [
@@ -728,28 +739,51 @@ class MealPlanner:
                 {'name': 'Moong dal paste', 'add_to': 'roti dough', 'benefit': 'Protein boost'}
             ],
             'vitamin_a_mcg': [
-                {'name': 'Carrot (grated)', 'add_to': 'salad or raita', 'benefit': 'Vitamin A'},
+                {'name': 'Carrot (grated)', 'add_to': 'salad, raita, or dough', 'benefit': 'Vitamin A', 'style': 'hidden_veggies'},
                 {'name': 'Ghee (small amount)', 'add_to': 'roti or dal', 'benefit': 'Helps absorb vitamins'}
             ],
             'fiber_g': [
                 {'name': 'Cucumber/Tomato salad', 'add_to': 'serve alongside', 'benefit': 'Fiber & hydration'},
-                {'name': 'Methi leaves', 'add_to': 'roti dough', 'benefit': 'Fiber & iron'}
+                {'name': 'Methi leaves', 'add_to': 'roti dough', 'benefit': 'Fiber & iron', 'style': 'hidden_veggies'}
             ]
         }
+
+        # Parent habit: always sneak veggies into the meal
+        if hide_veggies:
+            pick = random.choice(hidden_veggie_pool)
+            # Prefer pairing with carb/main when available
+            if carb and 'dough' in pick['add_to']:
+                pick = dict(pick)
+                pick['add_to'] = f"{carb.name} dough / batter" if carb else pick['add_to']
+            elif main:
+                pick = dict(pick)
+                pick['add_to'] = f"{main.name} (blend in)"
+            add_ins.append(pick)
         
-        # Add suggestions for top 2 nutritional gaps
+        # Add suggestions for top nutritional gaps
         gaps_sorted = sorted(nutrition_gaps.items(), key=lambda x: x[1], reverse=True)[:2]
         
         for nutrient, gap in gaps_sorted:
             if nutrient in addin_suggestions and gap > 20:
-                suggestion = random.choice(addin_suggestions[nutrient])
-                add_ins.append(suggestion)
+                options = addin_suggestions[nutrient]
+                if hide_veggies:
+                    veggie_opts = [o for o in options if o.get('style') == 'hidden_veggies']
+                    suggestion = random.choice(veggie_opts or options)
+                else:
+                    suggestion = random.choice(options)
+                # Avoid duplicate names
+                if not any(a.get('name') == suggestion.get('name') for a in add_ins):
+                    add_ins.append(suggestion)
         
         # Always suggest at least one add-in
         if not add_ins:
-            add_ins.append({'name': 'Ghee', 'add_to': 'roti or rice', 'benefit': 'Healthy fats & taste'})
+            if hide_veggies:
+                add_ins.append(random.choice(hidden_veggie_pool))
+            else:
+                add_ins.append({'name': 'Ghee', 'add_to': 'roti or rice', 'benefit': 'Healthy fats & taste'})
         
-        return add_ins[:2]  # Max 2 add-ins
+        # When hiding veggies, keep up to 3 tips so a veggie tip isn't crowded out
+        return add_ins[:3 if hide_veggies else 2]
     
     def _filter_by_meal_type(self, foods, meal_type):
         """Filter foods appropriate for the meal type with strict separation"""
@@ -1200,7 +1234,7 @@ class MealPlanner:
         
         # Add add-ins hint
         if complete_meal.get('add_ins'):
-            addin_names = [a['name'] for a in complete_meal['add_ins'][:2]]
+            addin_names = [a['name'] for a in complete_meal['add_ins'][:3]]
             summary += f" (add: {', '.join(addin_names)})"
         
         return summary

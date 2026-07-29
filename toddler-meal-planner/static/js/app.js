@@ -1083,9 +1083,56 @@ async function loadPreferences(toddlerId) {
     try {
         const data = await apiCall(`/preferences/${toddlerId}`);
         renderPreferences(data);
+        await loadFeedingPreferences(toddlerId);
     } catch (error) {
         console.error('Failed to load preferences:', error);
     }
+}
+
+async function loadFeedingPreferences(toddlerId) {
+    const checkbox = document.getElementById('pref-hidden-veggies');
+    const saveBtn = document.getElementById('save-feeding-prefs');
+    if (!checkbox || !saveBtn) return;
+
+    try {
+        const toddler = await apiCall(`/toddlers/${toddlerId}`);
+        const prefs = toddler.feeding_preferences || {};
+        checkbox.checked = !!prefs.always_hidden_veggies;
+    } catch (e) {
+        console.warn('Could not load feeding preferences', e);
+    }
+
+    if (saveBtn.dataset.bound) return;
+    saveBtn.dataset.bound = '1';
+    saveBtn.addEventListener('click', async () => {
+        const status = document.getElementById('feeding-pref-status');
+        if (status) {
+            status.hidden = false;
+            status.className = 'feeding-pref-status';
+            status.textContent = 'Saving…';
+        }
+        try {
+            await apiCall(`/toddlers/${toddlerId}`, 'PUT', {
+                feeding_preferences: {
+                    always_hidden_veggies: !!checkbox.checked,
+                },
+            });
+            if (status) {
+                status.className = 'feeding-pref-status is-ok';
+                status.textContent = checkbox.checked
+                    ? 'Saved. Regenerating your weekly plan will include hidden-veggie add-ins.'
+                    : 'Saved. Hidden-veggie tips are turned off.';
+            }
+            if (typeof showToast === 'function') {
+                showToast('Cooking habits saved', 'success');
+            }
+        } catch (err) {
+            if (status) {
+                status.className = 'feeding-pref-status is-error';
+                status.textContent = 'Could not save. Please try again.';
+            }
+        }
+    });
 }
 
 function renderPreferences(data) {
@@ -1257,7 +1304,10 @@ async function createToddler(event) {
         activity_level: formData.get('activity_level') || 'moderate',
         health_conditions: healthConditions,
         dietary_preference: formData.get('dietary_preference') || 'vegetarian',
-        allergies: allergies
+        allergies: allergies,
+        feeding_preferences: {
+            always_hidden_veggies: !!form.querySelector('input[name="always_hidden_veggies"]:checked'),
+        },
     };
     
     try {

@@ -241,6 +241,11 @@ with app.app_context():
             if 'last_reaction' not in pref_cols:
                 db.session.execute(text('ALTER TABLE food_preferences ADD COLUMN last_reaction VARCHAR(50)'))
                 db.session.commit()
+        if 'toddlers' in insp.get_table_names():
+            toddler_cols = {c['name'] for c in insp.get_columns('toddlers')}
+            if 'feeding_preferences' not in toddler_cols:
+                db.session.execute(text('ALTER TABLE toddlers ADD COLUMN feeding_preferences JSON'))
+                db.session.commit()
     except Exception as e:
         app.logger.warning('Schema patch skipped: %s', e)
     init_food_database(db.session, Food)
@@ -912,7 +917,8 @@ def create_toddler():
         health_notes=data.get('health_notes'),
         allergies=data.get('allergies', []),
         dietary_preference=data.get('dietary_preference', 'vegetarian'),
-        meal_schedule=data.get('meal_schedule')
+        meal_schedule=data.get('meal_schedule'),
+        feeding_preferences=_normalize_feeding_preferences(data.get('feeding_preferences')),
     )
     
     # Assign ownership
@@ -983,9 +989,28 @@ def update_toddler(toddler_id):
         toddler.dietary_preference = data['dietary_preference']
     if 'meal_schedule' in data:
         toddler.meal_schedule = data['meal_schedule']
+    if 'feeding_preferences' in data:
+        toddler.feeding_preferences = _normalize_feeding_preferences(
+            data['feeding_preferences'],
+            existing=toddler.get_feeding_preferences(),
+        )
     
     db.session.commit()
     return jsonify(toddler.to_dict())
+
+
+def _normalize_feeding_preferences(raw, existing=None):
+    """Merge parent cooking habits into a stable dict."""
+    base = {
+        'always_hidden_veggies': False,
+    }
+    if isinstance(existing, dict):
+        base.update(existing)
+    if not isinstance(raw, dict):
+        return base
+    if 'always_hidden_veggies' in raw:
+        base['always_hidden_veggies'] = bool(raw.get('always_hidden_veggies'))
+    return base
 
 
 @app.route('/api/toddlers/<toddler_ref:toddler_id>/health', methods=['PUT'])

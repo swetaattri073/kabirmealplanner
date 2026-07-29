@@ -323,6 +323,27 @@ def get_enhancement_suggestions(food_name, toddler=None):
         priorities = toddler.get_nutrition_priorities()
         weight_status = toddler.get_weight_status()
         conditions = toddler.health_conditions or []
+
+        # Parent habit: surface "Hidden veggies" boosts first
+        if getattr(toddler, 'always_hides_veggies', lambda: False)():
+            hidden = [b for b in result['boosts'] if 'hidden' in (b.get('benefit') or '').lower()
+                      or 'vegetable' in (b.get('method') or '').lower()
+                      or 'puree' in (b.get('method') or '').lower()
+                      or 'veggies' in (b.get('benefit') or '').lower()]
+            other = [b for b in result['boosts'] if b not in hidden]
+            if hidden:
+                result['boosts'] = hidden + other
+            result['parent_habit'] = {
+                'always_hidden_veggies': True,
+                'tip': 'You prefer hiding veggies — we prioritized puree/blend-in ideas for this food.',
+            }
+            # Always offer a generic veggie blender tip if none matched this food
+            if not hidden:
+                result['boosts'] = [{
+                    'method': 'Blend in a vegetable puree',
+                    'benefit': 'Hidden veggies',
+                    'how': 'Mix 1–2 tbsp spinach, carrot, pumpkin, or lauki puree into the dish',
+                }] + list(result['boosts'])
         
         # Add relevant general boosters
         if 'protein_g' in priorities:
@@ -408,7 +429,22 @@ def get_daily_enhancement_tip(toddler, liked_foods=None):
     if not enhancements.get('boosts'):
         return None
     
-    boost = random.choice(enhancements['boosts'])
+    boosts = list(enhancements['boosts'])
+    if toddler and getattr(toddler, 'always_hides_veggies', lambda: False)():
+        hidden = [b for b in boosts if 'hidden' in (b.get('benefit') or '').lower()
+                  or 'vegetable' in (b.get('method') or '').lower()
+                  or 'puree' in (b.get('method') or '').lower()
+                  or 'veggies' in (b.get('benefit') or '').lower()]
+        if hidden:
+            boost = random.choice(hidden)
+        else:
+            boost = {
+                'method': 'Blend in a vegetable puree',
+                'benefit': 'Hidden veggies',
+                'how': 'Mix 1–2 tbsp spinach, carrot, pumpkin, or lauki puree into the dish',
+            }
+    else:
+        boost = random.choice(boosts)
     
     return {
         'food': food_name,
