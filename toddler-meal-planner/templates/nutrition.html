@@ -9,6 +9,68 @@
         <p>Weekly nutrition summary for {{ toddler.name }} ({{ toddler.age_months }} months old)</p>
     </div>
 
+    <div class="card" id="milk-feeds" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h2>🥛 Add milk or breast milk</h2>
+        </div>
+        <div class="card-body">
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                Milk feeds count toward today’s nutrition (including omega-3). Pick a type, amount, and reaction.
+            </p>
+            <div class="milk-quick-add" id="milk-quick-add"
+                 data-toddler-id="{{ toddler.ref }}"
+                 data-options='{{ milk_options|tojson }}'>
+                <div class="milk-option-row" role="group" aria-label="Milk type">
+                    {% for opt in milk_options %}
+                    <button type="button"
+                            class="btn btn-sm milk-type-btn {% if loop.first %}active{% endif %}"
+                            data-food-id="{{ opt.id }}"
+                            data-serving="{{ opt.serving_ml }}"
+                            data-disabled="{{ '1' if opt.disabled else '0' }}"
+                            {% if opt.disabled %}title="Usually for {{ opt.suitable_from_months }}+ months"{% endif %}
+                            onclick="selectMilkOption(this)">
+                        {{ opt.name }}{% if opt.name_hindi %} <span class="suggestion-meta">({{ opt.name_hindi }})</span>{% endif %}
+                    </button>
+                    {% else %}
+                    <p class="nutrition-hint">Milk options are still loading — redeploy or refresh after food sync.</p>
+                    {% endfor %}
+                </div>
+                <div class="milk-amount-row" style="margin-top: 0.85rem;">
+                    <label class="form-label" for="milk-amount-ml">Amount (ml)</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+                        <button type="button" class="btn btn-sm btn-outline" onclick="setMilkAmount(60)">60</button>
+                        <button type="button" class="btn btn-sm btn-outline" onclick="setMilkAmount(100)">100</button>
+                        <button type="button" class="btn btn-sm btn-outline" onclick="setMilkAmount(120)">120</button>
+                        <button type="button" class="btn btn-sm btn-outline" onclick="setMilkAmount(150)">150</button>
+                        <button type="button" class="btn btn-sm btn-outline" onclick="setMilkAmount(200)">200</button>
+                        <input type="number" class="form-input" id="milk-amount-ml" min="30" max="400" step="10"
+                               value="{{ (milk_options[0].serving_ml if milk_options else 100)|int }}"
+                               style="width: 6.5rem;">
+                    </div>
+                </div>
+                <div class="milk-reaction-row" style="margin-top: 0.85rem;">
+                    <label class="form-label">Reaction</label>
+                    <div class="reaction-buttons compact" id="milk-reaction-btns">
+                        <button type="button" class="reaction-btn loved" data-reaction="loved" onclick="selectMilkReaction(this)">😍</button>
+                        <button type="button" class="reaction-btn liked selected" data-reaction="liked" onclick="selectMilkReaction(this)">😊</button>
+                        <button type="button" class="reaction-btn neutral" data-reaction="neutral" onclick="selectMilkReaction(this)">😐</button>
+                        <button type="button" class="reaction-btn disliked" data-reaction="disliked" onclick="selectMilkReaction(this)">😕</button>
+                        <button type="button" class="reaction-btn refused" data-reaction="refused" onclick="selectMilkReaction(this)">🙅</button>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center;">
+                    <button type="button" class="btn btn-primary" id="milk-log-btn"
+                            onclick='logMilkFeed({{ toddler.ref|tojson }})'>
+                        <i class="fas fa-plus"></i> Add to today’s nutrition
+                    </button>
+                    <span class="suggestion-meta" id="milk-hint">
+                        Counts as a snack feed · omega-3 included in totals
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card" id="today-breakdown" style="margin-bottom: 1.5rem; scroll-margin-top: 5rem;">
         <div class="card-header">
             <h2>🍽️ Today's nutrient breakdown</h2>
@@ -84,6 +146,13 @@
                         <p>Calcium/day</p>
                     </div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-icon primary">🐟</div>
+                    <div class="stat-content">
+                        <h3>{{ rda.omega3_mg if rda else '~700' }}mg</h3>
+                        <p>Omega-3/day</p>
+                    </div>
+                </div>
             </div>
             
             <div style="margin-top: 1.5rem;">
@@ -93,6 +162,13 @@
                     <div class="alert-content">
                         <h4>Iron</h4>
                         <p>Indian vegetarian diets can be low in iron. Include ragi, spinach, dates, and pair with vitamin C foods for absorption.</p>
+                    </div>
+                </div>
+                <div class="alert info">
+                    <div class="alert-icon">🐟</div>
+                    <div class="alert-content">
+                        <h4>Omega-3</h4>
+                        <p>Supports brain and eye development. Breast milk / DHA-fortified formula, fatty fish (deboned), and ground walnuts or flax help meet needs.</p>
                     </div>
                 </div>
                 <div class="alert info">
@@ -119,4 +195,11 @@
             </div>
         </div>
     </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof loadWeeklyNutrition === 'function') {
+        loadWeeklyNutrition({{ toddler.ref|tojson }});
+    }
+});
+</script>
 {% endblock %}

@@ -1,0 +1,13 @@
+{
+  "name": "littlebowl-sandbox-scripts",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Sandbox tests for LittleBowl notifications UI",
+  "scripts": {
+    "test:notifications": "node test-notifications.js",
+    "sandbox:notify": "node sandbox-notify-ui.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.4.0"
+  }
+}

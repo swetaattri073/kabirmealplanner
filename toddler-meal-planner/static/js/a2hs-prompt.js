@@ -16,7 +16,11 @@
   let timerId = null;
 
   function isStandalone() {
+    const isCapacitor =
+      !!(window.Capacitor && (window.Capacitor.isNativePlatform?.() || window.Capacitor.DEBUG !== undefined)) ||
+      /capacitor/i.test(navigator.userAgent || '');
     return (
+      isCapacitor ||
       window.matchMedia('(display-mode: standalone)').matches ||
       window.navigator.standalone === true ||
       document.referrer.includes('android-app://')

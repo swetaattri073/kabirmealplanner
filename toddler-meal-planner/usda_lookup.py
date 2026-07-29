@@ -50,6 +50,8 @@ NUTRIENT_MAP = {
     1106: "vitamin_a_mcg",
     1162: "vitamin_c_mg",
     1114: "vitamin_d_mcg",
+    # Fatty acids (mg) — prefer total n-3 when available
+    1404: "omega3_mg",  # Fatty acids, total polyunsaturated / n-3 when present
 }
 
 
