@@ -1134,7 +1134,7 @@ async function loadFeedingPreferences(toddlerId) {
     try {
         const toddler = await apiCall(`/toddlers/${toddlerId}`);
         const prefs = toddler.feeding_preferences || {};
-        checkbox.checked = !!prefs.always_hidden_veggies;
+        checkbox.checked = prefs.always_hidden_veggies !== false;
     } catch (e) {
         console.warn('Could not load feeding preferences', e);
     }

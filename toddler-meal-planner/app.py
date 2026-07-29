@@ -1018,12 +1018,18 @@ def update_toddler(toddler_id):
 
 
 def _normalize_feeding_preferences(raw, existing=None):
-    """Merge parent cooking habits into a stable dict."""
+    """Merge parent cooking habits into a stable dict.
+
+    Hidden veggies stay ON by default unless the parent explicitly turns them off.
+    """
     base = {
-        'always_hidden_veggies': False,
+        'always_hidden_veggies': True,
     }
     if isinstance(existing, dict):
         base.update(existing)
+    # Re-apply default if existing never set the key
+    if 'always_hidden_veggies' not in base:
+        base['always_hidden_veggies'] = True
     if not isinstance(raw, dict):
         return base
     if 'always_hidden_veggies' in raw:

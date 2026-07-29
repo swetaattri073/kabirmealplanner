@@ -109,6 +109,7 @@ class Toddler(db.Model):
     dietary_preference = db.Column(db.String(50), default='vegetarian')  # vegetarian, non-vegetarian, eggetarian
     meal_schedule = db.Column(JSON, nullable=True)  # Custom schedule if provided
     # Parent cooking / serving habits, e.g. {"always_hidden_veggies": true}
+    # Missing always_hidden_veggies is treated as True (on by default).
     feeding_preferences = db.Column(JSON, default=dict)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -273,13 +274,18 @@ class Toddler(db.Model):
     def get_feeding_preferences(self):
         """Parent cooking/serving habits used by meal planning and tips."""
         prefs = self.feeding_preferences if isinstance(self.feeding_preferences, dict) else {}
+        # Default ON unless the parent has explicitly turned it off.
+        if 'always_hidden_veggies' not in prefs:
+            always_hidden = True
+        else:
+            always_hidden = bool(prefs.get('always_hidden_veggies'))
         return {
-            'always_hidden_veggies': bool(prefs.get('always_hidden_veggies')),
+            'always_hidden_veggies': always_hidden,
         }
 
     def always_hides_veggies(self):
-        """True when the parent prefers to sneak vegetables into most meals."""
-        return self.get_feeding_preferences().get('always_hidden_veggies', False)
+        """True when the parent prefers to sneak vegetables into most meals (default on)."""
+        return self.get_feeding_preferences().get('always_hidden_veggies', True)
 
     def set_feeding_preference(self, key, value):
         prefs = dict(self.get_feeding_preferences())
