@@ -13,6 +13,15 @@
 | AWS App Runner | ⭐⭐ Medium | $5-15/mo | 20 min |
 | AWS EC2 | ⭐⭐⭐ Advanced | $0-10/mo | 30 min |
 
+After the web app is live, build the **Android APK** from [`android-app/`](android-app/):
+
+```bash
+cd android-app && npm install && npm run sync && npm run build:debug
+# Install: adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+On first launch, enter your server URL. Details: [`android-app/README.md`](android-app/README.md).
+
 ---
 
 ## Option 1: Render.com (Recommended for Beginners)
