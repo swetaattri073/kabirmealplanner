@@ -63,6 +63,27 @@
                     {% if meal.reason %}
                     <p class="plan-meal-reason"><i class="fas fa-lightbulb"></i> {{ meal.reason }}</p>
                     {% endif %}
+
+                    {% if meal.add_ins %}
+                    <div class="plan-addins-block plan-addins-inline">
+                        <p class="plan-addins-title">
+                            {% if meal.add_ins|selectattr('style', 'equalto', 'hidden_veggies')|list %}
+                            Hidden veggie suggestions
+                            {% else %}
+                            Make it more nutritious
+                            {% endif %}
+                        </p>
+                        <ul class="plan-addins">
+                            {% for a in meal.add_ins %}
+                            <li class="plan-addin {% if a.style == 'hidden_veggies' %}is-hidden-veggie{% endif %}">
+                                <strong>{{ a.label or a.name }}</strong>
+                                {% if a.add_to %}<span class="plan-addin-to">→ {{ a.add_to }}</span>{% endif %}
+                                {% if a.benefit %}<em class="plan-addin-benefit">{{ a.benefit }}</em>{% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
                     
                     {% if already_logged %}
                     <div class="logged-summary" id="logged-summary-{{ meal_type }}">
@@ -574,6 +595,9 @@ document.addEventListener('DOMContentLoaded', function() {
     Object.keys(todayPlanMeals).forEach(initPlanItems);
     Object.keys(loggedByMeal).forEach(initEditItems);
     if (alwaysHiddenVeggies && hiddenVeggieOptions.length) {
+        Object.keys(todayPlanMeals).forEach((mealType) => {
+            seedHiddenVeggiesFromPlan(mealType, 'plan');
+        });
         document.querySelectorAll('.hidden-veggie-picker').forEach((el) => {
             renderHiddenVeggiePicker(el.dataset.meal, el.dataset.mode);
         });
@@ -591,6 +615,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+function seedHiddenVeggiesFromPlan(mealType, mode) {
+    if (!alwaysHiddenVeggies || !hiddenVeggieOptions.length) return;
+    const meal = todayPlanMeals[mealType];
+    const addIns = meal?.add_ins || [];
+    if (!addIns.length) return;
+    const map = getHiddenVeggieMap(mealType, mode);
+    addIns.forEach((a) => {
+        if (a.style && a.style !== 'hidden_veggies') return;
+        let id = a.food_id ? Number(a.food_id) : null;
+        if (!id && a.db_name) {
+            const opt = hiddenVeggieOptions.find((o) => o.name === a.db_name);
+            if (opt) id = Number(opt.id);
+        }
+        if (!id && a.name) {
+            const opt = hiddenVeggieOptions.find((o) =>
+                (o.name || '').toLowerCase().includes((a.label || '').toLowerCase())
+                || (a.name || '').toLowerCase().includes((o.label || '').toLowerCase())
+            );
+            if (opt) id = Number(opt.id);
+        }
+        if (!id) return;
+        if (alreadyLoggedFoodIds(mealType, mode).has(id)) return;
+        const opt = hiddenVeggieOptions.find((o) => Number(o.id) === id);
+        map[id] = a.default_g || opt?.default_g || 15;
+    });
+}
 
 function hvStateKey(mealType, mode) {
     return `${mode}:${mealType}`;

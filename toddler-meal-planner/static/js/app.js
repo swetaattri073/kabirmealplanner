@@ -336,7 +336,7 @@ function renderMealSchedule(data) {
     allMeals.forEach(mealType => {
         const isEaten = data.meals_eaten?.includes(mealType);
         const logs = todayLogs.filter(l => l.meal_type === mealType);
-        const plannedName = getPlannedMealDisplayName(plannedMeals[mealType]);
+        const plannedName = getPlannedMealBaseName(plannedMeals[mealType]);
         const suggestion = suggestions[mealType]?.[0];
         let pendingLabel = 'Not planned yet';
         if (plannedName) {
@@ -344,6 +344,7 @@ function renderMealSchedule(data) {
         } else if (suggestion?.food?.name) {
             pendingLabel = `Suggested: ${suggestion.food.name}`;
         }
+        const addInsHtml = buildAddInsHtml(plannedMeals[mealType]);
 
         let eatenLabel = 'Logged';
         let kcalPreview = '';
@@ -374,7 +375,7 @@ function renderMealSchedule(data) {
                         ${escapeHtml(eatenLabel)}
                         ${kcalPreview}
                        </div>`
-                    : `<div class="meal-food">${escapeHtml(pendingLabel)}</div>`}
+                    : `<div class="meal-food">${escapeHtml(pendingLabel)}${addInsHtml}</div>`}
                 </div>
                 ${isEaten 
                     ? `<a href="/log-meal/${data.toddler.ref || data.toddler.id}?meal=${mealType}&edit=1" class="meal-action log-btn" title="Edit meal">Edit</a>`
@@ -748,6 +749,40 @@ function getPlannedMealDisplayName(meal) {
         || '';
 }
 
+/** Food title without the "(add: …)" parenthetical when structured add-ins are shown. */
+function getPlannedMealBaseName(meal) {
+    let name = getPlannedMealDisplayName(meal);
+    if (meal?.add_ins?.length) {
+        name = name.replace(/\s*\(add:\s*[^)]*\)\s*$/i, '').trim();
+    }
+    return name;
+}
+
+function buildAddInsHtml(meal) {
+    const addIns = meal?.add_ins || [];
+    if (!addIns.length) return '';
+    const items = addIns.map((a) => {
+        const isHidden = (a.style === 'hidden_veggies')
+            || /hidden|puree|veggie|spinach|carrot|lauki|pumpkin|beet|cauli|methi/i.test(
+                `${a.name || ''} ${a.benefit || ''}`
+            );
+        return `
+            <li class="plan-addin ${isHidden ? 'is-hidden-veggie' : ''}">
+                <strong>${escapeHtml(a.label || a.name || 'Add-in')}</strong>
+                ${a.add_to ? `<span class="plan-addin-to">→ ${escapeHtml(a.add_to)}</span>` : ''}
+                ${a.benefit ? `<em class="plan-addin-benefit">${escapeHtml(a.benefit)}</em>` : ''}
+                ${a.how ? `<span class="plan-addin-how">${escapeHtml(a.how)}</span>` : ''}
+            </li>`;
+    }).join('');
+    const hasHidden = addIns.some((a) => a.style === 'hidden_veggies');
+    const title = hasHidden ? 'Hidden veggie suggestions' : 'Make it more nutritious';
+    return `
+        <div class="plan-addins-block">
+            <p class="plan-addins-title">${title}</p>
+            <ul class="plan-addins">${items}</ul>
+        </div>`;
+}
+
 function isCompactWeeklyPlanView() {
     return window.matchMedia('(max-width: 768px)').matches;
 }
@@ -904,8 +939,9 @@ function renderWeeklyPlan(plan) {
         ].filter(Boolean).join(' ');
 
         const mealRows = orderedMealEntries(day.meals).map(([mealType, meal]) => {
-            const name = getPlannedMealDisplayName(meal) || 'Not planned';
+            const name = getPlannedMealBaseName(meal) || 'Not planned';
             const recipeLinks = buildRecipeLinks(meal, toddlerId);
+            const addIns = buildAddInsHtml(meal);
             return `
                 <div class="day-meal">
                     <div class="day-meal-type">
@@ -913,6 +949,7 @@ function renderWeeklyPlan(plan) {
                         <span>${formatMealType(mealType)}</span>
                     </div>
                     <div class="day-meal-food">${escapeHtml(name)}</div>
+                    ${addIns}
                     ${recipeLinks}
                 </div>`;
         }).join('');

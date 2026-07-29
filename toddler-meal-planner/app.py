@@ -877,6 +877,18 @@ def recipes_page(toddler_id):
     # Put highlighted recipe first when present
     if highlight:
         recipes = sorted(recipes, key=lambda r: 0 if r.get('slug') == highlight else 1)
+
+    always_hidden = toddler.always_hides_veggies()
+    if always_hidden:
+        from hidden_veggies import suggestions_for_recipe
+        enriched = []
+        for recipe in recipes:
+            item = dict(recipe)
+            tips = suggestions_for_recipe(recipe, count=2)
+            item['hidden_veggie_tips'] = tips
+            enriched.append(item)
+        recipes = enriched
+
     categories = sorted({r.get('category') for r in list_recipes() if r.get('category')})
     return render_template(
         'recipes.html',
@@ -887,6 +899,7 @@ def recipes_page(toddler_id):
         q=q or '',
         category=category or '',
         highlight=highlight or '',
+        always_hidden_veggies=always_hidden,
     )
 
 
@@ -1018,22 +1031,11 @@ def _normalize_feeding_preferences(raw, existing=None):
     return base
 
 
-# Foods parents commonly blend into dal/roti/khichdi when "always hide veggies" is on.
-# default_g ≈ 1 tbsp puree; 2 tbsp uses 2× that on the log-meal picker.
-_HIDDEN_VEGGIE_PICKER = (
-    {'db_name': 'Carrot', 'label': 'Carrot', 'default_g': 15},
-    {'db_name': 'Spinach/Palak', 'label': 'Spinach', 'default_g': 15},
-    {'db_name': 'Bottle Gourd/Lauki', 'label': 'Lauki', 'default_g': 15},
-    {'db_name': 'Pumpkin', 'label': 'Pumpkin', 'default_g': 15},
-    {'db_name': 'Beetroot', 'label': 'Beetroot', 'default_g': 15},
-    {'db_name': 'Cauliflower', 'label': 'Cauliflower', 'default_g': 15},
-)
-
-
 def _hidden_veggie_options_for_toddler(toddler):
     """Resolve DB foods for the log-meal hidden-veggies picker."""
+    from hidden_veggies import catalog_for_picker
     options = []
-    for spec in _HIDDEN_VEGGIE_PICKER:
+    for spec in catalog_for_picker():
         food = Food.query.filter_by(name=spec['db_name']).first()
         if not food:
             continue

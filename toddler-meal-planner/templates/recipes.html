@@ -8,6 +8,13 @@
     <p class="page-subtitle">Toddler-friendly recipes for every food in LittleBowl — open any meal from the weekly plan to jump here.</p>
 </div>
 
+{% if always_hidden_veggies %}
+<div class="recipe-habit-banner">
+    <strong>Hidden veggies on</strong>
+    <span>Each recipe below includes blend-in ideas (spinach, carrot, lauki, pumpkin…). Log them on Log Meal so they count toward nutrition.</span>
+</div>
+{% endif %}
+
 <form class="recipe-filters" method="get" action="{{ url_for('recipes_page', toddler_id=toddler.id) }}">
     <input type="search" name="q" value="{{ q }}" placeholder="Search recipes or foods…" aria-label="Search recipes">
     <select name="category" aria-label="Filter by category">
@@ -72,6 +79,20 @@
             <strong>How to make it</strong>
             <p>{{ recipe.steps }}</p>
         </div>
+        {% if recipe.hidden_veggie_tips %}
+        <div class="recipe-hidden-veggies">
+            <strong>Hidden veggie suggestions</strong>
+            <ul>
+                {% for tip in recipe.hidden_veggie_tips %}
+                <li>
+                    <span class="recipe-hv-name">{{ tip.label or tip.name }}</span>
+                    {% if tip.add_to %}<span class="recipe-hv-to">→ {{ tip.add_to }}</span>{% endif %}
+                    {% if tip.how %}<span class="recipe-hv-how">{{ tip.how }}</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         {% if recipe.suitable_from_months %}
         <p class="recipe-meta">Suitable from {{ recipe.suitable_from_months }} months</p>
         {% endif %}

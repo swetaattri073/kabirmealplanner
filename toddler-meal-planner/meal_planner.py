@@ -212,13 +212,23 @@ class MealPlanner:
                     )
                     
                     if food:
+                        alternatives = {'backup': food.get('backup')}
+                        if getattr(toddler, 'always_hides_veggies', lambda: False)():
+                            alternatives['add_ins'] = self._get_nutritious_addins(
+                                toddler,
+                                nutrition_gaps,
+                                food['food'],
+                                None,
+                                None,
+                                meal_type=meal_type,
+                            )
                         plan_entry = WeeklyPlan(
                             toddler_id=toddler.id,
                             week_start=week_start,
                             day_of_week=day,
                             meal_type=meal_type,
                             food_id=food['food'].id,
-                            alternatives={'backup': food.get('backup')},
+                            alternatives=alternatives,
                             is_generated=True,
                             nutrition_reason=food.get('reason', '')
                         )
@@ -649,7 +659,9 @@ class MealPlanner:
             selected_side = None
         
         # Generate nutritious add-in suggestions
-        add_ins = self._get_nutritious_addins(toddler, nutrition_gaps, selected_main, selected_carb, selected_side)
+        add_ins = self._get_nutritious_addins(
+            toddler, nutrition_gaps, selected_main, selected_carb, selected_side, meal_type=meal_type
+        )
         
         # Create complete meal structure
         complete_meal = {
@@ -706,26 +718,36 @@ class MealPlanner:
             'reason': complete_meal.get('reason', ''),
         }
     
-    def _get_nutritious_addins(self, toddler, nutrition_gaps, main, carb, side):
+    def _get_nutritious_addins(self, toddler, nutrition_gaps, main, carb, side, meal_type=None):
         """Suggest nutritious add-ins based on gaps and parent cooking habits."""
+        from hidden_veggies import pick_hidden_veggie_suggestions, attach_food_ids
+        from models import Food
+
         add_ins = []
         hide_veggies = bool(getattr(toddler, 'always_hides_veggies', lambda: False)())
 
-        hidden_veggie_pool = [
-            {'name': 'Spinach puree', 'add_to': 'dal, khichdi, or roti dough', 'benefit': 'Hidden veggies + iron', 'style': 'hidden_veggies'},
-            {'name': 'Carrot puree/grated', 'add_to': 'dal, raita, or paratha', 'benefit': 'Hidden veggies + vitamin A', 'style': 'hidden_veggies'},
-            {'name': 'Beetroot puree', 'add_to': 'roti dough or dal', 'benefit': 'Hidden veggies + iron', 'style': 'hidden_veggies'},
-            {'name': 'Zucchini/lauki puree', 'add_to': 'dal, khichdi, or idli batter', 'benefit': 'Hidden veggies + moisture', 'style': 'hidden_veggies'},
-            {'name': 'Pumpkin puree', 'add_to': 'khichdi, dal, or porridge', 'benefit': 'Hidden veggies + vitamin A', 'style': 'hidden_veggies'},
-            {'name': 'Cauliflower puree', 'add_to': 'roti dough or gravy', 'benefit': 'Hidden veggies', 'style': 'hidden_veggies'},
-            {'name': 'Methi leaves (finely chopped)', 'add_to': 'roti/paratha dough', 'benefit': 'Hidden greens + fiber', 'style': 'hidden_veggies'},
-        ]
-        
-        # Common nutritious add-ins
+        main_food = main if hasattr(main, 'name') else (main.get('food') if isinstance(main, dict) else main)
+        carb_food = carb if hasattr(carb, 'name') else (carb.get('food') if isinstance(carb, dict) else carb)
+        side_food = side if hasattr(side, 'name') else (side.get('food') if isinstance(side, dict) else side)
+
+        def _fname(obj):
+            return getattr(obj, 'name', None) or ''
+
+        def _fcat(obj):
+            return getattr(obj, 'category', None) or ''
+
+        food_id_by_name = {}
+        for row in Food.query.filter(Food.name.in_([
+            'Carrot', 'Spinach/Palak', 'Bottle Gourd/Lauki', 'Pumpkin',
+            'Beetroot', 'Cauliflower',
+        ])).all():
+            food_id_by_name[row.name] = row.id
+
+        # Common nutritious add-ins (gap-driven)
         addin_suggestions = {
             'iron_mg': [
                 {'name': 'Jaggery powder', 'add_to': 'dahi or roti', 'benefit': 'Boosts iron'},
-                {'name': 'Spinach puree', 'add_to': 'dal or roti dough', 'benefit': 'Iron rich', 'style': 'hidden_veggies'},
+                {'name': 'Spinach puree', 'add_to': 'dal or roti dough', 'benefit': 'Iron rich', 'style': 'hidden_veggies', 'db_name': 'Spinach/Palak', 'default_g': 15},
                 {'name': 'Dates (chopped)', 'add_to': 'dahi', 'benefit': 'Iron & energy'}
             ],
             'calcium_mg': [
@@ -739,7 +761,7 @@ class MealPlanner:
                 {'name': 'Moong dal paste', 'add_to': 'roti dough', 'benefit': 'Protein boost'}
             ],
             'vitamin_a_mcg': [
-                {'name': 'Carrot (grated)', 'add_to': 'salad, raita, or dough', 'benefit': 'Vitamin A', 'style': 'hidden_veggies'},
+                {'name': 'Carrot (grated)', 'add_to': 'salad, raita, or dough', 'benefit': 'Vitamin A', 'style': 'hidden_veggies', 'db_name': 'Carrot', 'default_g': 15},
                 {'name': 'Ghee (small amount)', 'add_to': 'roti or dal', 'benefit': 'Helps absorb vitamins'}
             ],
             'fiber_g': [
@@ -748,21 +770,22 @@ class MealPlanner:
             ]
         }
 
-        # Parent habit: always sneak veggies into the meal
+        # Parent habit: always sneak veggies into the meal (context-aware picks)
         if hide_veggies:
-            pick = random.choice(hidden_veggie_pool)
-            # Prefer pairing with carb/main when available
-            if carb and 'dough' in pick['add_to']:
-                pick = dict(pick)
-                pick['add_to'] = f"{carb.name} dough / batter" if carb else pick['add_to']
-            elif main:
-                pick = dict(pick)
-                pick['add_to'] = f"{main.name} (blend in)"
-            add_ins.append(pick)
-        
+            veggie_picks = pick_hidden_veggie_suggestions(
+                food_name=_fname(main_food),
+                category=_fcat(main_food),
+                meal_type=meal_type,
+                carb_name=_fname(carb_food),
+                side_name=_fname(side_food),
+                count=2,
+            )
+            veggie_picks = attach_food_ids(veggie_picks, food_id_by_name)
+            add_ins.extend(veggie_picks)
+
         # Add suggestions for top nutritional gaps
         gaps_sorted = sorted(nutrition_gaps.items(), key=lambda x: x[1], reverse=True)[:2]
-        
+
         for nutrient, gap in gaps_sorted:
             if nutrient in addin_suggestions and gap > 20:
                 options = addin_suggestions[nutrient]
@@ -771,17 +794,26 @@ class MealPlanner:
                     suggestion = random.choice(veggie_opts or options)
                 else:
                     suggestion = random.choice(options)
-                # Avoid duplicate names
+                suggestion = dict(suggestion)
+                if suggestion.get('db_name') and suggestion['db_name'] in food_id_by_name:
+                    suggestion['food_id'] = food_id_by_name[suggestion['db_name']]
                 if not any(a.get('name') == suggestion.get('name') for a in add_ins):
                     add_ins.append(suggestion)
-        
+
         # Always suggest at least one add-in
         if not add_ins:
             if hide_veggies:
-                add_ins.append(random.choice(hidden_veggie_pool))
+                fallback = pick_hidden_veggie_suggestions(
+                    food_name=_fname(main_food),
+                    category=_fcat(main_food),
+                    meal_type=meal_type,
+                    carb_name=_fname(carb_food),
+                    count=1,
+                )
+                add_ins.extend(attach_food_ids(fallback, food_id_by_name))
             else:
                 add_ins.append({'name': 'Ghee', 'add_to': 'roti or rice', 'benefit': 'Healthy fats & taste'})
-        
+
         # When hiding veggies, keep up to 3 tips so a veggie tip isn't crowded out
         return add_ins[:3 if hide_veggies else 2]
     
@@ -912,20 +944,28 @@ class MealPlanner:
             else:
                 # Single food format (breakfast, snacks)
                 backup = None
+                add_ins = []
                 if isinstance(entry.alternatives, dict) and 'backup' in entry.alternatives:
                     backup = entry.alternatives.get('backup')
+                    add_ins = entry.alternatives.get('add_ins') or []
                 elif isinstance(entry.alternatives, list) and entry.alternatives:
                     backup = entry.alternatives[0] if entry.alternatives else None
 
                 food_name = entry.food.name if entry.food else None
                 recipe = find_recipe_for_food_name(food_name)
+                display = food_name or ''
+                if add_ins:
+                    addin_names = [a.get('name') for a in add_ins[:3] if a.get('name')]
+                    if addin_names:
+                        display = f"{display} (add: {', '.join(addin_names)})"
                 
                 days[day_key]['meals'][entry.meal_type] = {
                     'id': entry.id,
                     'is_complete_meal': False,
                     'food': entry.food.to_dict() if entry.food else None,
-                    'display_name': food_name,
+                    'display_name': display,
                     'backup': backup,
+                    'add_ins': add_ins,
                     'reason': entry.nutrition_reason,
                     'is_generated': entry.is_generated,
                     'recipe_slug': recipe['slug'] if recipe else None,

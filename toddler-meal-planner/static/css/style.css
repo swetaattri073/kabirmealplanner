@@ -1433,6 +1433,60 @@ body.nutrition-modal-open {
     word-break: break-word;
 }
 
+.plan-addins-block {
+    margin-top: 0.45rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 10px;
+    background: rgba(107, 143, 60, 0.08);
+    border: 1px solid rgba(107, 143, 60, 0.22);
+}
+.plan-addins-title {
+    margin: 0 0 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--primary-dark, #4a6b2a);
+}
+.plan-addins {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.plan-addin {
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+}
+.plan-addin strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+.plan-addin.is-hidden-veggie strong {
+    color: var(--primary-dark, #4a6b2a);
+}
+.plan-addin-to {
+    display: inline;
+    margin-left: 0.15rem;
+}
+.plan-addin-benefit,
+.plan-addin-how {
+    display: block;
+    font-style: normal;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+.meal-slot .plan-addins-block {
+    margin-top: 0.4rem;
+}
+.plan-addins-inline {
+    margin: 0.65rem 0 0.85rem;
+}
+
 .day-meal-recipes {
     display: flex;
     flex-wrap: wrap;
@@ -2897,4 +2951,63 @@ a.mobile-avatar-link:active {
 .recipe-card.is-highlighted {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(107, 143, 60, 0.2), var(--shadow-md);
+}
+
+.recipe-habit-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0 0 1.1rem;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: rgba(107, 143, 60, 0.1);
+    border: 1px solid rgba(107, 143, 60, 0.28);
+}
+.recipe-habit-banner strong {
+    font-size: 0.95rem;
+    color: var(--primary-dark, #4a6b2a);
+}
+.recipe-habit-banner span {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+.recipe-hidden-veggies {
+    margin-top: 0.85rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: var(--radius-md);
+    background: rgba(107, 143, 60, 0.08);
+    border: 1px dashed rgba(107, 143, 60, 0.35);
+}
+.recipe-hidden-veggies strong {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--primary-dark, #4a6b2a);
+    font-size: 0.9rem;
+}
+.recipe-hidden-veggies ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.recipe-hidden-veggies li {
+    font-size: 0.85rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+}
+.recipe-hv-name {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.recipe-hv-to {
+    margin-left: 0.2rem;
+}
+.recipe-hv-how {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
 }
