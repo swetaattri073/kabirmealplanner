@@ -6,10 +6,37 @@
 <body data-page="preferences" data-toddler-id="{{ toddler.ref }}">
     <div class="page-header">
         <h1>❤️ Food Preferences</h1>
-        <p>Track what {{ toddler.name }} loves and doesn't like</p>
+        <p>Track what {{ toddler.name }} loves — and how you like to cook for them</p>
+    </div>
+
+    <div class="card" id="cooking-habits">
+        <div class="card-header">
+            <h2>🧑‍🍳 Your cooking habits</h2>
+        </div>
+        <div class="card-body">
+            <p style="color:var(--text-secondary);margin:0 0 1rem;line-height:1.45;">
+                Hidden veggies stay on by default. Uncheck only if you don’t usually blend them in — then save.
+            </p>
+            <label class="feeding-pref-card" for="pref-hidden-veggies">
+                <input type="checkbox" id="pref-hidden-veggies" checked>
+                <span class="feeding-pref-copy">
+                    <strong>I always hide veggies</strong>
+                    <small>Suggest spinach, carrot, pumpkin, beetroot, lauki, and other purees to blend into dal, roti dough, khichdi, idli batter, and gravies. On Log Meal you can tap which ones you added so they count toward nutrition.</small>
+                </span>
+            </label>
+            <div class="feeding-pref-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="save-feeding-prefs">
+                    <i class="fas fa-save"></i> Save cooking habits
+                </button>
+                <span class="feeding-pref-status" id="feeding-pref-status" hidden></span>
+            </div>
+            <p class="feeding-pref-note">
+                Tip: After saving, regenerate this week’s plan for add-in suggestions — and use the Log Meal veggie chips so those veggies move the nutrition bars.
+            </p>
+        </div>
     </div>
     
-    <div class="card">
+    <div class="card" style="margin-top: 1.5rem;">
         <div class="card-header">
             <h2>😋 Loved & Liked Foods</h2>
         </div>
@@ -119,4 +146,55 @@
             </div>
         </div>
     </div>
+
+<style>
+.feeding-pref-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    padding: 0.95rem 1rem;
+    border: 1.5px solid var(--border-color, #e2e8f0);
+    border-radius: 14px;
+    background: #fff;
+    cursor: pointer;
+}
+.feeding-pref-card input {
+    margin-top: 0.2rem;
+    width: 1.15rem;
+    height: 1.15rem;
+    accent-color: var(--primary, #6b8f3c);
+    flex-shrink: 0;
+}
+.feeding-pref-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.feeding-pref-copy strong { font-size: 1rem; }
+.feeding-pref-copy small {
+    color: var(--text-secondary, #64748b);
+    font-size: 0.88rem;
+    line-height: 1.4;
+    font-weight: 500;
+}
+.feeding-pref-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+.feeding-pref-status {
+    font-size: 0.9rem;
+    color: var(--text-secondary, #64748b);
+}
+.feeding-pref-status.is-ok { color: #166534; }
+.feeding-pref-status.is-error { color: #991b1b; }
+.feeding-pref-note {
+    margin: 0.85rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted, #94a3b8);
+    line-height: 1.4;
+}
+</style>
 {% endblock %}

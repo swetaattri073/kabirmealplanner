@@ -323,6 +323,41 @@ def get_enhancement_suggestions(food_name, toddler=None):
         priorities = toddler.get_nutrition_priorities()
         weight_status = toddler.get_weight_status()
         conditions = toddler.health_conditions or []
+
+        # Parent habit: surface "Hidden veggies" boosts first
+        if getattr(toddler, 'always_hides_veggies', lambda: False)():
+            from hidden_veggies import pick_hidden_veggie_suggestions
+            hidden = [b for b in result['boosts'] if 'hidden' in (b.get('benefit') or '').lower()
+                      or 'vegetable' in (b.get('method') or '').lower()
+                      or 'puree' in (b.get('method') or '').lower()
+                      or 'veggies' in (b.get('benefit') or '').lower()]
+            other = [b for b in result['boosts'] if b not in hidden]
+            if hidden:
+                result['boosts'] = hidden + other
+            result['parent_habit'] = {
+                'always_hidden_veggies': True,
+                'tip': 'You prefer hiding veggies — we prioritized puree/blend-in ideas for this food.',
+            }
+            # Context-aware veggie blend tips for this dish
+            veggie_tips = pick_hidden_veggie_suggestions(food_name=food_name, count=2)
+            tailored = [{
+                'method': tip['name'],
+                'benefit': tip['benefit'],
+                'how': tip.get('how') or f"Mix 1–2 tbsp into {tip.get('add_to') or 'the dish'}",
+            } for tip in veggie_tips]
+            # Prefer tailored tips at the front; keep unique methods
+            seen = {b.get('method') for b in result['boosts']}
+            for tip in reversed(tailored):
+                if tip['method'] not in seen:
+                    result['boosts'].insert(0, tip)
+                    seen.add(tip['method'])
+            if not hidden and not tailored:
+                result['boosts'] = [{
+                    'method': 'Blend in a vegetable puree',
+                    'benefit': 'Hidden veggies',
+                    'how': 'Mix 1–2 tbsp spinach, carrot, pumpkin, or lauki puree into the dish',
+                }] + list(result['boosts'])
+            result['hidden_veggie_suggestions'] = veggie_tips
         
         # Add relevant general boosters
         if 'protein_g' in priorities:
@@ -408,7 +443,22 @@ def get_daily_enhancement_tip(toddler, liked_foods=None):
     if not enhancements.get('boosts'):
         return None
     
-    boost = random.choice(enhancements['boosts'])
+    boosts = list(enhancements['boosts'])
+    if toddler and getattr(toddler, 'always_hides_veggies', lambda: False)():
+        hidden = [b for b in boosts if 'hidden' in (b.get('benefit') or '').lower()
+                  or 'vegetable' in (b.get('method') or '').lower()
+                  or 'puree' in (b.get('method') or '').lower()
+                  or 'veggies' in (b.get('benefit') or '').lower()]
+        if hidden:
+            boost = random.choice(hidden)
+        else:
+            boost = {
+                'method': 'Blend in a vegetable puree',
+                'benefit': 'Hidden veggies',
+                'how': 'Mix 1–2 tbsp spinach, carrot, pumpkin, or lauki puree into the dish',
+            }
+    else:
+        boost = random.choice(boosts)
     
     return {
         'food': food_name,

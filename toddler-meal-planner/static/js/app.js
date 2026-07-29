@@ -370,7 +370,7 @@ function renderMealSchedule(data) {
     allMeals.forEach(mealType => {
         const isEaten = data.meals_eaten?.includes(mealType);
         const logs = todayLogs.filter(l => l.meal_type === mealType);
-        const plannedName = getPlannedMealDisplayName(plannedMeals[mealType]);
+        const plannedName = getPlannedMealBaseName(plannedMeals[mealType]);
         const suggestion = suggestions[mealType]?.[0];
         let pendingLabel = 'Not planned yet';
         if (plannedName) {
@@ -378,6 +378,7 @@ function renderMealSchedule(data) {
         } else if (suggestion?.food?.name) {
             pendingLabel = `Suggested: ${suggestion.food.name}`;
         }
+        const addInsHtml = buildAddInsHtml(plannedMeals[mealType]);
 
         let eatenLabel = 'Logged';
         let kcalPreview = '';
@@ -408,7 +409,7 @@ function renderMealSchedule(data) {
                         ${escapeHtml(eatenLabel)}
                         ${kcalPreview}
                        </div>`
-                    : `<div class="meal-food">${escapeHtml(pendingLabel)}</div>`}
+                    : `<div class="meal-food">${escapeHtml(pendingLabel)}${addInsHtml}</div>`}
                 </div>
                 ${isEaten 
                     ? `<a href="/log-meal/${data.toddler.ref || data.toddler.id}?meal=${mealType}&edit=1" class="meal-action log-btn" title="Edit meal">Edit</a>`
@@ -790,6 +791,40 @@ function getPlannedMealDisplayName(meal) {
         || '';
 }
 
+/** Food title without the "(add: …)" parenthetical when structured add-ins are shown. */
+function getPlannedMealBaseName(meal) {
+    let name = getPlannedMealDisplayName(meal);
+    if (meal?.add_ins?.length) {
+        name = name.replace(/\s*\(add:\s*[^)]*\)\s*$/i, '').trim();
+    }
+    return name;
+}
+
+function buildAddInsHtml(meal) {
+    const addIns = meal?.add_ins || [];
+    if (!addIns.length) return '';
+    const items = addIns.map((a) => {
+        const isHidden = (a.style === 'hidden_veggies')
+            || /hidden|puree|veggie|spinach|carrot|lauki|pumpkin|beet|cauli|methi/i.test(
+                `${a.name || ''} ${a.benefit || ''}`
+            );
+        return `
+            <li class="plan-addin ${isHidden ? 'is-hidden-veggie' : ''}">
+                <strong>${escapeHtml(a.label || a.name || 'Add-in')}</strong>
+                ${a.add_to ? `<span class="plan-addin-to">→ ${escapeHtml(a.add_to)}</span>` : ''}
+                ${a.benefit ? `<em class="plan-addin-benefit">${escapeHtml(a.benefit)}</em>` : ''}
+                ${a.how ? `<span class="plan-addin-how">${escapeHtml(a.how)}</span>` : ''}
+            </li>`;
+    }).join('');
+    const hasHidden = addIns.some((a) => a.style === 'hidden_veggies');
+    const title = hasHidden ? 'Hidden veggie suggestions' : 'Make it more nutritious';
+    return `
+        <div class="plan-addins-block">
+            <p class="plan-addins-title">${title}</p>
+            <ul class="plan-addins">${items}</ul>
+        </div>`;
+}
+
 function isCompactWeeklyPlanView() {
     return window.matchMedia('(max-width: 768px)').matches;
 }
@@ -946,8 +981,9 @@ function renderWeeklyPlan(plan) {
         ].filter(Boolean).join(' ');
 
         const mealRows = orderedMealEntries(day.meals).map(([mealType, meal]) => {
-            const name = getPlannedMealDisplayName(meal) || 'Not planned';
+            const name = getPlannedMealBaseName(meal) || 'Not planned';
             const recipeLinks = buildRecipeLinks(meal, toddlerId);
+            const addIns = buildAddInsHtml(meal);
             return `
                 <div class="day-meal">
                     <div class="day-meal-type">
@@ -955,6 +991,7 @@ function renderWeeklyPlan(plan) {
                         <span>${formatMealType(mealType)}</span>
                     </div>
                     <div class="day-meal-food">${escapeHtml(name)}</div>
+                    ${addIns}
                     ${recipeLinks}
                 </div>`;
         }).join('');
@@ -1223,9 +1260,56 @@ async function loadPreferences(toddlerId) {
     try {
         const data = await apiCall(`/preferences/${toddlerId}`);
         renderPreferences(data);
+        await loadFeedingPreferences(toddlerId);
     } catch (error) {
         console.error('Failed to load preferences:', error);
     }
+}
+
+async function loadFeedingPreferences(toddlerId) {
+    const checkbox = document.getElementById('pref-hidden-veggies');
+    const saveBtn = document.getElementById('save-feeding-prefs');
+    if (!checkbox || !saveBtn) return;
+
+    try {
+        const toddler = await apiCall(`/toddlers/${toddlerId}`);
+        const prefs = toddler.feeding_preferences || {};
+        checkbox.checked = prefs.always_hidden_veggies !== false;
+    } catch (e) {
+        console.warn('Could not load feeding preferences', e);
+    }
+
+    if (saveBtn.dataset.bound) return;
+    saveBtn.dataset.bound = '1';
+    saveBtn.addEventListener('click', async () => {
+        const status = document.getElementById('feeding-pref-status');
+        if (status) {
+            status.hidden = false;
+            status.className = 'feeding-pref-status';
+            status.textContent = 'Saving…';
+        }
+        try {
+            await apiCall(`/toddlers/${toddlerId}`, 'PUT', {
+                feeding_preferences: {
+                    always_hidden_veggies: !!checkbox.checked,
+                },
+            });
+            if (status) {
+                status.className = 'feeding-pref-status is-ok';
+                status.textContent = checkbox.checked
+                    ? 'Saved. Use Log Meal veggie chips so they count toward nutrition — regenerate the plan for add-in tips.'
+                    : 'Saved. Hidden-veggie tips are turned off.';
+            }
+            if (typeof showToast === 'function') {
+                showToast('Cooking habits saved', 'success');
+            }
+        } catch (err) {
+            if (status) {
+                status.className = 'feeding-pref-status is-error';
+                status.textContent = 'Could not save. Please try again.';
+            }
+        }
+    });
 }
 
 function renderPreferences(data) {
@@ -1397,7 +1481,10 @@ async function createToddler(event) {
         activity_level: formData.get('activity_level') || 'moderate',
         health_conditions: healthConditions,
         dietary_preference: formData.get('dietary_preference') || 'vegetarian',
-        allergies: allergies
+        allergies: allergies,
+        feeding_preferences: {
+            always_hidden_veggies: !!form.querySelector('input[name="always_hidden_veggies"]:checked'),
+        },
     };
     
     try {

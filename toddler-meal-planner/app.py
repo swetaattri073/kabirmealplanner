@@ -242,6 +242,11 @@ with app.app_context():
             if 'last_reaction' not in pref_cols:
                 db.session.execute(text('ALTER TABLE food_preferences ADD COLUMN last_reaction VARCHAR(50)'))
                 db.session.commit()
+        if 'toddlers' in insp.get_table_names():
+            toddler_cols = {c['name'] for c in insp.get_columns('toddlers')}
+            if 'feeding_preferences' not in toddler_cols:
+                db.session.execute(text('ALTER TABLE toddlers ADD COLUMN feeding_preferences JSON'))
+                db.session.commit()
     except Exception as e:
         app.logger.warning('Schema patch skipped: %s', e)
     init_food_database(db.session, Food)
@@ -799,6 +804,9 @@ def log_meal_page(toddler_id):
         for _mt, _meal in today_plan['meals'].items():
             _meal['log_components'] = _meal_log_components(_meal)
     
+    always_hidden = toddler.always_hides_veggies()
+    hidden_veggie_options = _hidden_veggie_options_for_toddler(toddler) if always_hidden else []
+
     return render_template(
         'log_meal.html',
         toddler=toddler,
@@ -807,6 +815,8 @@ def log_meal_page(toddler_id):
         foods_data=foods_data,
         today_plan=today_plan,
         logged_by_meal=logged_by_meal,
+        always_hidden_veggies=always_hidden,
+        hidden_veggie_options=hidden_veggie_options,
         meal_order=['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner'],
         meal_labels={
             'breakfast': '🌅 Breakfast',
@@ -896,6 +906,18 @@ def recipes_page(toddler_id):
     # Put highlighted recipe first when present
     if highlight:
         recipes = sorted(recipes, key=lambda r: 0 if r.get('slug') == highlight else 1)
+
+    always_hidden = toddler.always_hides_veggies()
+    if always_hidden:
+        from hidden_veggies import suggestions_for_recipe
+        enriched = []
+        for recipe in recipes:
+            item = dict(recipe)
+            tips = suggestions_for_recipe(recipe, count=2)
+            item['hidden_veggie_tips'] = tips
+            enriched.append(item)
+        recipes = enriched
+
     categories = sorted({r.get('category') for r in list_recipes() if r.get('category')})
     return render_template(
         'recipes.html',
@@ -906,6 +928,7 @@ def recipes_page(toddler_id):
         q=q or '',
         category=category or '',
         highlight=highlight or '',
+        always_hidden_veggies=always_hidden,
     )
 
 
@@ -941,7 +964,8 @@ def create_toddler():
         health_notes=data.get('health_notes'),
         allergies=data.get('allergies', []),
         dietary_preference=data.get('dietary_preference', 'vegetarian'),
-        meal_schedule=data.get('meal_schedule')
+        meal_schedule=data.get('meal_schedule'),
+        feeding_preferences=_normalize_feeding_preferences(data.get('feeding_preferences')),
     )
     
     # Assign ownership
@@ -1012,9 +1036,53 @@ def update_toddler(toddler_id):
         toddler.dietary_preference = data['dietary_preference']
     if 'meal_schedule' in data:
         toddler.meal_schedule = data['meal_schedule']
+    if 'feeding_preferences' in data:
+        toddler.feeding_preferences = _normalize_feeding_preferences(
+            data['feeding_preferences'],
+            existing=toddler.get_feeding_preferences(),
+        )
     
     db.session.commit()
     return jsonify(toddler.to_dict())
+
+
+def _normalize_feeding_preferences(raw, existing=None):
+    """Merge parent cooking habits into a stable dict.
+
+    Hidden veggies stay ON by default unless the parent explicitly turns them off.
+    """
+    base = {
+        'always_hidden_veggies': True,
+    }
+    if isinstance(existing, dict):
+        base.update(existing)
+    # Re-apply default if existing never set the key
+    if 'always_hidden_veggies' not in base:
+        base['always_hidden_veggies'] = True
+    if not isinstance(raw, dict):
+        return base
+    if 'always_hidden_veggies' in raw:
+        base['always_hidden_veggies'] = bool(raw.get('always_hidden_veggies'))
+    return base
+
+
+def _hidden_veggie_options_for_toddler(toddler):
+    """Resolve DB foods for the log-meal hidden-veggies picker."""
+    from hidden_veggies import catalog_for_picker
+    options = []
+    for spec in catalog_for_picker():
+        food = Food.query.filter_by(name=spec['db_name']).first()
+        if not food:
+            continue
+        if food.suitable_from_months and food.suitable_from_months > (toddler.age_months or 0):
+            continue
+        options.append({
+            'id': food.id,
+            'name': food.name,
+            'label': spec['label'],
+            'default_g': spec['default_g'],
+        })
+    return options
 
 
 @app.route('/api/toddlers/<toddler_ref:toddler_id>/health', methods=['PUT'])

@@ -154,6 +154,9 @@ class Toddler(db.Model):
     allergies = db.Column(JSON, default=list)  # List of allergen strings
     dietary_preference = db.Column(db.String(50), default='vegetarian')  # vegetarian, non-vegetarian, eggetarian
     meal_schedule = db.Column(JSON, nullable=True)  # Custom schedule if provided
+    # Parent cooking / serving habits, e.g. {"always_hidden_veggies": true}
+    # Missing always_hidden_veggies is treated as True (on by default).
+    feeding_preferences = db.Column(JSON, default=dict)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -313,6 +316,28 @@ class Toddler(db.Model):
                 'snacks': ['mid_morning_snack', 'evening_snack'],
                 'milk_feeds': 1
             }
+
+    def get_feeding_preferences(self):
+        """Parent cooking/serving habits used by meal planning and tips."""
+        prefs = self.feeding_preferences if isinstance(self.feeding_preferences, dict) else {}
+        # Default ON unless the parent has explicitly turned it off.
+        if 'always_hidden_veggies' not in prefs:
+            always_hidden = True
+        else:
+            always_hidden = bool(prefs.get('always_hidden_veggies'))
+        return {
+            'always_hidden_veggies': always_hidden,
+        }
+
+    def always_hides_veggies(self):
+        """True when the parent prefers to sneak vegetables into most meals (default on)."""
+        return self.get_feeding_preferences().get('always_hidden_veggies', True)
+
+    def set_feeding_preference(self, key, value):
+        prefs = dict(self.get_feeding_preferences())
+        prefs[key] = bool(value) if isinstance(value, bool) else value
+        self.feeding_preferences = prefs
+        return prefs
     
     @property
     def ref(self):
@@ -340,6 +365,7 @@ class Toddler(db.Model):
             'allergies': self.allergies or [],
             'dietary_preference': self.dietary_preference,
             'meal_schedule': self.get_recommended_schedule(),
+            'feeding_preferences': self.get_feeding_preferences(),
             'age_group': self.get_age_group(),
             'calorie_adjustment': self.get_calorie_adjustment(),
             'nutrition_priorities': self.get_nutrition_priorities(),

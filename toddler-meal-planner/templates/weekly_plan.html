@@ -40,8 +40,12 @@
             <p>
                 💡 Plans respect {{ toddler.name }}'s diet
                 (<strong>{{ toddler.dietary_preference or 'vegetarian' }}</strong>
-                {% if toddler.allergies %}and allergies <strong>{{ toddler.allergies | join(', ') }}</strong>{% endif %}.
+                {% if toddler.allergies %}and allergies <strong>{{ toddler.allergies | join(', ') }}</strong>{% endif %}).
+                {% if toddler.always_hides_veggies() %}
+                Hidden-veggie blend-ins are suggested on meals — regenerate after changing Preferences.
+                {% else %}
                 After changing diet or allergies, tap <strong>Regenerate</strong>.
+                {% endif %}
             </p>
         </div>
     </div>
