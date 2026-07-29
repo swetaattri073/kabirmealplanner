@@ -105,6 +105,9 @@
                             (e.g. they refused the first option, then ate something else).
                         </p>
                         <div id="edit-items-{{ meal_type }}" class="meal-items-panel"></div>
+                        {% if always_hidden_veggies and hidden_veggie_options %}
+                        <div class="hidden-veggie-picker" id="hv-edit-{{ meal_type }}" data-meal="{{ meal_type }}" data-mode="edit"></div>
+                        {% endif %}
                         <div class="edit-add-food" style="margin-top:0.75rem;">
                             <label class="form-label">Add another food to this meal</label>
                             <input type="text" class="form-input" id="edit-search-{{ meal_type }}"
@@ -133,6 +136,10 @@
                             Rate <strong>each item</strong> {{ toddler.name }} ate — combos are split into separate foods.
                         </p>
                         <div id="plan-items-{{ meal_type }}" class="meal-items-panel"></div>
+
+                        {% if always_hidden_veggies and hidden_veggie_options %}
+                        <div class="hidden-veggie-picker" id="hv-plan-{{ meal_type }}" data-meal="{{ meal_type }}" data-mode="plan"></div>
+                        {% endif %}
                         
                         <div class="form-group" style="margin: 0.75rem 0;">
                             <label class="form-label">Anything refused / notes? <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
@@ -230,6 +237,10 @@
                         <p id="alt-items-hint-{{ meal_type }}" style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;">
                             No foods selected yet — tap items above. Combos like “Lobia with Roti” split into separate rows.
                         </p>
+
+                        {% if always_hidden_veggies and hidden_veggie_options %}
+                        <div class="hidden-veggie-picker" id="hv-alt-{{ meal_type }}" data-meal="{{ meal_type }}" data-mode="alt"></div>
+                        {% endif %}
                         
                         <button type="button" class="btn btn-primary" style="margin-top:0.75rem;" id="alt-submit-{{ meal_type }}"
                                 onclick='logAlternateMeal({{ toddler.ref|tojson }}, {{ meal_type|tojson }})'>
@@ -396,6 +407,63 @@
     padding: 0.75rem;
     border: 1px dashed var(--border-color);
 }
+.hidden-veggie-picker {
+    margin: 0.85rem 0 0.25rem;
+}
+.hv-picker-inner {
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius-md);
+    background: rgba(107, 143, 60, 0.08);
+    border: 1px solid rgba(107, 143, 60, 0.28);
+}
+.hv-picker-label {
+    margin: 0 0 0.65rem;
+    font-weight: 700;
+    font-size: 0.92rem;
+}
+.hv-picker-label span {
+    display: block;
+    font-weight: 500;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 0.15rem;
+}
+.hv-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+.hv-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1.5px solid var(--border-color);
+    background: #fff;
+    border-radius: 999px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-primary, #1e293b);
+}
+.hv-chip.selected {
+    border-color: var(--primary, #6b8f3c);
+    background: rgba(107, 143, 60, 0.16);
+}
+.hv-chip.already,
+.hv-chip:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.hv-amount {
+    border: none;
+    background: transparent;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--primary-dark, #4a6b2a);
+    cursor: pointer;
+    padding: 0;
+}
 </style>
 
 <script>
@@ -403,12 +471,16 @@ const allFoods = {{ foods_data | tojson }};
 const toddlerAgeMonths = {{ toddler.age_months }};
 const todayPlanMeals = {{ (today_plan.meals if today_plan else {}) | tojson }};
 const loggedByMeal = {{ logged_by_meal | tojson }};
+const alwaysHiddenVeggies = {{ always_hidden_veggies | tojson }};
+const hiddenVeggieOptions = {{ hidden_veggie_options | tojson }};
 const planItemState = {};
 const altItemState = {};
 const editItemState = {};
 const altPhotos = {};
 const editNotesSeed = {};
 const altModeByMeal = {}; // 'append' | 'replace'
+// Selected hidden veggies: key "mode:mealType" -> { [foodId]: grams }
+const hiddenVeggieState = {};
 
 const REACTIONS = [
     { id: 'loved', label: '😍 Loved', short: '😍' },
@@ -434,7 +506,9 @@ function previewNutrientsForItem(item) {
         return { available: false, reason: 'Nutrients updating…' };
     }
     const portion = (item.reaction === 'refused') ? 0 : (item.portion != null ? item.portion : 100);
-    const serving = servingForAge(food, toddlerAgeMonths);
+    const serving = (item.portion_offered_g != null && item.portion_offered_g > 0)
+        ? Number(item.portion_offered_g)
+        : servingForAge(food, toddlerAgeMonths);
     const actualG = serving * (portion / 100);
     const factor = actualG / 100;
     return {
@@ -464,9 +538,18 @@ function nutrientPreviewHtml(item) {
     `;
 }
 
-function mealNutrientTotalHtml(items) {
+function mealNutrientTotalHtml(items, mealType, mode) {
+    let all = items;
+    if (mealType && mode) {
+        all = items.concat(collectHiddenVeggieItems(mealType, mode).map((i) => ({
+            food_id: i.food_id,
+            portion: i.portion_eaten_percent,
+            reaction: i.toddler_reaction,
+            portion_offered_g: i.portion_offered_g,
+        })));
+    }
     let kcal = 0, protein = 0, iron = 0, calcium = 0, any = false;
-    items.forEach((item) => {
+    all.forEach((item) => {
         const n = previewNutrientsForItem(item);
         if (!n.available) return;
         any = true;
@@ -490,6 +573,11 @@ function escapeHtml(str) {
 document.addEventListener('DOMContentLoaded', function() {
     Object.keys(todayPlanMeals).forEach(initPlanItems);
     Object.keys(loggedByMeal).forEach(initEditItems);
+    if (alwaysHiddenVeggies && hiddenVeggieOptions.length) {
+        document.querySelectorAll('.hidden-veggie-picker').forEach((el) => {
+            renderHiddenVeggiePicker(el.dataset.meal, el.dataset.mode);
+        });
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const mealType = urlParams.get('meal');
     if (mealType) {
@@ -503,6 +591,113 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+function hvStateKey(mealType, mode) {
+    return `${mode}:${mealType}`;
+}
+
+function getHiddenVeggieMap(mealType, mode) {
+    const key = hvStateKey(mealType, mode);
+    if (!hiddenVeggieState[key]) hiddenVeggieState[key] = {};
+    return hiddenVeggieState[key];
+}
+
+function clearHiddenVeggieSelections(mealType, mode) {
+    hiddenVeggieState[hvStateKey(mealType, mode)] = {};
+    renderHiddenVeggiePicker(mealType, mode);
+}
+
+function alreadyLoggedFoodIds(mealType, mode) {
+    const ids = new Set();
+    getItemState(mealType, mode).forEach((i) => {
+        if (i.food_id) ids.add(Number(i.food_id));
+    });
+    if (mode === 'alt' && altModeByMeal[mealType] === 'append') {
+        (loggedByMeal[mealType] || []).forEach((l) => {
+            if (l.food_id) ids.add(Number(l.food_id));
+        });
+    }
+    return ids;
+}
+
+function renderHiddenVeggiePicker(mealType, mode) {
+    if (!alwaysHiddenVeggies || !hiddenVeggieOptions.length) return;
+    const el = document.getElementById(`hv-${mode}-${mealType}`);
+    if (!el) return;
+    const selected = getHiddenVeggieMap(mealType, mode);
+    const already = alreadyLoggedFoodIds(mealType, mode);
+    const chips = hiddenVeggieOptions.map((opt) => {
+        const id = Number(opt.id);
+        const isDup = already.has(id);
+        const isOn = Object.prototype.hasOwnProperty.call(selected, id) || Object.prototype.hasOwnProperty.call(selected, String(id));
+        const grams = selected[id] ?? selected[String(id)] ?? opt.default_g ?? 15;
+        const tbsp = grams >= 25 ? 2 : 1;
+        return `
+            <button type="button"
+                class="hv-chip ${isOn ? 'selected' : ''} ${isDup ? 'already' : ''}"
+                ${isDup ? 'disabled title="Already in this meal"' : ''}
+                onclick="toggleHiddenVeggie('${mealType}', '${mode}', ${id})">
+                <span>${escapeHtml(opt.label || opt.name)}</span>
+                ${isOn && !isDup ? `
+                    <select class="hv-amount" onclick="event.stopPropagation()"
+                            onchange="setHiddenVeggieAmount('${mealType}', '${mode}', ${id}, parseInt(this.value, 10))">
+                        <option value="15" ${tbsp === 1 ? 'selected' : ''}>1 tbsp</option>
+                        <option value="30" ${tbsp === 2 ? 'selected' : ''}>2 tbsp</option>
+                    </select>
+                ` : ''}
+            </button>`;
+    }).join('');
+    el.innerHTML = `
+        <div class="hv-picker-inner">
+            <p class="hv-picker-label">Hidden veggies added? <span>Counts toward nutrition (~1–2 tbsp)</span></p>
+            <div class="hv-chip-row">${chips}</div>
+        </div>`;
+}
+
+function toggleHiddenVeggie(mealType, mode, foodId) {
+    const map = getHiddenVeggieMap(mealType, mode);
+    const id = Number(foodId);
+    if (alreadyLoggedFoodIds(mealType, mode).has(id)) {
+        showToast('That veggie is already in this meal', 'error');
+        return;
+    }
+    if (Object.prototype.hasOwnProperty.call(map, id) || Object.prototype.hasOwnProperty.call(map, String(id))) {
+        delete map[id];
+        delete map[String(id)];
+    } else {
+        const opt = hiddenVeggieOptions.find((o) => Number(o.id) === id);
+        map[id] = opt?.default_g || 15;
+    }
+    renderItemRows(mealType, mode);
+}
+
+function setHiddenVeggieAmount(mealType, mode, foodId, grams) {
+    const map = getHiddenVeggieMap(mealType, mode);
+    map[Number(foodId)] = grams > 0 ? grams : 15;
+    renderItemRows(mealType, mode);
+}
+
+function collectHiddenVeggieItems(mealType, mode) {
+    const map = getHiddenVeggieMap(mealType, mode);
+    const already = alreadyLoggedFoodIds(mealType, mode);
+    const items = [];
+    Object.keys(map).forEach((key) => {
+        const id = Number(key);
+        if (!id || already.has(id)) return;
+        const opt = hiddenVeggieOptions.find((o) => Number(o.id) === id);
+        if (!opt) return;
+        const grams = Number(map[key]) || opt.default_g || 15;
+        items.push({
+            food_id: id,
+            name: opt.name,
+            custom_food_name: null,
+            portion_eaten_percent: 100,
+            toddler_reaction: 'liked',
+            portion_offered_g: grams,
+        });
+    });
+    return items;
+}
 
 function resolveFoodByName(name) {
     const n = (name || '').toLowerCase().trim();
@@ -587,13 +782,15 @@ function renderItemRows(mealType, mode) {
     if (!container) return;
     const items = getItemState(mealType, mode);
     if (!items.length) {
-        container.innerHTML = mode === 'edit'
+        const emptyMsg = mode === 'edit'
             ? '<p style="color:var(--text-muted);font-size:0.9rem;">No items left — save to clear this meal log, or cancel.</p>'
             : (mode === 'plan'
                 ? '<p style="color:var(--text-muted);font-size:0.9rem;">No planned items found.</p>'
                 : '');
+        container.innerHTML = emptyMsg + mealNutrientTotalHtml([], mealType, mode);
         const hint = document.getElementById('alt-items-hint-' + mealType);
         if (hint) hint.style.display = mode === 'alt' ? 'block' : 'none';
+        renderHiddenVeggiePicker(mealType, mode);
         return;
     }
     const hint = document.getElementById('alt-items-hint-' + mealType);
@@ -618,7 +815,8 @@ function renderItemRows(mealType, mode) {
             <div class="reaction-buttons compact">${reactionBtns}</div>
             ${canRemove ? `<button type="button" class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="removeItemRow('${mealType}', '${mode}', ${idx})">Remove</button>` : ''}
         </div>`;
-    }).join('') + mealNutrientTotalHtml(items);
+    }).join('') + mealNutrientTotalHtml(items, mealType, mode);
+    renderHiddenVeggiePicker(mealType, mode);
 }
 
 function removeItemRow(mealType, mode, idx) {
@@ -643,6 +841,7 @@ function showEditLoggedMeal(mealType) {
         edit.style.display = 'block';
         // Reset from original logs each time edit opens
         initEditItems(mealType);
+        clearHiddenVeggieSelections(mealType, 'edit');
         const notes = document.getElementById('edit-notes-' + mealType);
         if (notes) notes.value = editNotesSeed[mealType] || '';
         renderItemRows(mealType, 'edit');
@@ -763,10 +962,24 @@ async function saveEditedMealLogs(toddlerId, mealType) {
 
     if (!items.length) {
         try {
+            const hiddenOnly = collectHiddenVeggieItems(mealType, 'edit');
+            if (!hiddenOnly.length) {
+                for (const log of original) {
+                    await apiCall('/meal-logs/' + log.id, 'DELETE');
+                }
+                showToast('Cleared logged meal', 'success');
+                setTimeout(() => location.reload(), 700);
+                return;
+            }
             for (const log of original) {
                 await apiCall('/meal-logs/' + log.id, 'DELETE');
             }
-            showToast('Cleared logged meal', 'success');
+            await submitMealLogs(toddlerId, mealType, hiddenOnly, {
+                notes: notes || 'Hidden veggies only',
+                update_plan: false,
+                replace_existing: false,
+            });
+            showToast('Updated logged meal', 'success');
             setTimeout(() => location.reload(), 700);
         } catch (e) {
             console.error(e);
@@ -784,6 +997,7 @@ async function saveEditedMealLogs(toddlerId, mealType) {
     const newItems = items.filter(i => !i.log_id);
     const keepIds = new Set(existingItems.map(i => i.log_id));
     const toDelete = original.filter(l => !keepIds.has(l.id));
+    const hiddenExtras = collectHiddenVeggieItems(mealType, 'edit');
 
     try {
         for (const log of toDelete) {
@@ -800,14 +1014,16 @@ async function saveEditedMealLogs(toddlerId, mealType) {
                 })),
             });
         }
-        if (newItems.length) {
-            await submitMealLogs(toddlerId, mealType, newItems.map(i => ({
-                food_id: i.food_id,
-                custom_food_name: i.custom_food_name || (!i.food_id ? i.name : null),
-                name: i.name,
-                portion_eaten_percent: i.portion,
-                toddler_reaction: i.reaction,
-            })), {
+        const toCreate = newItems.map(i => ({
+            food_id: i.food_id,
+            custom_food_name: i.custom_food_name || (!i.food_id ? i.name : null),
+            name: i.name,
+            portion_eaten_percent: i.portion,
+            toddler_reaction: i.reaction,
+            portion_offered_g: i.portion_offered_g,
+        })).concat(hiddenExtras);
+        if (toCreate.length) {
+            await submitMealLogs(toddlerId, mealType, toCreate, {
                 notes: notes || 'Added while editing meal',
                 update_plan: false,
                 replace_existing: false,
@@ -911,13 +1127,15 @@ function collectItemsFromState(mealType, mode) {
         showToast('Please set a reaction for each food (' + missing.map(m => m.name).join(', ') + ')', 'error');
         return null;
     }
-    return items.map(i => ({
+    const base = items.map(i => ({
         food_id: i.food_id,
         custom_food_name: i.custom_food_name || (!i.food_id ? i.name : null),
         name: i.name,
         portion_eaten_percent: i.portion,
         toddler_reaction: i.reaction,
+        portion_offered_g: i.portion_offered_g != null ? i.portion_offered_g : undefined,
     }));
+    return base.concat(collectHiddenVeggieItems(mealType, mode));
 }
 
 async function submitMealLogs(toddlerId, mealType, items, options) {
@@ -985,6 +1203,7 @@ function showAlternateForm(mealType, mode) {
         }
         altItemState[mealType] = [];
         renderItemRows(mealType, 'alt');
+        clearHiddenVeggieSelections(mealType, 'alt');
         switchAltTab(mealType, 'search');
         filterAltFoods(mealType, '');
     }

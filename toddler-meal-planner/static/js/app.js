@@ -1120,7 +1120,7 @@ async function loadFeedingPreferences(toddlerId) {
             if (status) {
                 status.className = 'feeding-pref-status is-ok';
                 status.textContent = checkbox.checked
-                    ? 'Saved. Regenerating your weekly plan will include hidden-veggie add-ins.'
+                    ? 'Saved. Use Log Meal veggie chips so they count toward nutrition — regenerate the plan for add-in tips.'
                     : 'Saved. Hidden-veggie tips are turned off.';
             }
             if (typeof showToast === 'function') {

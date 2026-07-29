@@ -803,6 +803,9 @@ def log_meal_page(toddler_id):
         for _mt, _meal in today_plan['meals'].items():
             _meal['log_components'] = _meal_log_components(_meal)
     
+    always_hidden = toddler.always_hides_veggies()
+    hidden_veggie_options = _hidden_veggie_options_for_toddler(toddler) if always_hidden else []
+
     return render_template(
         'log_meal.html',
         toddler=toddler,
@@ -811,6 +814,8 @@ def log_meal_page(toddler_id):
         foods_data=foods_data,
         today_plan=today_plan,
         logged_by_meal=logged_by_meal,
+        always_hidden_veggies=always_hidden,
+        hidden_veggie_options=hidden_veggie_options,
         meal_order=['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner'],
         meal_labels={
             'breakfast': '🌅 Breakfast',
@@ -1011,6 +1016,36 @@ def _normalize_feeding_preferences(raw, existing=None):
     if 'always_hidden_veggies' in raw:
         base['always_hidden_veggies'] = bool(raw.get('always_hidden_veggies'))
     return base
+
+
+# Foods parents commonly blend into dal/roti/khichdi when "always hide veggies" is on.
+# default_g ≈ 1 tbsp puree; 2 tbsp uses 2× that on the log-meal picker.
+_HIDDEN_VEGGIE_PICKER = (
+    {'db_name': 'Carrot', 'label': 'Carrot', 'default_g': 15},
+    {'db_name': 'Spinach/Palak', 'label': 'Spinach', 'default_g': 15},
+    {'db_name': 'Bottle Gourd/Lauki', 'label': 'Lauki', 'default_g': 15},
+    {'db_name': 'Pumpkin', 'label': 'Pumpkin', 'default_g': 15},
+    {'db_name': 'Beetroot', 'label': 'Beetroot', 'default_g': 15},
+    {'db_name': 'Cauliflower', 'label': 'Cauliflower', 'default_g': 15},
+)
+
+
+def _hidden_veggie_options_for_toddler(toddler):
+    """Resolve DB foods for the log-meal hidden-veggies picker."""
+    options = []
+    for spec in _HIDDEN_VEGGIE_PICKER:
+        food = Food.query.filter_by(name=spec['db_name']).first()
+        if not food:
+            continue
+        if food.suitable_from_months and food.suitable_from_months > (toddler.age_months or 0):
+            continue
+        options.append({
+            'id': food.id,
+            'name': food.name,
+            'label': spec['label'],
+            'default_g': spec['default_g'],
+        })
+    return options
 
 
 @app.route('/api/toddlers/<toddler_ref:toddler_id>/health', methods=['PUT'])
