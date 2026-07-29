@@ -125,8 +125,12 @@ function renderNutritionStatus(nutrition, toddlerId) {
     const container = document.getElementById('nutrition-grid');
     if (!container) return;
     
-    const priorityNutrients = ['calories', 'protein_g', 'iron_mg', 'calcium_mg', 'vitamin_a_mcg', 'vitamin_c_mg'];
+    const priorityNutrients = [
+        'calories', 'protein_g', 'iron_mg', 'calcium_mg',
+        'omega3_mg', 'vitamin_a_mcg', 'vitamin_c_mg', 'vitamin_d_mcg',
+    ];
     const tid = toddlerId || document.body.dataset.toddlerId;
+    const tidJs = tid != null ? JSON.stringify(String(tid)) : 'null';
     
     let html = '';
     priorityNutrients.forEach(key => {
@@ -136,10 +140,11 @@ function renderNutritionStatus(nutrition, toddlerId) {
         const percentage = Math.min(nutrient.percentage, 150);
         const statusClass = nutrient.status;
         const info = nutrient.info || {};
+        const examplesHtml = renderIncludeExamples(nutrient);
         
         html += `
             <button type="button" class="nutrient-card nutrient-card-btn"
-                    onclick="openNutritionBreakdown(${tid ? Number(tid) : 'null'}, '${key}')"
+                    onclick="openNutritionBreakdown(${tidJs}, '${key}')"
                     aria-label="View ${info.name || key} breakdown">
                 <div class="nutrient-header">
                     <span class="nutrient-icon">${info.icon || '📊'}</span>
@@ -152,11 +157,30 @@ function renderNutritionStatus(nutrition, toddlerId) {
                     <span>${nutrient.actual} ${info.unit || ''}</span>
                     <span>${nutrient.percentage}% of RDA</span>
                 </div>
+                ${examplesHtml}
             </button>
         `;
     });
     
     container.innerHTML = html || '<p class="nutrition-hint">No nutrition data yet — log a meal to see totals.</p>';
+}
+
+function renderIncludeExamples(nutrient) {
+    const examples = nutrient?.include_examples || [];
+    if (!examples.length || !['low', 'moderate'].includes(nutrient.status)) {
+        return '';
+    }
+    const names = examples.slice(0, 4).map((f) => escapeHtml(f.name)).join(', ');
+    const tip = nutrient.include_tip
+        ? `<div class="nutrient-include-tip">${escapeHtml(nutrient.include_tip)}</div>`
+        : '';
+    return `
+        <div class="nutrient-include">
+            <div class="nutrient-include-label">Try including</div>
+            <div class="nutrient-include-foods">${names}</div>
+            ${tip}
+        </div>
+    `;
 }
 
 function formatMealTypeLabel(mealType) {
@@ -227,7 +251,10 @@ function renderNutritionBreakdownModal(data, focusNutrient) {
     if (!body) return;
 
     const info = data.nutrient_info || {};
-    const priority = ['calories', 'protein_g', 'iron_mg', 'calcium_mg', 'vitamin_a_mcg', 'vitamin_c_mg', 'fat_g', 'fiber_g', 'zinc_mg', 'vitamin_d_mcg'];
+    const priority = [
+        'calories', 'protein_g', 'iron_mg', 'calcium_mg', 'omega3_mg',
+        'vitamin_a_mcg', 'vitamin_c_mg', 'fat_g', 'fiber_g', 'zinc_mg', 'vitamin_d_mcg',
+    ];
     const keys = priority.filter((k) => info[k] || (data.nutrition && data.nutrition[k]));
     const active = focusNutrient && keys.includes(focusNutrient) ? focusNutrient : null;
 
@@ -257,10 +284,12 @@ function renderNutritionBreakdownModal(data, focusNutrient) {
     if (active) {
         const meta = info[active] || {};
         const total = data.nutrition?.[active];
+        const examplesHtml = total ? renderIncludeExamples(total) : '';
         html += `
             <div class="nutrition-focus-summary">
                 <strong>${meta.icon || ''} ${meta.name || active}</strong>
                 <span>${total ? `${total.actual} ${meta.unit || ''} · ${total.percentage}% of RDA` : '—'}</span>
+                ${examplesHtml}
             </div>
         `;
         const contrib = [];
@@ -404,20 +433,28 @@ function renderAlerts(alerts) {
     
     let html = '';
     alerts.forEach(alert => {
+        const foods = alert.recommended_foods || [];
+        const tips = alert.all_tips || (alert.recommendation ? [alert.recommendation] : []);
         html += `
             <div class="alert ${alert.severity}">
                 <div class="alert-icon">
                     ${alert.severity === 'critical' ? '⚠️' : alert.severity === 'warning' ? '⚡' : 'ℹ️'}
                 </div>
                 <div class="alert-content">
-                    <h4>${alert.icon || ''} ${alert.nutrient_name || alert.type}</h4>
-                    <p>${alert.message}</p>
-                    ${alert.recommended_foods?.length > 0 ? `
+                    <h4>${alert.icon || ''} ${escapeHtml(alert.nutrient_name || alert.type)}</h4>
+                    <p>${escapeHtml(alert.message || '')}</p>
+                    ${foods.length ? `
+                        <p class="alert-include-label"><strong>Try including:</strong></p>
                         <div class="alert-foods">
-                            ${alert.recommended_foods.map(f => `
-                                <span class="food-chip">${f.name}</span>
+                            ${foods.map(f => `
+                                <span class="food-chip">${escapeHtml(f.name)}${f.name_hindi ? ` (${escapeHtml(f.name_hindi)})` : ''}</span>
                             `).join('')}
                         </div>
+                    ` : ''}
+                    ${tips.length ? `
+                        <ul class="alert-tips">
+                            ${tips.slice(0, 3).map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+                        </ul>
                     ` : ''}
                 </div>
             </div>
@@ -1007,6 +1044,91 @@ async function regenerateWeeklyPlan(toddlerId) {
 
 // ==================== Nutrition Page Functions ====================
 
+let selectedMilkReaction = 'liked';
+
+function selectMilkOption(btn) {
+    if (!btn) return;
+    document.querySelectorAll('.milk-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const serving = parseInt(btn.dataset.serving || '100', 10);
+    if (serving) setMilkAmount(serving);
+    const hint = document.getElementById('milk-hint');
+    if (hint && btn.dataset.disabled === '1') {
+        hint.textContent = 'Usually introduced later — you can still log if already started';
+    } else if (hint) {
+        hint.textContent = 'Counts as a snack feed · omega-3 included in totals';
+    }
+}
+
+function setMilkAmount(ml) {
+    const input = document.getElementById('milk-amount-ml');
+    if (input) input.value = String(ml);
+}
+
+function selectMilkReaction(btn) {
+    if (!btn) return;
+    selectedMilkReaction = btn.dataset.reaction || 'liked';
+    document.querySelectorAll('#milk-reaction-btns .reaction-btn').forEach(b => {
+        b.classList.toggle('selected', b === btn);
+    });
+}
+
+function defaultMilkMealType() {
+    const hour = new Date().getHours();
+    if (hour < 11) return 'mid_morning_snack';
+    if (hour < 16) return 'lunch';
+    return 'evening_snack';
+}
+
+async function logMilkFeed(toddlerId) {
+    const tid = toddlerId || document.body.dataset.toddlerId;
+    const active = document.querySelector('.milk-type-btn.active');
+    const amountInput = document.getElementById('milk-amount-ml');
+    const btn = document.getElementById('milk-log-btn');
+    if (!tid || !active) {
+        showToast('Pick a milk type first', 'error');
+        return;
+    }
+    const foodId = parseInt(active.dataset.foodId, 10);
+    const ml = parseInt(amountInput?.value || '100', 10);
+    if (!foodId || !ml || ml < 20) {
+        showToast('Enter at least 20 ml', 'error');
+        return;
+    }
+    const reaction = selectedMilkReaction || 'liked';
+    const portion = reaction === 'refused' ? 0 : 100;
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+    }
+    try {
+        await apiCall('/meal-logs', 'POST', {
+            toddler_id: tid,
+            meal_type: defaultMilkMealType(),
+            items: [{
+                food_id: foodId,
+                portion_offered_g: ml,
+                portion_eaten_percent: portion,
+                toddler_reaction: reaction,
+            }],
+            date: localDateISO(),
+            notes: `Milk feed · ${ml} ml`,
+            update_plan: false,
+            replace_existing: false,
+        });
+        showToast(`Added ${ml} ml to today’s nutrition`, 'success');
+        await loadWeeklyNutrition(tid);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = btn.dataset.originalHtml || '<i class="fas fa-plus"></i> Add to today’s nutrition';
+        }
+    }
+}
+
 async function loadWeeklyNutrition(toddlerId) {
     try {
         const daily = await apiCall(`/nutrition/daily/${toddlerId}`);
@@ -1055,6 +1177,7 @@ function renderWeeklyNutrition(data) {
     nutrients.forEach(([key, nutrient]) => {
         const percentage = Math.min(nutrient.percentage, 150);
         const info = nutrient.info || {};
+        const examplesHtml = renderIncludeExamples(nutrient);
         
         html += `
             <div class="nutrient-card">
@@ -1069,6 +1192,7 @@ function renderWeeklyNutrition(data) {
                     <span>Avg: ${nutrient.daily_average} ${info.unit || ''}/day</span>
                     <span>${nutrient.percentage}%</span>
                 </div>
+                ${examplesHtml}
             </div>
         `;
     });
