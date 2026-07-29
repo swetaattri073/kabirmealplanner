@@ -28,5 +28,12 @@
   "android": {
     "allowMixedContent": true,
     "backgroundColor": "#fffaf0"
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#fffaf0",
+    "preferredContentMode": "mobile",
+    "scrollEnabled": true,
+    "allowsLinkPreview": false
   }
 }

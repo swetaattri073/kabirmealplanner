@@ -17,6 +17,16 @@ android/.idea/
 *.keystore
 *.jks
 
+# iOS / Xcode
+ios/App/Pods/
+ios/App/build/
+ios/App/output/
+ios/App/App/public/
+ios/DerivedData/
+ios/**/xcuserdata/
+*.xcuserstate
+*.ipa
+
 # OS / editor
 .DS_Store
 .idea/

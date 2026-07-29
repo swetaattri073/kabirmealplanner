@@ -13,11 +13,15 @@
 | AWS App Runner | ⭐⭐ Medium | $5-15/mo | 20 min |
 | AWS EC2 | ⭐⭐⭐ Advanced | $0-10/mo | 30 min |
 
-After the web app is live, build the **Android APK** from [`android-app/`](android-app/):
+After the web app is live, build the **native apps** from [`android-app/`](android-app/) (Android + iOS Capacitor shell):
 
 ```bash
-cd android-app && npm install && npm run sync && npm run build:debug
+cd android-app && npm install && npm run sync && npm run verify:ios
+# Android APK:
+npm run build:debug
 # Install: adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+# iOS (macOS + Xcode):
+npm run open:ios
 ```
 
 On first launch, enter your server URL. Details: [`android-app/README.md`](android-app/README.md).

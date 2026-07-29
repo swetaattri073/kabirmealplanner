@@ -12,9 +12,12 @@ if (config.server && config.server.url) {
   console.warn('server.url =', config.server.url);
 }
 
-console.log('OK — Android shell uses local setup screen.');
+console.log('OK — Capacitor shell uses local setup screen (Android + iOS).');
 if (hasBaked) {
   console.log('Default server is baked into www/config.js');
 } else {
   console.log('No baked default — users enter the server URL on first launch.');
+}
+if (!(config.server && Array.isArray(config.server.allowNavigation))) {
+  console.warn('Warning: server.allowNavigation missing — plugins may break after redirect.');
 }

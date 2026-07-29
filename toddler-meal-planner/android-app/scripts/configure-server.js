@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Optionally bake a default server URL into the Android shell.
+ * Optionally bake a default server URL into the Capacitor shell (Android + iOS).
  * The app also lets you enter/change the URL on first launch.
  *
  * Usage:
@@ -49,9 +49,14 @@ if (!serverUrl) {
 }
 
 // Keep Capacitor loading local www (setup + redirect). Do not set server.url,
-// or the in-app setup screen would be skipped.
+// or the in-app setup screen would be skipped. Preserve allowNavigation/cleartext.
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-if (config.server) delete config.server;
+config.server = {
+  ...(config.server || {}),
+  allowNavigation: (config.server && config.server.allowNavigation) || ['*'],
+  cleartext: true,
+};
+delete config.server.url;
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
 
 fs.writeFileSync(
@@ -62,9 +67,9 @@ fs.writeFileSync(
 
 fs.writeFileSync(
   envPath,
-  `# LittleBowl Android shell\nSERVER_URL=${serverUrl}\n`
+  `# LittleBowl native shell (Android + iOS)\nSERVER_URL=${serverUrl}\n`
 );
 
 console.log(`Baked default server URL → ${serverUrl}`);
 console.log('The app still shows setup if no URL has been saved on the device.');
-console.log('Next: npm run sync');
+console.log('Next: npm run sync   (or npm run sync:ios / sync:android)');
