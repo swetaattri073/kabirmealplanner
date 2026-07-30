@@ -2,7 +2,8 @@
  * LittleBowl notifications — meal log reminders + nutrition alerts.
  *
  * Defaults: notifications ON (meal reminders + nutrition alerts).
- * Android: Capacitor Local Notifications. Web/PWA: Notification API fallback.
+ * Native (Android + iOS): Capacitor Local Notifications.
+ * Web/PWA: Notification API fallback.
  */
 (function (global) {
   const PREF_KEY = 'littlebowl_notify_prefs_v2';
@@ -213,6 +214,7 @@
           repeats: true,
           allowWhileIdle: true,
         },
+        sound: 'default',
         channelId: 'meal-reminders',
         smallIcon: 'ic_stat_littlebowl',
         extra: {
@@ -319,6 +321,7 @@
           title,
           body,
           schedule: { at: new Date(Date.now() + 1500) },
+          sound: 'default',
           channelId: 'nutrition-alerts',
           smallIcon: 'ic_stat_littlebowl',
           extra: {
@@ -531,6 +534,7 @@
           title,
           body,
           schedule: { at: new Date(Date.now() + 1000) },
+          sound: 'default',
           channelId: 'meal-reminders',
           smallIcon: 'ic_stat_littlebowl',
           extra: { type: 'test', toddlerRef: prefs.toddlerRef },
@@ -570,7 +574,7 @@
           <div class="notify-hero-text">
             <p class="notify-lead">
               ${native
-                ? 'Meal log reminders and nutrition alerts are <strong>on by default</strong> for this Android app.'
+                ? 'Meal log reminders and nutrition alerts are <strong>on by default</strong> in the LittleBowl app.'
                 : 'Meal log reminders and nutrition alerts are <strong>on by default</strong>. Allow browser notifications to receive them.'}
             </p>
           </div>
