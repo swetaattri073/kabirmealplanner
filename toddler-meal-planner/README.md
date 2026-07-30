@@ -121,9 +121,9 @@ More hosts (Render, App Runner, Fly): see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Native apps (Android + iOS)
 
-LittleBowl ships with a Capacitor shell under [`android-app/`](android-app/) for
-**Android and iOS**. Install the app, enter your server URL on first launch, and
-use the full product (icon, camera for meal photos, local notifications).
+Official LittleBowl apps under [`android-app/`](android-app/) open **http://littlebowl.in/home**
+directly (no server-URL prompt, no marketing landing). Splash, status bar, local
+notifications, and camera are native; the product UI is the LittleBowl app experience.
 
 ```bash
 cd android-app
@@ -132,14 +132,11 @@ npm run sync
 npm run verify:ios
 npm run open:android          # Android Studio → Run
 npm run open:ios              # Xcode on macOS → Run
-# or Android APK: npm run build:debug
 ```
 
-Optional: `npm run configure -- https://YOUR_SERVER` to prefill the URL.
+Details: [`android-app/README.md`](android-app/README.md).
 
-Full build / Play Store / App Store steps: [`android-app/README.md`](android-app/README.md).
-
-Users can also **Add to Home Screen** from Chrome/Safari (existing PWA).
+You can still use the website / PWA in a browser.
 
 ---
 

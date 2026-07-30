@@ -2,10 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="End mealtime battles! AI-powered meal planner for Indian toddlers. Personalized, nutritious meals your picky eater will love.">
     <title>LittleBowl - End Mealtime Battles Forever</title>
     {% include 'includes/pwa_head.html' %}
+    <script>
+      // Native apps should never sit on the marketing site — jump to app entry.
+      (function () {
+        try {
+          if (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+            window.location.replace('/home');
+          }
+        } catch (e) { /* stay on landing */ }
+      })();
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -1477,6 +1487,7 @@
             }
         }
     </script>
+    <script src="{{ url_for('static', filename='js/native-app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/a2hs-prompt.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/analytics.js') }}" defer></script>
 </body>

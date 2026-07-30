@@ -13,10 +13,10 @@
 | AWS App Runner | ⭐⭐ Medium | $5-15/mo | 20 min |
 | AWS EC2 | ⭐⭐⭐ Advanced | $0-10/mo | 30 min |
 
-After the web app is live, build the **native apps** from [`android-app/`](android-app/) (Android + iOS Capacitor shell):
+After the web app is live at **http://littlebowl.in**, build the **native apps** from [`android-app/`](android-app/):
 
 ```bash
-cd android-app && npm install && npm run sync && npm run verify:ios
+cd android-app && npm install && npm run sync && npm run verify && npm run verify:ios
 # Android APK:
 npm run build:debug
 # Install: adb install -r android/app/build/outputs/apk/debug/app-debug.apk
@@ -24,7 +24,7 @@ npm run build:debug
 npm run open:ios
 ```
 
-On first launch, enter your server URL. Details: [`android-app/README.md`](android-app/README.md).
+Apps open `http://littlebowl.in/home` (product entry, not the marketing site) with no URL setup screen. Details: [`android-app/README.md`](android-app/README.md).
 
 ---
 

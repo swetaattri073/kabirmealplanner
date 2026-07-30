@@ -2,18 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#6b8f3c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>LittleBowl</title>
   <style>
     :root {
       --bg: #fffaf0;
       --green: #6b8f3c;
-      --green-dark: #54732f;
       --ink: #2c3a1f;
       --muted: #6b7a5a;
-      --line: #d7e0c8;
-      --danger: #b45309;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -24,250 +22,84 @@
         radial-gradient(ellipse 120% 80% at 50% -10%, #eef5dc 0%, transparent 55%),
         linear-gradient(180deg, #fffaf0 0%, #f5efe0 100%);
       color: var(--ink);
+      -webkit-user-select: none;
+      user-select: none;
+      overscroll-behavior: none;
     }
     main {
       min-height: 100dvh;
+      min-height: 100svh;
       display: grid;
       place-items: center;
-      padding: 1.5rem 1.15rem 2rem;
+      padding: 1.5rem;
+      padding-top: max(1.5rem, env(safe-area-inset-top));
+      padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
     }
-    .card {
-      width: min(100%, 26rem);
-      text-align: center;
-    }
+    .card { text-align: center; max-width: 18rem; }
     .mark {
-      width: 88px;
-      height: 88px;
-      margin: 0 auto 1rem;
-      border-radius: 22px;
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 1.1rem;
+      border-radius: 24px;
       background: linear-gradient(145deg, #6b8f3c, #8fb85a);
-      display: grid;
-      place-items: center;
-      box-shadow: 0 12px 28px rgba(107, 143, 60, 0.28);
-      font-size: 2.35rem;
+      box-shadow: 0 14px 32px rgba(107, 143, 60, 0.3);
+      position: relative;
+    }
+    .mark::after {
+      content: "";
+      position: absolute;
+      inset: 28% 22% 22%;
+      border: 3px solid rgba(255, 250, 240, 0.95);
+      border-radius: 0 0 48% 48%;
+      border-top: none;
     }
     h1 {
-      margin: 0 0 0.35rem;
-      font-size: 1.85rem;
+      margin: 0 0 0.4rem;
+      font-size: 1.9rem;
       letter-spacing: -0.02em;
     }
-    .tagline {
-      margin: 0 0 1.35rem;
+    h1 .little { color: var(--green); }
+    h1 .bowl { color: #f97316; }
+    p {
+      margin: 0;
       color: var(--muted);
       line-height: 1.45;
       font-size: 0.98rem;
+      font-weight: 600;
     }
-    label {
-      display: block;
-      text-align: left;
-      font-size: 0.85rem;
-      font-weight: 700;
-      margin-bottom: 0.4rem;
-      color: var(--ink);
+    .spinner {
+      width: 28px;
+      height: 28px;
+      margin: 1.35rem auto 0;
+      border: 3px solid rgba(107, 143, 60, 0.2);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
     }
-    input[type="url"] {
-      width: 100%;
-      border: 1.5px solid var(--line);
-      border-radius: 12px;
-      padding: 0.85rem 0.95rem;
-      font: inherit;
-      font-size: 1rem;
-      background: #fff;
-      color: var(--ink);
-      outline: none;
-    }
-    input[type="url"]:focus {
-      border-color: var(--green);
-      box-shadow: 0 0 0 3px rgba(107, 143, 60, 0.18);
-    }
-    .actions {
-      display: grid;
-      gap: 0.65rem;
-      margin-top: 1rem;
-    }
-    button {
-      appearance: none;
-      border: 0;
-      border-radius: 12px;
-      padding: 0.9rem 1rem;
-      font: inherit;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .primary {
-      background: var(--green);
-      color: #fff;
-    }
-    .primary:active { background: var(--green-dark); }
-    .ghost {
-      background: transparent;
-      color: var(--muted);
-      font-weight: 700;
-      font-size: 0.9rem;
-    }
-    .error {
-      display: none;
-      margin-top: 0.75rem;
-      color: var(--danger);
-      font-size: 0.9rem;
-      text-align: left;
-    }
-    .error.show { display: block; }
-    .hint {
-      margin-top: 1.1rem;
-      font-size: 0.82rem;
-      color: var(--muted);
-      line-height: 1.4;
-      text-align: left;
-    }
-    .loading {
-      display: none;
-      margin-top: 0.85rem;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
-    .loading.show { display: block; }
-    code {
-      font-size: 0.8rem;
-      background: rgba(107, 143, 60, 0.12);
-      color: var(--green-dark);
-      padding: 0.1rem 0.35rem;
-      border-radius: 5px;
-      word-break: break-all;
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
   <script src="./config.js"></script>
 </head>
 <body>
   <main>
-    <div class="card" id="setup">
-      <div class="mark" aria-hidden="true">🥗</div>
-      <h1>LittleBowl</h1>
-      <p class="tagline">Enter the address of your LittleBowl server to open the app.</p>
-
-      <form id="setup-form" novalidate>
-        <label for="server-url">Server URL</label>
-        <input
-          id="server-url"
-          type="url"
-          inputmode="url"
-          autocomplete="url"
-          placeholder="https://your-domain or http://192.168.1.10"
-          required
-        />
-        <div class="error" id="error" role="alert"></div>
-        <div class="actions">
-          <button class="primary" type="submit">Open LittleBowl</button>
-          <button class="ghost" type="button" id="clear-btn" hidden>Clear saved server</button>
-        </div>
-      </form>
-
-      <p class="loading" id="loading">Opening…</p>
-      <p class="hint">
-        Use the same URL you open in a browser (your VPS IP or domain).
-        Example: <code>http://203.0.113.10</code> or <code>https://meals.example.com</code>
-      </p>
+    <div class="card">
+      <div class="mark" aria-hidden="true"></div>
+      <h1><span class="little">Little</span><span class="bowl">Bowl</span></h1>
+      <p>Little meals, big growth</p>
+      <div class="spinner" aria-label="Loading"></div>
     </div>
   </main>
-
   <script>
-    const STORAGE_KEY = 'littlebowl_server_url';
-
-    function normalizeUrl(raw) {
-      let url = String(raw || '').trim().replace(/\/+$/, '');
-      if (!url) return null;
-      if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
-      try {
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol)) return null;
-        return parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, ''));
-      } catch (e) {
-        return null;
-      }
-    }
-
-    async function saveUrl(url) {
-      try { localStorage.setItem(STORAGE_KEY, url); } catch (e) {}
-      try {
-        if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
-          await Capacitor.Plugins.Preferences.set({ key: STORAGE_KEY, value: url });
-        }
-      } catch (e) {}
-    }
-
-    async function loadSavedUrl() {
-      try {
-        if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
-          const res = await Capacitor.Plugins.Preferences.get({ key: STORAGE_KEY });
-          if (res && res.value) return res.value;
-        }
-      } catch (e) {}
-      try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }
-    }
-
-    async function clearSavedUrl() {
-      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-      try {
-        if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
-          await Capacitor.Plugins.Preferences.remove({ key: STORAGE_KEY });
-        }
-      } catch (e) {}
-    }
-
-    function showError(msg) {
-      const el = document.getElementById('error');
-      el.textContent = msg;
-      el.classList.add('show');
-    }
-
-    function openServer(url) {
-      document.getElementById('loading').classList.add('show');
-      window.location.replace(url);
-    }
-
-    async function boot() {
-      const params = new URLSearchParams(window.location.search);
-      const forceSetup = params.has('setup') || params.has('reset');
-      if (forceSetup) {
-        await clearSavedUrl();
-      }
-
-      const input = document.getElementById('server-url');
-      const clearBtn = document.getElementById('clear-btn');
-      const baked = (window.LITTLEBOWL_DEFAULT_SERVER || '').trim();
-      const saved = forceSetup ? null : await loadSavedUrl();
-      const initial = normalizeUrl(saved) || normalizeUrl(baked);
-
-      if (initial) {
-        input.value = initial;
-        clearBtn.hidden = false;
-        if (!forceSetup && saved) {
-          openServer(initial);
-          return;
-        }
-      }
-
-      document.getElementById('setup-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        document.getElementById('error').classList.remove('show');
-        const url = normalizeUrl(input.value);
-        if (!url) {
-          showError('Enter a valid http:// or https:// address.');
-          return;
-        }
-        await saveUrl(url);
-        openServer(url);
-      });
-
-      clearBtn.addEventListener('click', async () => {
-        await clearSavedUrl();
-        input.value = baked || '';
-        clearBtn.hidden = !baked;
-        showError('Saved server cleared. Enter a new URL.');
-      });
-    }
-
-    document.addEventListener('DOMContentLoaded', boot);
+    // Capacitor normally loads server.url (http://littlebowl.in) directly.
+    // This local page is only a branded splash / offline fallback.
+    (function () {
+      var url = (window.LITTLEBOWL_DEFAULT_SERVER || 'http://littlebowl.in/home').replace(/\/+$/, '');
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('stay')) return;
+      setTimeout(function () {
+        window.location.replace(url);
+      }, 400);
+    })();
   </script>
 </body>
 </html>

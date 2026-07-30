@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
     <title>Opening LittleBowl…</title>
     {% include 'includes/pwa_head.html' %}
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap" rel="stylesheet">
@@ -75,6 +75,7 @@
         <div class="spinner" aria-hidden="true"></div>
     </div>
     <script src="{{ url_for('static', filename='js/session-persist.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/native-app.js') }}"></script>
     <script>
       (async function () {
         const msg = document.getElementById('bridge-msg');

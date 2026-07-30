@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="{% block theme_color %}#6b8f3c{% endblock %}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="{% block apple_status_bar %}black-translucent{% endblock %}">
@@ -216,6 +216,7 @@
     {% endif %}
     
     <script src="{{ url_for('static', filename='js/session-persist.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/native-app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
     {% block a2hs_script %}

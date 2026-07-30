@@ -1,8 +1,8 @@
 {
   "name": "littlebowl-mobile",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "LittleBowl native apps (Capacitor Android + iOS shell around the Flask web app)",
+  "description": "LittleBowl official Android + iOS apps (opens http://littlebowl.in)",
   "scripts": {
     "sync": "npx cap sync",
     "sync:android": "npx cap sync android",

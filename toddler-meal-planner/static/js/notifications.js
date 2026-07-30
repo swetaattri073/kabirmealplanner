@@ -706,6 +706,17 @@
     });
   }
 
+  async function resync() {
+    const prefs = loadPrefs();
+    if (!prefs.enabled) return { ok: true, disabled: true };
+    bindNativeListeners();
+    if (prefs.mealReminders) {
+      return scheduleMealReminders(prefs);
+    }
+    await cancelMealReminders();
+    return { ok: true };
+  }
+
   global.LittleBowlNotifications = {
     loadPrefs,
     savePrefs,
@@ -718,6 +729,7 @@
     saveSettingsFromForm,
     sendTestNotification,
     renderSettings,
+    resync,
     parseTime,
     mealId,
     alertFingerprint,

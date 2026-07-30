@@ -3,21 +3,28 @@
   "appName": "LittleBowl",
   "webDir": "www",
   "server": {
+    "url": "http://littlebowl.in/home",
+    "cleartext": true,
     "allowNavigation": [
-      "*"
-    ],
-    "cleartext": true
+      "littlebowl.in",
+      "*.littlebowl.in",
+      "http://littlebowl.in",
+      "http://littlebowl.in/*"
+    ]
   },
   "plugins": {
     "SplashScreen": {
-      "launchShowDuration": 1500,
+      "launchShowDuration": 2500,
       "launchAutoHide": true,
       "backgroundColor": "#fffaf0",
-      "showSpinner": false
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
     },
     "StatusBar": {
       "style": "DARK",
-      "backgroundColor": "#6b8f3c"
+      "backgroundColor": "#6b8f3c",
+      "overlaysWebView": false
     },
     "LocalNotifications": {
       "smallIcon": "ic_stat_littlebowl",
@@ -27,13 +34,15 @@
   },
   "android": {
     "allowMixedContent": true,
-    "backgroundColor": "#fffaf0"
+    "backgroundColor": "#fffaf0",
+    "webContentsDebuggingEnabled": false
   },
   "ios": {
     "contentInset": "automatic",
     "backgroundColor": "#fffaf0",
     "preferredContentMode": "mobile",
     "scrollEnabled": true,
-    "allowsLinkPreview": false
+    "allowsLinkPreview": false,
+    "limitsNavigationsToAppBoundDomains": true
   }
 }
