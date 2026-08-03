@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="End mealtime battles! AI-powered meal planner for Indian toddlers. Personalized, nutritious meals your picky eater will love.">
     <title>LittleBowl - End Mealtime Battles Forever</title>
     {% include 'includes/pwa_head.html' %}
@@ -18,1464 +18,805 @@
             --text-dark: #1e1b4b;
             --text-light: #6b7280;
             --bg-light: #faf5ff;
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        html {
-            scroll-behavior: smooth;
-        }
-        
-        body {
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
             font-family: 'Nunito', sans-serif;
-            background: var(--bg-light);
+            background: #0f1222;
             color: var(--text-dark);
-            overflow-x: hidden;
-        }
-        
-        /* ===== HERO SECTION ===== */
-        .hero {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            position: relative;
             overflow: hidden;
         }
-        
-        .hero-bg {
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 30%, #ec4899 70%, #f97316 100%);
-            background-size: 400% 400%;
-            animation: gradientFlow 15s ease infinite;
+
+        body.is-native-app .web-only-nav { display: none !important; }
+        body:not(.is-native-app) .native-first-ctas { display: none !important; }
+
+        .story-shell {
+            height: 100dvh;
+            height: 100svh;
+            display: flex;
+            flex-direction: column;
+            background: #0f1222;
         }
-        
-        @keyframes gradientFlow {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-        }
-        
-        .hero-bg::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-        }
-        
-        /* Nav */
-        .nav {
+
+        .story-progress {
+            display: flex;
+            gap: 4px;
+            padding: calc(0.65rem + var(--safe-top)) 0.75rem 0.45rem;
             position: relative;
-            z-index: 10;
-            padding: 1.5rem 2rem;
+            z-index: 20;
+            flex-shrink: 0;
+        }
+
+        .story-progress span {
+            flex: 1;
+            height: 3px;
+            border-radius: 99px;
+            background: rgba(255,255,255,0.28);
+            overflow: hidden;
+        }
+
+        .story-progress span i {
+            display: block;
+            height: 100%;
+            width: 0%;
+            background: #fff;
+            border-radius: inherit;
+            transition: width 0.25s ease;
+        }
+
+        .story-progress span.is-done i { width: 100%; }
+        .story-progress span.is-active i { width: 100%; }
+
+        .story-topbar {
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: center;
+            padding: 0.35rem 1rem 0.5rem;
+            position: relative;
+            z-index: 20;
+            flex-shrink: 0;
+            color: #fff;
         }
-        
-        .nav-logo {
+
+        .brand {
             display: flex;
             align-items: center;
-            gap: 0.65rem;
-            color: white;
-            font-weight: 800;
-            font-size: 1.5rem;
+            gap: 0.55rem;
             text-decoration: none;
+            color: #fff;
+            font-weight: 800;
+            font-size: 1.15rem;
         }
-        
-        .nav-logo img {
-            width: 44px;
-            height: 44px;
+
+        .brand img {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #fffaf0;
+            object-fit: cover;
+        }
+
+        .brand .little { color: #e8f5c8; }
+        .brand .bowl { color: #ffd4a8; }
+
+        .web-only-nav {
+            display: flex;
+            gap: 0.65rem;
+            align-items: center;
+        }
+
+        .web-only-nav a {
+            color: #fff;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.9rem;
+            opacity: 0.92;
+        }
+
+        .web-only-nav .pill {
+            background: #fff;
+            color: var(--primary);
+            padding: 0.45rem 0.9rem;
+            border-radius: 999px;
+        }
+
+        .story-track {
+            flex: 1;
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            overscroll-behavior-x: contain;
+        }
+
+        .story-track::-webkit-scrollbar { display: none; }
+
+        .story-slide {
+            flex: 0 0 100%;
+            width: 100%;
+            height: 100%;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slide-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 35%, #ec4899 70%, #f97316 100%);
+        }
+
+        .slide-bg.alt-a { background: linear-gradient(160deg, #312e81 0%, #7c3aed 45%, #db2777 100%); }
+        .slide-bg.alt-b { background: linear-gradient(160deg, #0f766e 0%, #2563eb 50%, #7c3aed 100%); }
+        .slide-bg.alt-c { background: linear-gradient(160deg, #9a3412 0%, #ea580c 40%, #db2777 100%); }
+        .slide-bg.alt-d { background: linear-gradient(160deg, #1e3a8a 0%, #4f46e5 50%, #06b6d4 100%); }
+        .slide-bg.form {
+            background:
+                radial-gradient(ellipse 90% 60% at 50% -10%, rgba(99,102,241,0.35), transparent 55%),
+                linear-gradient(180deg, #1e1b4b 0%, #312e81 40%, #faf5ff 40%);
+        }
+
+        .slide-inner {
+            position: relative;
+            z-index: 2;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 1.25rem 1.35rem calc(1.5rem + var(--safe-bottom));
+            color: #fff;
+            max-width: 520px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .story-slide[data-slide="register"] .slide-inner {
+            justify-content: flex-start;
+            overflow-y: auto;
+            max-width: 440px;
+            padding-top: 0.5rem;
+            padding-bottom: calc(1.25rem + var(--safe-bottom));
+        }
+
+        .post-card {
+            background: rgba(255,255,255,0.14);
+            border: 1px solid rgba(255,255,255,0.22);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 28px;
+            padding: 1.5rem 1.35rem 1.4rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.22);
+        }
+
+        .post-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            opacity: 0.9;
+            margin-bottom: 0.85rem;
+        }
+
+        .post-emoji {
+            font-size: 2.75rem;
+            line-height: 1;
+            margin-bottom: 0.75rem;
+        }
+
+        .post-card h2 {
+            font-size: clamp(1.55rem, 5.5vw, 2.1rem);
+            font-weight: 900;
+            line-height: 1.15;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.02em;
+        }
+
+        .post-card p {
+            font-size: 1.02rem;
+            line-height: 1.5;
+            opacity: 0.95;
+            font-weight: 600;
+        }
+
+        .post-solution {
+            margin-top: 1.1rem;
+            padding: 0.75rem 0.9rem;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.18);
+            font-weight: 700;
+            font-size: 0.92rem;
+            display: flex;
+            gap: 0.55rem;
+            align-items: flex-start;
+        }
+
+        .post-solution i { color: #bbf7d0; margin-top: 0.15rem; }
+
+        .hero-mark {
+            width: 88px;
+            height: 88px;
+            border-radius: 24px;
+            margin: 0 auto 1rem;
+            display: grid;
+            place-items: center;
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.28);
+            box-shadow: 0 16px 40px rgba(0,0,0,0.2);
+        }
+
+        .hero-mark img {
+            width: 72px;
+            height: 72px;
             border-radius: 50%;
             object-fit: cover;
             background: #fffaf0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
         }
-        
-        .nav-logo .brand-little { color: #e8f5c8; }
-        .nav-logo .brand-bowl { color: #ffd4a8; }
-        
-        .nav-actions {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+
+        .hero-title {
+            font-size: clamp(2rem, 8vw, 2.75rem);
+            font-weight: 900;
+            line-height: 1.08;
+            text-align: center;
+            margin-bottom: 0.85rem;
+            letter-spacing: -0.03em;
+            text-shadow: 0 4px 24px rgba(0,0,0,0.2);
         }
-        
-        .nav-link {
-            color: white;
-            text-decoration: none;
+
+        .hero-title .hi {
+            background: linear-gradient(135deg, #fbbf24, #f97316);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-sub {
+            text-align: center;
+            font-size: 1.05rem;
+            line-height: 1.45;
             font-weight: 600;
-            opacity: 0.9;
-            transition: all 0.3s;
+            opacity: 0.95;
+            max-width: 22rem;
+            margin: 0 auto 1.25rem;
         }
-        
-        .nav-link:hover {
-            opacity: 1;
-        }
-        
-        .nav-cta {
-            padding: 0.75rem 1.5rem;
-            background: white;
-            color: var(--primary);
-            border-radius: 50px;
+
+        .swipe-hint {
+            text-align: center;
+            font-size: 0.85rem;
             font-weight: 700;
-            text-decoration: none;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .nav-cta:hover {
-            transform: scale(1.05);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        
-        .nav-cta-short {
-            display: none;
-        }
-        
-        /* Hero Content */
-        .hero-content {
-            flex: 1;
+            opacity: 0.85;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 2rem;
-            position: relative;
-            z-index: 5;
+            gap: 0.45rem;
+            animation: nudge 1.8s ease-in-out infinite;
         }
-        
-        .hero-inner {
-            max-width: 1200px;
-            width: 100%;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4rem;
-            align-items: center;
+
+        @keyframes nudge {
+            0%, 100% { transform: translateX(0); opacity: 0.75; }
+            50% { transform: translateX(6px); opacity: 1; }
         }
-        
-        @media (max-width: 900px) {
-            .hero-inner {
-                grid-template-columns: 1fr;
-                text-align: center;
-            }
-        }
-        
-        .hero-text {
-            color: white;
-        }
-        
-        .hero-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: rgba(255,255,255,0.2);
-            border-radius: 50px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            backdrop-filter: blur(10px);
-        }
-        
-        .hero-badge i {
-            color: #fbbf24;
-        }
-        
-        .hero-title {
-            font-size: 3.5rem;
-            font-weight: 900;
-            line-height: 1.1;
-            margin-bottom: 1.5rem;
-            text-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-        
-        .hero-title .highlight {
-            background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        @media (max-width: 600px) {
-            .hero-title {
-                font-size: 2.25rem;
-            }
-        }
-        
-        .hero-subtitle {
-            font-size: 1.25rem;
-            opacity: 0.95;
-            margin-bottom: 2rem;
-            line-height: 1.6;
-        }
-        
-        .hero-cta-group {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        
-        @media (max-width: 900px) {
-            .hero-cta-group {
-                justify-content: center;
-            }
-        }
-        
-        .hero-cta {
-            padding: 1.25rem 2.5rem;
-            border-radius: 50px;
-            font-weight: 800;
-            font-size: 1.1rem;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.75rem;
-            transition: all 0.3s;
-        }
-        
-        .hero-cta-primary {
-            background: white;
-            color: var(--primary);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-        
-        .hero-cta-primary:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-        }
-        
-        .hero-cta-secondary {
-            background: rgba(255,255,255,0.15);
-            color: white;
-            border: 2px solid rgba(255,255,255,0.3);
-            backdrop-filter: blur(10px);
-        }
-        
-        .hero-cta-secondary:hover {
-            background: rgba(255,255,255,0.25);
-        }
-        
-        /* Animated Scene */
-        .hero-scene {
-            position: relative;
-            height: 450px;
-        }
-        
-        @media (max-width: 900px) {
-            .hero-scene {
-                height: 350px;
-                order: -1;
-            }
-        }
-        
-        .scene-plate {
+
+        .native-first-ctas {
             position: absolute;
             left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 280px;
-            height: 280px;
-            background: white;
-            border-radius: 50%;
-            box-shadow: 0 30px 60px rgba(0,0,0,0.3), inset 0 -10px 30px rgba(0,0,0,0.1);
+            bottom: calc(1.35rem + var(--safe-bottom));
+            transform: translateX(-50%);
+            width: min(100% - 2rem, 22rem);
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+
+        .native-first-ctas a,
+        .btn-primary-block,
+        .btn-ghost-block {
             display: flex;
             align-items: center;
             justify-content: center;
-            animation: plateFloat 4s ease-in-out infinite;
-        }
-        
-        @keyframes plateFloat {
-            0%, 100% { transform: translate(-50%, -50%) rotate(-2deg); }
-            50% { transform: translate(-50%, calc(-50% - 15px)) rotate(2deg); }
-        }
-        
-        .scene-plate::before {
-            content: '';
-            position: absolute;
-            inset: 15px;
-            border: 4px dashed #e9d5ff;
-            border-radius: 50%;
-        }
-        
-        .plate-food {
-            font-size: 5rem;
-            animation: foodBounce 2s ease-in-out infinite;
-        }
-        
-        @keyframes foodBounce {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-        
-        /* Flying foods */
-        .flying-food {
-            position: absolute;
-            font-size: 3rem;
-            animation: flyAround 8s linear infinite;
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.2));
-        }
-        
-        .flying-food:nth-child(1) { animation-delay: 0s; }
-        .flying-food:nth-child(2) { animation-delay: -2s; }
-        .flying-food:nth-child(3) { animation-delay: -4s; }
-        .flying-food:nth-child(4) { animation-delay: -6s; }
-        
-        @keyframes flyAround {
-            0% { transform: rotate(0deg) translateX(180px) rotate(0deg); opacity: 1; }
-            50% { opacity: 0.8; }
-            100% { transform: rotate(360deg) translateX(180px) rotate(-360deg); opacity: 1; }
-        }
-        
-        /* Toddler character */
-        .toddler-character {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            text-align: center;
-            animation: toddlerWave 3s ease-in-out infinite;
-        }
-        
-        @keyframes toddlerWave {
-            0%, 100% { transform: rotate(-5deg); }
-            50% { transform: rotate(5deg); }
-        }
-        
-        .toddler-emoji {
-            font-size: 5rem;
-            display: block;
-        }
-        
-        .toddler-speech {
-            position: absolute;
-            top: -60px;
-            right: 60px;
-            background: white;
-            padding: 0.75rem 1.25rem;
-            border-radius: 20px;
-            font-weight: 700;
-            font-size: 0.9rem;
-            color: var(--text-dark);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-            white-space: nowrap;
-            animation: speechPop 4s ease-in-out infinite;
-        }
-        
-        .toddler-speech::after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            right: 20px;
-            border: 8px solid transparent;
-            border-top-color: white;
-        }
-        
-        @keyframes speechPop {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            10% { transform: scale(1.1); }
-            50% { opacity: 0.8; }
-        }
-        
-        /* Spoon animation */
-        .flying-spoon {
-            position: absolute;
-            font-size: 2.5rem;
-            top: 30%;
-            left: 10%;
-            animation: spoonFly 3s ease-in-out infinite;
-        }
-        
-        @keyframes spoonFly {
-            0%, 100% { transform: translate(0, 0) rotate(-30deg); }
-            50% { transform: translate(100px, 50px) rotate(30deg); }
-        }
-        
-        /* ===== PAIN POINTS SECTION ===== */
-        .pain-points {
-            padding: 6rem 2rem;
-            background: white;
-            position: relative;
-        }
-        
-        .section-container {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-        
-        .section-header {
-            text-align: center;
-            margin-bottom: 4rem;
-        }
-        
-        .section-tag {
-            display: inline-block;
-            padding: 0.5rem 1.25rem;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%);
-            border-radius: 50px;
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 1rem;
-        }
-        
-        .section-title {
-            font-size: 2.5rem;
-            font-weight: 900;
-            margin-bottom: 1rem;
-            color: var(--text-dark);
-        }
-        
-        .section-subtitle {
-            font-size: 1.15rem;
-            color: var(--text-light);
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        
-        .pain-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-        
-        .pain-card {
-            padding: 2rem;
-            background: var(--bg-light);
-            border-radius: 24px;
-            border: 2px solid transparent;
-            transition: all 0.4s;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .pain-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--primary), var(--accent));
-            transform: scaleX(0);
-            transition: transform 0.4s;
-        }
-        
-        .pain-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.15);
-            border-color: rgba(99, 102, 241, 0.2);
-        }
-        
-        .pain-card:hover::before {
-            transform: scaleX(1);
-        }
-        
-        .pain-icon {
-            width: 70px;
-            height: 70px;
-            background: white;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.25rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-        }
-        
-        .pain-card h3 {
-            font-size: 1.35rem;
-            font-weight: 800;
-            margin-bottom: 0.75rem;
-            color: var(--text-dark);
-        }
-        
-        .pain-card p {
-            color: var(--text-light);
-            line-height: 1.7;
-        }
-        
-        .pain-card .solution {
-            margin-top: 1.25rem;
-            padding-top: 1.25rem;
-            border-top: 1px dashed rgba(99, 102, 241, 0.2);
-            display: flex;
-            align-items: center;
             gap: 0.5rem;
-            color: var(--success);
-            font-weight: 700;
-            font-size: 0.95rem;
-        }
-        
-        /* ===== FEATURES SECTION ===== */
-        .features {
-            padding: 6rem 2rem;
-            background: linear-gradient(180deg, var(--bg-light) 0%, white 100%);
-        }
-        
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
-        }
-        
-        .feature-card {
-            padding: 2rem;
-            background: white;
-            border-radius: 20px;
-            border: 1px solid rgba(99, 102, 241, 0.1);
-            text-align: center;
-            transition: all 0.3s;
-        }
-        
-        .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 30px rgba(99, 102, 241, 0.1);
-        }
-        
-        .feature-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            display: block;
-        }
-        
-        .feature-card h3 {
-            font-size: 1.15rem;
-            font-weight: 800;
-            margin-bottom: 0.5rem;
-        }
-        
-        .feature-card p {
-            font-size: 0.95rem;
-            color: var(--text-light);
-        }
-        
-        /* ===== TESTIMONIAL/SOCIAL PROOF ===== */
-        .social-proof {
-            padding: 4rem 2rem;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-            text-align: center;
-            color: white;
-        }
-        
-        .proof-stats {
-            display: flex;
-            justify-content: center;
-            gap: 4rem;
-            flex-wrap: wrap;
-            margin-bottom: 2rem;
-        }
-        
-        .proof-stat h3 {
-            font-size: 3rem;
-            font-weight: 900;
-        }
-        
-        .proof-stat p {
-            opacity: 0.9;
-            font-weight: 600;
-        }
-        
-        .proof-quote {
-            max-width: 700px;
-            margin: 0 auto;
-            font-size: 1.35rem;
-            font-style: italic;
-            opacity: 0.95;
-            line-height: 1.7;
-        }
-        
-        .proof-author {
-            margin-top: 1.5rem;
-            font-weight: 700;
-        }
-        
-        /* ===== FINAL CTA ===== */
-        .final-cta {
-            padding: 6rem 2rem;
-            text-align: center;
-            background: white;
-        }
-        
-        .cta-box {
-            max-width: 700px;
-            margin: 0 auto;
-            padding: 4rem;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(236, 72, 153, 0.05) 100%);
-            border-radius: 32px;
-            border: 2px solid rgba(99, 102, 241, 0.1);
-        }
-        
-        .cta-emoji {
-            font-size: 4rem;
-            margin-bottom: 1.5rem;
-            display: block;
-            animation: bounce 2s infinite;
-        }
-        
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-20px); }
-        }
-        
-        .cta-box h2 {
-            font-size: 2.25rem;
-            font-weight: 900;
-            margin-bottom: 1rem;
-        }
-        
-        .cta-box p {
-            font-size: 1.15rem;
-            color: var(--text-light);
-            margin-bottom: 2rem;
-        }
-        
-        .cta-button {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 1.25rem 3rem;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-            color: white;
-            border-radius: 50px;
-            font-weight: 800;
-            font-size: 1.2rem;
             text-decoration: none;
-            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.4);
-            transition: all 0.3s;
-        }
-        
-        .cta-button:hover {
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 0 20px 50px rgba(99, 102, 241, 0.5);
-        }
-        
-        .cta-note {
-            margin-top: 1.5rem;
-            font-size: 0.9rem;
-            color: var(--text-light);
-        }
-        
-        .cta-note i {
-            color: var(--success);
-        }
-
-        /* ===== LANDING REGISTRATION ===== */
-        .register-section {
-            padding: 5rem 1.5rem 5.5rem;
-            background: linear-gradient(180deg, #ffffff 0%, #f8f5ff 100%);
-            scroll-margin-top: 0.5rem;
-        }
-
-        .register-wrap {
-            max-width: 480px;
-            margin: 0 auto;
-        }
-
-        .register-intro {
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .register-intro .section-tag {
-            display: inline-block;
-            margin-bottom: 0.75rem;
-        }
-
-        .register-intro h2 {
-            font-size: 2rem;
-            font-weight: 900;
-            margin: 0 0 0.5rem;
-        }
-
-        .register-intro p {
-            color: var(--text-light);
-            margin: 0;
-            font-size: 1.05rem;
-        }
-
-        .register-card {
-            background: white;
-            border-radius: 24px;
-            box-shadow: 0 16px 48px rgba(99, 102, 241, 0.12);
-            border: 1px solid rgba(99, 102, 241, 0.12);
-            overflow: hidden;
-        }
-
-        .register-header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-            color: white;
-            text-align: center;
-            padding: 1.75rem 1.5rem 1.5rem;
-        }
-
-        .register-header h3 {
-            margin: 0;
-            font-size: 1.4rem;
             font-weight: 800;
+            font-size: 1rem;
+            border-radius: 999px;
+            padding: 0.95rem 1.1rem;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
         }
 
-        .register-header p {
-            margin: 0.4rem 0 0;
-            opacity: 0.92;
+        .btn-primary-block {
+            background: #fff;
+            color: var(--primary-dark);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+        }
+
+        .btn-ghost-block {
+            background: rgba(255,255,255,0.16);
+            color: #fff;
+            border: 1.5px solid rgba(255,255,255,0.45);
+        }
+
+        .web-hero-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+            width: min(100%, 18rem);
+            margin: 0 auto 1rem;
+        }
+
+        body.is-native-app .web-hero-actions { display: none; }
+
+        .story-slide[data-slide="register"] .register-panel {
+            background: #fff;
+            color: var(--text-dark);
+            border-radius: 24px 24px 0 0;
+            margin-top: auto;
+            padding: 1.35rem 1.2rem 1.1rem;
+            box-shadow: 0 -12px 40px rgba(0,0,0,0.18);
+            min-height: 70%;
+        }
+
+        .register-panel h2 {
+            font-size: 1.45rem;
+            font-weight: 900;
+            margin-bottom: 0.25rem;
+        }
+
+        .register-panel .lead {
+            color: var(--text-light);
+            font-weight: 600;
+            margin-bottom: 1rem;
             font-size: 0.95rem;
-        }
-
-        .register-body {
-            padding: 1.75rem 1.5rem 1.5rem;
         }
 
         .register-features {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 0.6rem;
-            margin-bottom: 1.15rem;
+            gap: 0.45rem;
+            margin-bottom: 0.9rem;
         }
 
-        .register-feature {
+        .register-features span {
             display: flex;
-            align-items: center;
             gap: 0.4rem;
-            font-size: 0.85rem;
-            color: var(--text-light);
-        }
-
-        .register-feature i {
-            color: var(--success);
-        }
-
-        .register-form .form-group {
-            margin-bottom: 1rem;
-            text-align: left;
-        }
-
-        .register-form label {
-            display: block;
-            margin-bottom: 0.35rem;
+            align-items: center;
+            font-size: 0.82rem;
             font-weight: 700;
-            font-size: 0.9rem;
+            color: #4338ca;
         }
 
-        .register-form input {
+        .register-features i { color: var(--success); }
+
+        .form-group { margin-bottom: 0.85rem; }
+        .form-group label {
+            display: block;
+            font-weight: 700;
+            font-size: 0.88rem;
+            margin-bottom: 0.35rem;
+        }
+        .form-group input {
             width: 100%;
-            padding: 0.85rem 1rem;
-            border: 2px solid rgba(99, 102, 241, 0.15);
+            padding: 0.8rem 0.9rem;
+            border: 2px solid #e5e7eb;
             border-radius: 12px;
+            font: inherit;
             font-size: 1rem;
-            font-family: inherit;
-            box-sizing: border-box;
         }
-
-        .register-form input:focus {
+        .form-group input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
         }
-
-        .register-form .input-hint {
+        .input-hint {
             font-size: 0.78rem;
             color: var(--text-light);
-            margin: 0.3rem 0 0;
+            margin-top: 0.3rem;
         }
-
-        .register-password-strength {
+        .password-bar {
             height: 4px;
-            background: rgba(99, 102, 241, 0.12);
-            border-radius: 2px;
-            margin-top: 0.45rem;
+            border-radius: 99px;
+            background: #e5e7eb;
+            margin-top: 0.4rem;
             overflow: hidden;
         }
-
-        .register-password-bar {
+        .password-bar::after {
+            content: '';
+            display: block;
             height: 100%;
             width: 0;
-            border-radius: 2px;
-            transition: width 0.25s ease, background 0.25s ease;
+            background: #e5e7eb;
+            transition: width 0.2s, background 0.2s;
         }
-
-        .register-password-bar.weak { width: 33%; background: #ef4444; }
-        .register-password-bar.medium { width: 66%; background: #f59e0b; }
-        .register-password-bar.strong { width: 100%; background: #10b981; }
+        .password-bar.weak::after { width: 33%; background: #ef4444; }
+        .password-bar.medium::after { width: 66%; background: #f59e0b; }
+        .password-bar.strong::after { width: 100%; background: #22c55e; }
 
         .register-submit {
             width: 100%;
             margin-top: 0.35rem;
-            padding: 1rem;
+            padding: 0.95rem 1rem;
             border: none;
-            border-radius: 14px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-            color: white;
-            font-size: 1rem;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            color: #fff;
+            font: inherit;
             font-weight: 800;
-            font-family: inherit;
+            font-size: 1rem;
             cursor: pointer;
-            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
         }
 
-        .register-submit:hover {
-            filter: brightness(1.05);
-        }
-
-        .register-terms {
-            margin: 0.85rem 0 0;
-            font-size: 0.78rem;
-            color: var(--text-light);
+        .register-footer, .register-terms {
             text-align: center;
-        }
-
-        .register-footer {
-            margin-top: 1.15rem;
-            text-align: center;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             color: var(--text-light);
+            margin-top: 0.75rem;
+            font-weight: 600;
         }
-
-        .register-footer a {
-            color: var(--primary);
-            font-weight: 700;
-            text-decoration: none;
-        }
+        .register-footer a { color: var(--primary); font-weight: 800; text-decoration: none; }
 
         .register-guest {
-            display: block;
-            margin-top: 1rem;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            margin-top: 0.85rem;
             padding: 0.75rem;
+            border-radius: 12px;
+            border: 2px dashed rgba(99,102,241,0.3);
             color: var(--text-light);
             text-decoration: none;
-            border: 2px dashed rgba(99, 102, 241, 0.25);
-            border-radius: 12px;
+            font-weight: 700;
             font-size: 0.9rem;
-        }
-
-        .register-guest:hover {
-            border-color: var(--primary);
-            color: var(--primary);
         }
 
         .register-alert {
-            padding: 0.8rem 1rem;
+            padding: 0.7rem 0.85rem;
             border-radius: 10px;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-            text-align: left;
+            margin-bottom: 0.85rem;
+            font-size: 0.88rem;
+            font-weight: 600;
         }
+        .register-alert.error { background: #fef2f2; color: #b91c1c; }
+        .register-alert.success { background: #f0fdf4; color: #15803d; }
 
-        .register-alert.error {
-            background: #fef2f2;
-            color: #b91c1c;
-            border: 1px solid #fecaca;
-        }
-
-        .register-alert.success {
-            background: #f0fdf4;
-            color: #15803d;
-            border: 1px solid #bbf7d0;
-        }
-
-        .register-transfer-note {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-            border: 1px solid #fcd34d;
-            border-radius: 10px;
-            padding: 0.75rem 0.9rem;
-            margin-bottom: 1rem;
-            font-size: 0.85rem;
-            color: #92400e;
-            text-align: left;
+        .tap-zones {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
             display: flex;
-            gap: 0.6rem;
-            align-items: flex-start;
+            pointer-events: none;
+        }
+        .tap-zones button {
+            flex: 1;
+            border: none;
+            background: transparent;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .story-slide[data-slide="register"] .tap-zones { display: none; }
+        body.is-native-app .story-slide[data-slide="0"] .tap-zones {
+            bottom: calc(7.5rem + var(--safe-bottom));
         }
 
-        .register-transfer-note i {
-            margin-top: 0.15rem;
-            color: #d97706;
-        }
-        
-        /* ===== MOBILE FIXES (buttons / nav / spacing) ===== */
-        @media (max-width: 768px) {
-            .nav {
-                padding: 0.85rem 1rem;
-                gap: 0.5rem;
-            }
-            
-            .nav-logo {
-                font-size: 1.05rem;
-                gap: 0.4rem;
-                flex-shrink: 0;
-            }
-            
-            .nav-logo img {
-                width: 36px;
-                height: 36px;
-            }
-            
-            .nav-actions {
-                gap: 0.5rem;
-                flex-shrink: 1;
-                min-width: 0;
-            }
-            
-            .nav-link {
-                font-size: 0.85rem;
-                white-space: nowrap;
-            }
-            
-            .nav-cta {
-                padding: 0.45rem 0.85rem;
-                font-size: 0.8rem;
-                white-space: nowrap;
-                flex-shrink: 0;
-            }
-            
-            .hero-content {
-                padding: 1.25rem 1rem 2rem;
-            }
-            
-            .hero-cta-group {
-                flex-direction: column;
-                align-items: stretch;
-                width: 100%;
-                max-width: 320px;
-                margin-left: auto;
-                margin-right: auto;
-            }
-            
-            .hero-cta {
-                justify-content: center;
-                padding: 0.85rem 1.25rem;
-                font-size: 0.95rem;
-                white-space: nowrap;
-                width: 100%;
-            }
-            
-            .final-cta {
-                padding: 3rem 1rem;
-            }
-            
-            .cta-box {
-                padding: 1.75rem 1.25rem;
-                border-radius: 20px;
-            }
-            
-            .cta-box h2 {
-                font-size: 1.5rem;
-            }
-            
-            .cta-box p {
-                font-size: 1rem;
-                margin-bottom: 1.25rem;
-            }
-            
-            .cta-emoji {
-                font-size: 2.5rem;
-                margin-bottom: 1rem;
-            }
-            
-            .cta-button {
-                display: inline-flex;
-                flex-direction: row;
-                flex-wrap: nowrap;
-                justify-content: center;
-                align-items: center;
-                width: 100%;
-                max-width: 100%;
-                box-sizing: border-box;
-                padding: 0.9rem 1.25rem;
-                font-size: 1rem;
-                white-space: nowrap;
-                gap: 0.5rem;
-            }
-
-            .register-section {
-                padding: 3rem 1rem 4rem;
-            }
-
-            .register-intro h2 {
-                font-size: 1.55rem;
-            }
-
-            .register-body {
-                padding: 1.35rem 1.15rem 1.25rem;
-            }
-
-            .register-features {
-                grid-template-columns: 1fr;
-            }
-            
-            .pain-points {
-                padding: 3.5rem 1rem;
-            }
-            
-            .pain-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .section-title {
-                font-size: 1.75rem;
-            }
-        }
-        
-        @media (max-width: 380px) {
-            .nav-cta {
-                padding: 0.4rem 0.65rem;
-                font-size: 0.75rem;
-            }
-            
-            .nav-link {
-                font-size: 0.8rem;
-            }
-            
-            .cta-button {
-                font-size: 0.9rem;
-                padding: 0.85rem 1rem;
-            }
-        }
-        
-        /* ===== FOOTER ===== */
-        footer {
-            padding: 2rem;
-            text-align: center;
-            background: var(--bg-light);
-            color: var(--text-light);
-            font-size: 0.9rem;
-        }
-        
-        footer a {
-            color: var(--primary);
-            text-decoration: none;
-        }
-        
-        /* ===== SCROLL ANIMATIONS ===== */
-        .animate-on-scroll {
-            opacity: 0;
-            transform: translateY(30px);
-            transition: all 0.6s ease-out;
-        }
-        
-        .animate-on-scroll.visible {
-            opacity: 1;
-            transform: translateY(0);
+        @media (min-width: 900px) {
+            .story-shell { max-width: 480px; margin: 0 auto; border-left: 1px solid rgba(255,255,255,0.08); border-right: 1px solid rgba(255,255,255,0.08); }
+            html, body { background: #111827; }
         }
     </style>
 </head>
 <body>
-    <!-- HERO SECTION -->
-    <section class="hero">
-        <div class="hero-bg"></div>
-        
-        <nav class="nav">
-            <a class="nav-logo" href="{{ url_for('home') }}" aria-label="LittleBowl home">
-                <img src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="LittleBowl" width="44" height="44">
-                <span><span class="brand-little">Little</span><span class="brand-bowl">Bowl</span></span>
+    <div class="story-shell" id="story-shell">
+        <div class="story-progress" id="story-progress" aria-hidden="true"></div>
+
+        <div class="story-topbar">
+            <a class="brand" href="{{ url_for('home') }}" aria-label="LittleBowl">
+                <img src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="" width="36" height="36">
+                <span><span class="little">Little</span><span class="bowl">Bowl</span></span>
             </a>
-            <div class="nav-actions">
+            <div class="web-only-nav">
                 {% if current_user.is_authenticated %}
-                <a href="{{ url_for('home') }}" class="nav-link">Dashboard</a>
-                <a href="{{ url_for('profile') }}" class="nav-cta">
-                    <i class="fas fa-user"></i> My Account
-                </a>
+                <a href="{{ url_for('home') }}">Dashboard</a>
+                <a class="pill" href="{{ url_for('profile') }}">My Account</a>
                 {% else %}
-                <a href="{{ url_for('login') }}" class="nav-link">Sign In</a>
-                <a href="#register" class="nav-cta">Get Started Free</a>
+                <a href="{{ url_for('login') }}">Sign In</a>
+                <a class="pill" href="#register" data-go-slide="register">Get Started</a>
                 {% endif %}
             </div>
-        </nav>
-        
-        <div class="hero-content">
-            <div class="hero-inner">
-                <div class="hero-text">
-                    <div class="hero-badge">
-                        <i class="fas fa-star"></i>
-                        Made for Indian Families
+        </div>
+
+        <div class="story-track" id="story-track" tabindex="0" aria-label="LittleBowl stories">
+            <!-- 0: Hero -->
+            <section class="story-slide" data-slide="0">
+                <div class="slide-bg"></div>
+                <div class="tap-zones" aria-hidden="true">
+                    <button type="button" data-dir="-1" aria-label="Previous"></button>
+                    <button type="button" data-dir="1" aria-label="Next"></button>
+                </div>
+                <div class="slide-inner">
+                    <div class="hero-mark">
+                        <img src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="LittleBowl">
                     </div>
-                    <h1 class="hero-title">
-                        Mealtime Battles<br>
-                        <span class="highlight">End Here.</span>
-                    </h1>
-                    <p class="hero-subtitle">
-                        Tired of "I don't want this!" at every meal? Our AI creates personalized, 
-                        nutritious Indian meal plans your toddler will actually eat. No more daily 
-                        menu struggles. No more nutrition worries.
-                    </p>
-                    <div class="hero-cta-group">
-                        <a href="#register" class="hero-cta hero-cta-primary">
-                            <i class="fas fa-rocket"></i>
-                            Start Free Now
+                    <h1 class="hero-title">Mealtime battles<br><span class="hi">end here.</span></h1>
+                    <p class="hero-sub">Personalized Indian toddler meals your picky eater will actually finish — with nutrition tracking that parents trust.</p>
+                    <div class="web-hero-actions">
+                        <a class="btn-primary-block" href="#register" data-go-slide="register">
+                            <i class="fas fa-rocket"></i> Start Free
                         </a>
-                        <a href="#pain-points" class="hero-cta hero-cta-secondary">
-                            <i class="fas fa-play-circle"></i>
-                            See How It Works
-                        </a>
+                        <a class="btn-ghost-block" href="{{ url_for('login') }}">Sign In</a>
                     </div>
+                    <p class="swipe-hint"><span>Swipe for more</span> <i class="fas fa-arrow-right"></i></p>
                 </div>
-                
-                <div class="hero-scene">
-                    <div class="scene-plate">
-                        <span class="plate-food">🍛</span>
-                    </div>
-                    
-                    <div class="flying-food" style="top: 50%; left: 50%;">🥕</div>
-                    <div class="flying-food" style="top: 50%; left: 50%;">🍎</div>
-                    <div class="flying-food" style="top: 50%; left: 50%;">🥦</div>
-                    <div class="flying-food" style="top: 50%; left: 50%;">🍌</div>
-                    
-                    <div class="flying-spoon">🥄</div>
-                    
-                    <div class="toddler-character">
-                        <div class="toddler-speech">Yummy! 😋</div>
-                        <span class="toddler-emoji">👶</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    
-    <!-- PAIN POINTS SECTION -->
-    <section class="pain-points" id="pain-points">
-        <div class="section-container">
-            <div class="section-header animate-on-scroll">
-                <span class="section-tag">We Get It</span>
-                <h2 class="section-title">Sound Familiar?</h2>
-                <p class="section-subtitle">
-                    Every parent faces these challenges. You're not alone — and there's a better way.
-                </p>
-            </div>
-            
-            <div class="pain-grid">
-                <div class="pain-card animate-on-scroll">
-                    <div class="pain-icon">😫</div>
-                    <h3>"Not This Again!"</h3>
-                    <p>
-                        Your toddler pushes away the plate before even trying. You've cooked 3 different things 
-                        already and it's only breakfast. The frustration is real.
-                    </p>
-                    <div class="solution">
-                        <i class="fas fa-check-circle"></i>
-                        Learns preferences & suggests accepted foods
-                    </div>
-                </div>
-                
-                <div class="pain-card animate-on-scroll">
-                    <div class="pain-icon">🤯</div>
-                    <h3>"What Do I Make Today?"</h3>
-                    <p>
-                        Every single day, the same question haunts you. Coming up with new, nutritious meals 
-                        that your little one will eat feels impossible.
-                    </p>
-                    <div class="solution">
-                        <i class="fas fa-check-circle"></i>
-                        Auto-generates weekly meal plans
-                    </div>
-                </div>
-                
-                <div class="pain-card animate-on-scroll">
-                    <div class="pain-icon">😰</div>
-                    <h3>"Is My Child Getting Enough?"</h3>
-                    <p>
-                        Iron, calcium, protein, vitamins... The worry about nutritional gaps keeps you up at night. 
-                        Is picky eating affecting their growth?
-                    </p>
-                    <div class="solution">
-                        <i class="fas fa-check-circle"></i>
-                        Tracks nutrition & alerts deficiencies
-                    </div>
-                </div>
-                
-                <div class="pain-card animate-on-scroll">
-                    <div class="pain-icon">🙅</div>
-                    <h3>"They Only Eat 3 Things!"</h3>
-                    <p>
-                        Dal-chawal. Paratha. Maggi. That's the entire menu your toddler approves. 
-                        Introducing new foods feels like a war you keep losing.
-                    </p>
-                    <div class="solution">
-                        <i class="fas fa-check-circle"></i>
-                        Gentle re-exposure strategy that works
-                    </div>
-                </div>
-                
-                <div class="pain-card animate-on-scroll">
-                    <div class="pain-icon">👨‍👩‍👧</div>
-                    <h3>"We Eat Different Meals"</h3>
-                    <p>
-                        Adults eat one thing, toddler eats another. Cooking multiple meals daily is exhausting. 
-                        You wish everyone could eat together.
-                    </p>
-                    <div class="solution">
-                        <i class="fas fa-check-circle"></i>
-                        Adapts adult meals for toddlers
-                    </div>
-                </div>
-                
-                <div class="pain-card animate-on-scroll">
-                    <div class="pain-icon">📉</div>
-                    <h3>"Doctor Says Underweight"</h3>
-                    <p>
-                        The growth chart is a constant source of stress. Your child needs more calories 
-                        but refuses to eat. What do you do?
-                    </p>
-                    <div class="solution">
-                        <i class="fas fa-check-circle"></i>
-                        Health-aware calorie-optimized meals
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    
-    <!-- FEATURES SECTION -->
-    <section class="features">
-        <div class="section-container">
-            <div class="section-header animate-on-scroll">
-                <span class="section-tag">How It Works</span>
-                <h2 class="section-title">Your Personal Meal Assistant</h2>
-                <p class="section-subtitle">
-                    Powered by nutrition science, designed for Indian families
-                </p>
-            </div>
-            
-            <div class="features-grid">
-                <div class="feature-card animate-on-scroll">
-                    <span class="feature-icon">📝</span>
-                    <h3>Log Meals Easily</h3>
-                    <p>Track what your toddler eats with reactions (loved, liked, refused)</p>
-                </div>
-                
-                <div class="feature-card animate-on-scroll">
-                    <span class="feature-icon">🧠</span>
-                    <h3>AI Learns Preferences</h3>
-                    <p>Gets smarter about what your child likes over time</p>
-                </div>
-                
-                <div class="feature-card animate-on-scroll">
-                    <span class="feature-icon">📅</span>
-                    <h3>Weekly Plans Generated</h3>
-                    <p>Personalized 7-day meal plans based on preferences & gaps</p>
-                </div>
-                
-                <div class="feature-card animate-on-scroll">
-                    <span class="feature-icon">⚠️</span>
-                    <h3>Nutrition Alerts</h3>
-                    <p>Get notified if iron, calcium or other nutrients are low</p>
-                </div>
-                
-                <div class="feature-card animate-on-scroll">
-                    <span class="feature-icon">🍛</span>
-                    <h3>100+ Indian Foods</h3>
-                    <p>Khichdi, idli, paratha, roti sabzi — all included</p>
-                </div>
-                
-                <div class="feature-card animate-on-scroll">
-                    <span class="feature-icon">📱</span>
-                    <h3>Works Offline</h3>
-                    <p>Install as app, use without internet after first load</p>
-                </div>
-            </div>
-        </div>
-    </section>
-    
-    <!-- SOCIAL PROOF -->
-    <section class="social-proof">
-        <div class="section-container">
-            <div class="proof-stats">
-                <div class="proof-stat">
-                    <h3>100+</h3>
-                    <p>Indian Recipes</p>
-                </div>
-                <div class="proof-stat">
-                    <h3>6-60</h3>
-                    <p>Months Age Range</p>
-                </div>
-                <div class="proof-stat">
-                    <h3>100%</h3>
-                    <p>Private & Free</p>
-                </div>
-            </div>
-            
-            <blockquote class="proof-quote">
-                "Finally, an app that understands Indian food and my picky toddler! 
-                The meal suggestions are actually things my child will eat."
-            </blockquote>
-            <p class="proof-author">— Parent of an 18-month-old</p>
-        </div>
-    </section>
-    
-    <!-- REGISTER (end of landing) -->
-    <section class="register-section" id="register">
-        <div class="register-wrap animate-on-scroll">
-            <div class="register-intro">
-                <span class="section-tag">Get Started Free</span>
-                <h2>Create your account</h2>
-                <p>Save meal plans, track nutrition, and sync across devices.</p>
-            </div>
-
-            <div class="register-card">
-                <div class="register-header">
-                    <h3>Create Your Account</h3>
-                    <p>It takes about a minute</p>
-                </div>
-                <div class="register-body">
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            {% for category, message in messages %}
-                                <div class="register-alert {{ category }}">{{ message }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
-
-                    <div class="register-features">
-                        <div class="register-feature"><i class="fas fa-check-circle"></i> Cloud sync</div>
-                        <div class="register-feature"><i class="fas fa-check-circle"></i> Meal history</div>
-                        <div class="register-feature"><i class="fas fa-check-circle"></i> Smart plans</div>
-                        <div class="register-feature"><i class="fas fa-check-circle"></i> Multi-device</div>
-                    </div>
-
-                    <div class="register-transfer-note">
-                        <i class="fas fa-info-circle"></i>
-                        <p style="margin:0;">Any guest toddler profiles on this device will transfer to your account automatically.</p>
-                    </div>
-
-                    <form class="register-form" method="POST" action="{{ url_for('signup') }}">
-                        <input type="hidden" name="next" value="landing">
-                        <div class="form-group">
-                            <label for="landing-name">Your Name <span style="font-weight:400;color:var(--text-light);">(optional)</span></label>
-                            <input type="text" id="landing-name" name="name"
-                                   value="{{ signup_name or '' }}"
-                                   placeholder="What should we call you?"
-                                   autocomplete="name">
-                        </div>
-                        <div class="form-group">
-                            <label for="landing-email">Email Address</label>
-                            <input type="email" id="landing-email" name="email"
-                                   value="{{ signup_email or '' }}"
-                                   placeholder="you@example.com" required
-                                   autocomplete="email">
-                        </div>
-                        <div class="form-group">
-                            <label for="landing-password">Password</label>
-                            <input type="password" id="landing-password" name="password"
-                                   placeholder="Create a strong password" required
-                                   autocomplete="new-password"
-                                   oninput="checkLandingPasswordStrength(this.value)">
-                            <div class="register-password-strength">
-                                <div class="register-password-bar" id="landing-password-bar"></div>
-                            </div>
-                            <p class="input-hint">At least 8 characters</p>
-                        </div>
-                        <div class="form-group">
-                            <label for="landing-confirm">Confirm Password</label>
-                            <input type="password" id="landing-confirm" name="confirm_password"
-                                   placeholder="Repeat your password" required
-                                   autocomplete="new-password">
-                        </div>
-                        <button type="submit" class="register-submit">
-                            <i class="fas fa-user-plus"></i> Create Account
-                        </button>
-                        <p class="register-terms">
-                            By signing up, you agree to our Terms of Service and Privacy Policy
-                        </p>
-                    </form>
-
-                    <div class="register-footer">
-                        Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
-                    </div>
-
-                    <a href="{{ url_for('onboarding') }}" class="register-guest">
-                        <i class="fas fa-arrow-right"></i> Continue without an account
+                <div class="native-first-ctas">
+                    <a class="btn-primary-block" href="#register" data-go-slide="register">
+                        <i class="fas fa-user-plus"></i> Create account
+                    </a>
+                    <a class="btn-ghost-block" href="{{ url_for('login') }}">
+                        <i class="fas fa-sign-in-alt"></i> Sign in
                     </a>
                 </div>
-            </div>
+            </section>
+
+            <!-- Marketing posts -->
+            <section class="story-slide" data-slide="1">
+                <div class="slide-bg alt-a"></div>
+                <div class="tap-zones" aria-hidden="true">
+                    <button type="button" data-dir="-1" aria-label="Previous"></button>
+                    <button type="button" data-dir="1" aria-label="Next"></button>
+                </div>
+                <div class="slide-inner">
+                    <article class="post-card">
+                        <div class="post-kicker"><i class="fas fa-heart"></i> We get it</div>
+                        <div class="post-emoji" aria-hidden="true">😫</div>
+                        <h2>“Not this again!”</h2>
+                        <p>Plate pushed away before the first bite. You’ve already cooked three things and it’s still breakfast.</p>
+                        <div class="post-solution"><i class="fas fa-check-circle"></i><span>LittleBowl learns what they accept and suggests meals that stick.</span></div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="story-slide" data-slide="2">
+                <div class="slide-bg alt-b"></div>
+                <div class="tap-zones" aria-hidden="true">
+                    <button type="button" data-dir="-1" aria-label="Previous"></button>
+                    <button type="button" data-dir="1" aria-label="Next"></button>
+                </div>
+                <div class="slide-inner">
+                    <article class="post-card">
+                        <div class="post-kicker"><i class="fas fa-calendar"></i> Weekly plans</div>
+                        <div class="post-emoji" aria-hidden="true">📅</div>
+                        <h2>“What do I make today?”</h2>
+                        <p>Stop reinventing lunch every afternoon. Get a 7-day plan tuned to Indian home cooking.</p>
+                        <div class="post-solution"><i class="fas fa-check-circle"></i><span>Auto-generated weekly plans based on age, diet, and likes.</span></div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="story-slide" data-slide="3">
+                <div class="slide-bg alt-c"></div>
+                <div class="tap-zones" aria-hidden="true">
+                    <button type="button" data-dir="-1" aria-label="Previous"></button>
+                    <button type="button" data-dir="1" aria-label="Next"></button>
+                </div>
+                <div class="slide-inner">
+                    <article class="post-card">
+                        <div class="post-kicker"><i class="fas fa-chart-pie"></i> Nutrition</div>
+                        <div class="post-emoji" aria-hidden="true">⚠️</div>
+                        <h2>“Are they getting enough?”</h2>
+                        <p>Iron, protein, calcium — track gaps without spreadsheets, and get gentle meal reminders.</p>
+                        <div class="post-solution"><i class="fas fa-check-circle"></i><span>Daily nutrition score + alerts when something looks low.</span></div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="story-slide" data-slide="4">
+                <div class="slide-bg alt-d"></div>
+                <div class="tap-zones" aria-hidden="true">
+                    <button type="button" data-dir="-1" aria-label="Previous"></button>
+                    <button type="button" data-dir="1" aria-label="Next"></button>
+                </div>
+                <div class="slide-inner">
+                    <article class="post-card">
+                        <div class="post-kicker"><i class="fas fa-bowl-food"></i> Indian foods</div>
+                        <div class="post-emoji" aria-hidden="true">🍛</div>
+                        <h2>Khichdi to idli, covered</h2>
+                        <p>100+ familiar recipes — dal, roti sabzi, dosa, porridge — adapted for little bowls.</p>
+                        <div class="post-solution"><i class="fas fa-check-circle"></i><span>Built for Indian families, not translated Western menus.</span></div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Register -->
+            <section class="story-slide" data-slide="register" id="register">
+                <div class="slide-bg form"></div>
+                <div class="slide-inner">
+                    <div class="register-panel">
+                        <h2>Create your account</h2>
+                        <p class="lead">Saved on our servers and on this phone — so the next open jumps straight to your dashboard.</p>
+
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    <div class="register-alert {{ category }}">{{ message }}</div>
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
+
+                        <div class="register-features">
+                            <span><i class="fas fa-check-circle"></i> Cloud sync</span>
+                            <span><i class="fas fa-check-circle"></i> Meal history</span>
+                            <span><i class="fas fa-check-circle"></i> Smart plans</span>
+                            <span><i class="fas fa-check-circle"></i> Reminders</span>
+                        </div>
+
+                        <form class="register-form" method="POST" action="{{ url_for('signup') }}" id="landing-register-form">
+                            <input type="hidden" name="next" value="landing">
+                            <div class="form-group">
+                                <label for="landing-name">Your name <span style="font-weight:500;color:#9ca3af;">(optional)</span></label>
+                                <input type="text" id="landing-name" name="name" value="{{ signup_name or '' }}" placeholder="What should we call you?" autocomplete="name">
+                            </div>
+                            <div class="form-group">
+                                <label for="landing-email">Email</label>
+                                <input type="email" id="landing-email" name="email" value="{{ signup_email or '' }}" placeholder="you@example.com" required autocomplete="email">
+                            </div>
+                            <div class="form-group">
+                                <label for="landing-password">Password</label>
+                                <input type="password" id="landing-password" name="password" placeholder="At least 8 characters" required autocomplete="new-password">
+                                <div class="password-bar" id="landing-password-bar"></div>
+                                <p class="input-hint">Stored securely in our database</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="landing-confirm">Confirm password</label>
+                                <input type="password" id="landing-confirm" name="confirm_password" placeholder="Repeat password" required autocomplete="new-password">
+                            </div>
+                            <button type="submit" class="register-submit">
+                                <i class="fas fa-user-plus"></i> Create account
+                            </button>
+                            <p class="register-terms">By signing up you agree to our Terms and Privacy Policy.</p>
+                        </form>
+
+                        <p class="register-footer">
+                            Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+                        </p>
+                        <a href="{{ url_for('onboarding') }}" class="register-guest">
+                            <i class="fas fa-arrow-right"></i> Continue without an account
+                        </a>
+                    </div>
+                </div>
+            </section>
         </div>
-    </section>
-    
-    <footer>
-        <p>
-            Made with ❤️ for Indian families<br>
-            <a href="#register">Create account</a>
-            ·
-            <a href="{{ url_for('onboarding') }}">Start as guest</a>
-        </p>
-    </footer>
-    
+    </div>
+
+    <script src="{{ url_for('static', filename='js/session-persist.js') }}"></script>
     <script>
-        // Scroll animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-        
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('visible');
-                }
-            });
-        }, observerOptions);
-        
-        document.querySelectorAll('.animate-on-scroll').forEach(el => {
-            observer.observe(el);
-        });
-        
-        // Change toddler speech bubble text
-        const speeches = [
-            "Yummy! 😋",
-            "More please! 🤤",
-            "I love it! ❤️",
-            "Tasty! 😊",
-            "Nom nom! 🍽️"
-        ];
-        
-        let speechIndex = 0;
-        const speechBubble = document.querySelector('.toddler-speech');
-        
-        setInterval(() => {
-            speechIndex = (speechIndex + 1) % speeches.length;
-            speechBubble.style.opacity = '0';
-            setTimeout(() => {
-                speechBubble.textContent = speeches[speechIndex];
-                speechBubble.style.opacity = '1';
-            }, 300);
-        }, 3000);
-        
-        // Smooth scroll for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function(e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            });
-        });
-
-        function checkLandingPasswordStrength(password) {
-            const bar = document.getElementById('landing-password-bar');
-            if (!bar) return;
-            bar.className = 'register-password-bar';
-            if (!password) return;
-            if (password.length < 8) {
-                bar.classList.add('weak');
-            } else if (password.length < 12 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-                bar.classList.add('medium');
-            } else {
-                bar.classList.add('strong');
-            }
+    (function () {
+      function isNative() {
+        try {
+          return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform())
+            || /capacitor/i.test(navigator.userAgent || '');
+        } catch (e) {
+          return /capacitor/i.test(navigator.userAgent || '');
         }
+      }
 
-        // If redirected here after a failed signup, open the register section
-        if (window.location.hash === '#register' || {{ 'true' if show_register|default(false) else 'false' }}) {
-            const register = document.getElementById('register');
-            if (register) {
-                requestAnimationFrame(() => {
-                    register.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
+      if (isNative()) document.body.classList.add('is-native-app');
+
+      // Returning users → dashboard (DB session + local phone cache)
+      (async function redirectIfKnown() {
+        if (!window.LittleBowlSession) return;
+        try {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('signed_out') === '1') {
+            await LittleBowlSession.clearLocalSession();
+            // Drop query param from address without reload
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState({}, '', window.location.pathname + window.location.hash);
             }
-        }
+            return;
+          }
+          const result = await LittleBowlSession.resolveDashboardPath();
+          if (result.path && result.path !== '/' && (result.toddlers.length || result.authenticated)) {
+            window.location.replace(result.path);
+          }
+        } catch (e) { /* stay on marketing */ }
+      })();
+
+      const track = document.getElementById('story-track');
+      const slides = Array.from(track.querySelectorAll('.story-slide'));
+      const progress = document.getElementById('story-progress');
+      let index = 0;
+
+      progress.innerHTML = slides.map(() => '<span><i></i></span>').join('');
+      const bars = Array.from(progress.children);
+
+      function goTo(i, behavior) {
+        index = Math.max(0, Math.min(slides.length - 1, i));
+        slides[index].scrollIntoView({ behavior: behavior || 'smooth', inline: 'start', block: 'nearest' });
+        updateBars();
+      }
+
+      function updateBars() {
+        bars.forEach((bar, i) => {
+          bar.classList.toggle('is-done', i < index);
+          bar.classList.toggle('is-active', i === index);
+        });
+      }
+
+      function slideIndexFromScroll() {
+        const w = track.clientWidth || 1;
+        return Math.round(track.scrollLeft / w);
+      }
+
+      let scrollTick = null;
+      track.addEventListener('scroll', () => {
+        if (scrollTick) return;
+        scrollTick = requestAnimationFrame(() => {
+          scrollTick = null;
+          index = slideIndexFromScroll();
+          updateBars();
+        });
+      }, { passive: true });
+
+      document.querySelectorAll('[data-go-slide]').forEach((el) => {
+        el.addEventListener('click', (e) => {
+          const target = el.getAttribute('data-go-slide');
+          if (target === 'register') {
+            e.preventDefault();
+            goTo(slides.length - 1);
+          }
+        });
+      });
+
+      track.querySelectorAll('.tap-zones button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const dir = parseInt(btn.getAttribute('data-dir'), 10) || 1;
+          goTo(index + dir);
+        });
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight') goTo(index + 1);
+        if (e.key === 'ArrowLeft') goTo(index - 1);
+      });
+
+      const pw = document.getElementById('landing-password');
+      const bar = document.getElementById('landing-password-bar');
+      if (pw && bar) {
+        pw.addEventListener('input', () => {
+          const v = pw.value || '';
+          bar.className = 'password-bar';
+          if (!v) return;
+          if (v.length < 8) bar.classList.add('weak');
+          else if (v.length < 12 || !/[A-Z]/.test(v) || !/[0-9]/.test(v)) bar.classList.add('medium');
+          else bar.classList.add('strong');
+        });
+      }
+
+      // After successful register POST, server redirects to /home — session-persist stores locally there.
+      // Also hash deep-link
+      if (window.location.hash === '#register' || {{ 'true' if show_register|default(false) else 'false' }}) {
+        requestAnimationFrame(() => goTo(slides.length - 1, 'auto'));
+      } else {
+        updateBars();
+      }
+    })();
     </script>
     <script src="{{ url_for('static', filename='js/a2hs-prompt.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/analytics.js') }}" defer></script>

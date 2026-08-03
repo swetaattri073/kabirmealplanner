@@ -616,7 +616,7 @@ def logout():
     """Log out user"""
     logout_user()
     flash('You have been logged out.', 'info')
-    return redirect(url_for('index'))
+    return redirect(url_for('index', signed_out=1))
 
 
 @app.route('/profile')

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
     <title>Opening LittleBowl…</title>
     {% include 'includes/pwa_head.html' %}
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap" rel="stylesheet">
@@ -71,7 +71,7 @@
     <div class="bridge" role="status" aria-live="polite">
         <img class="mark" src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="" width="64" height="64">
         <h1><span class="little">Little</span><span class="bowl">Bowl</span></h1>
-        <p id="bridge-msg">Restoring your meal plan…</p>
+        <p id="bridge-msg">Opening LittleBowl…</p>
         <div class="spinner" aria-hidden="true"></div>
     </div>
     <script src="{{ url_for('static', filename='js/session-persist.js') }}"></script>
@@ -79,20 +79,25 @@
       (async function () {
         const msg = document.getElementById('bridge-msg');
         try {
-          const data = await window.LittleBowlSession.restore();
-          const toddlers = (data && data.toddlers) || [];
+          const result = await window.LittleBowlSession.resolveDashboardPath();
+          const toddlers = result.toddlers || [];
           if (toddlers.length) {
-            const id = toddlers[0].ref || toddlers[0].id;
-            window.LittleBowlSession.rememberToddler(id);
-            window.location.replace('/dashboard/' + id);
+            msg.textContent = 'Welcome back…';
+            window.location.replace(result.path);
             return;
           }
-          msg.textContent = 'Setting up your profile…';
-          window.location.replace('/onboarding');
+          if (result.authenticated) {
+            msg.textContent = 'Setting up your profile…';
+            window.location.replace('/onboarding');
+            return;
+          }
+          // First open / signed out — marketing + registration carousel
+          msg.textContent = 'Welcome…';
+          window.location.replace('/');
         } catch (err) {
           console.warn('Session restore failed', err);
           msg.textContent = 'Continuing…';
-          window.location.replace('/onboarding');
+          window.location.replace('/');
         }
       })();
     </script>

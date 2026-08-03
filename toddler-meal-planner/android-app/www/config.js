@@ -1,3 +1,2 @@
-// Optional default server URL baked by `npm run configure -- <url>`.
-// Leave empty so first launch asks for the URL inside the app.
-window.LITTLEBOWL_DEFAULT_SERVER = '';
+// Production LittleBowl app entry — /home restores session then opens dashboard or marketing.
+window.LITTLEBOWL_DEFAULT_SERVER = 'http://littlebowl.in/home';

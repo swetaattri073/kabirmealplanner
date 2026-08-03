@@ -79,10 +79,16 @@ if (!fs.existsSync(pbxPath)) {
 
 const configPath = path.join(root, 'capacitor.config.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const info = fs.existsSync(infoPath) ? fs.readFileSync(infoPath, 'utf8') : '';
 if (config.server && config.server.url) {
-  bad('capacitor.config.json must NOT set server.url (breaks first-launch setup)');
+  ok(`server.url baked → ${config.server.url}`);
 } else {
-  ok('No server.url bake (setup screen preserved)');
+  bad('capacitor.config.json must set server.url (production littlebowl.in/home)');
+}
+if (info.includes('littlebowl.in') && info.includes('NSExceptionAllowsInsecureHTTPLoads')) {
+  ok('Info.plist ATS exception for littlebowl.in HTTP');
+} else {
+  bad('Info.plist missing ATS exception for littlebowl.in');
 }
 if (config.server && Array.isArray(config.server.allowNavigation)) {
   ok('server.allowNavigation present (plugins survive remote redirect)');

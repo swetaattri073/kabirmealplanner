@@ -57,9 +57,8 @@
 	<string>LittleBowl may save meal photos you capture to your library when you choose to keep them.</string>
 
 	<!--
-	  App Transport Security
-	  Web content (Capacitor WebView) may load your LittleBowl server over HTTP during
-	  setup (LAN/VPS IP). Prefer HTTPS in production. Local networking is also allowed.
+	  App Transport Security — production app loads http://littlebowl.in
+	  Prefer migrating the site to HTTPS; until then allow this host over HTTP.
 	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
@@ -67,6 +66,18 @@
 		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>littlebowl.in</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+		</dict>
 	</dict>
 </dict>
 </plist>
