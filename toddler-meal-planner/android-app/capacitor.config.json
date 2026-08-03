@@ -3,13 +3,13 @@
   "appName": "LittleBowl",
   "webDir": "www",
   "server": {
-    "url": "http://littlebowl.in/home",
-    "cleartext": true,
+    "url": "https://littlebowl.in/home",
+    "cleartext": false,
     "allowNavigation": [
       "littlebowl.in",
       "*.littlebowl.in",
-      "http://littlebowl.in",
-      "http://littlebowl.in/*"
+      "https://littlebowl.in",
+      "https://littlebowl.in/*"
     ]
   },
   "plugins": {
@@ -33,7 +33,7 @@
     }
   },
   "android": {
-    "allowMixedContent": true,
+    "allowMixedContent": false,
     "backgroundColor": "#fffaf0",
     "webContentsDebuggingEnabled": false
   },

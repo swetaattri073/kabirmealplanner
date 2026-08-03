@@ -1,6 +1,6 @@
 # LittleBowl native apps (Android + iOS)
 
-Official LittleBowl apps for **http://littlebowl.in** — Capacitor + native
+Official LittleBowl apps for **https://littlebowl.in** — Capacitor + native
 chrome (splash, status bar, notifications, camera).
 
 There is **no server-URL setup screen**. The app opens `/home`, which restores
@@ -10,9 +10,11 @@ the local session and either shows the **dashboard** (returning users) or the
 | | Android | iOS |
 |--|---------|-----|
 | Package / Bundle | `com.littlebowl.app` | `com.littlebowl.app` |
-| Opens | `http://littlebowl.in/home` | `http://littlebowl.in/home` |
+| Opens | `https://littlebowl.in/home` | `https://littlebowl.in/home` |
 | Project | `android/` | `ios/App/App.xcworkspace` |
 | Notifications | Local meal reminders | Local meal reminders |
+
+> **TLS required:** enable HTTPS on the server first (see [`../HTTPS.md`](../HTTPS.md)).
 
 ## Prerequisites
 

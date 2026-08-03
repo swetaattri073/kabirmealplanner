@@ -84,16 +84,21 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 # wipe Flask sessions (which made guest onboarding look "reset").
 app.config['SECRET_KEY'] = ensure_persistent_secret_key(_INSTANCE_DIR)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Session cookies: only set Secure when HTTPS is actually used.
-# Docker commonly serves over HTTP (port 80) with FLASK_ENV=production —
-# Secure cookies then never stick on mobile, so onboarding appears to "reset".
+# Session cookies: Secure flag for HTTPS (required for App Store / Play trust).
+# FORCE_HTTPS=true (or SESSION_COOKIE_SECURE=true) when littlebowl.in has a real cert.
+# SESSION_COOKIE_SECURE=auto → Secure cookies only when the request is HTTPS
+# (works behind Caddy/nginx/Cloudflare with X-Forwarded-Proto).
 _secure_flag = os.environ.get('SESSION_COOKIE_SECURE', '').strip().lower()
-if _secure_flag in ('1', 'true', 'yes'):
+_force_https = os.environ.get('FORCE_HTTPS', '').strip().lower() in ('1', 'true', 'yes')
+if _secure_flag in ('1', 'true', 'yes') or _force_https:
     app.config['SESSION_COOKIE_SECURE'] = True
 elif _secure_flag in ('0', 'false', 'no'):
     app.config['SESSION_COOKIE_SECURE'] = False
+elif _secure_flag in ('auto', ''):
+    # Auto: mark secure when ProxyFix sees HTTPS; False for plain HTTP IP deploys.
+    # Per-request guest cookies still use cookie_secure_for_request().
+    app.config['SESSION_COOKIE_SECURE'] = False
 else:
-    # Default off for HTTP deploys; set SESSION_COOKIE_SECURE=true behind HTTPS
     app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -105,6 +110,10 @@ app.config['REMEMBER_COOKIE_HTTPONLY'] = True
 app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
 app.config['REMEMBER_COOKIE_SECURE'] = app.config['SESSION_COOKIE_SECURE']
 app.config['REMEMBER_COOKIE_NAME'] = 'lb_remember'
+app.config['FORCE_HTTPS'] = _force_https
+if _force_https:
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
+
 
 # Opaque toddler IDs in URLs (signed tokens, not sequential integers)
 configure_toddler_refs(app.config['SECRET_KEY'])
@@ -407,6 +416,24 @@ def _redirect_numeric_toddler_urls():
     if request.query_string:
         new_path = f'{new_path}?{request.query_string.decode()}'
     return redirect(new_path, code=302)
+
+
+@app.before_request
+def _force_https_redirect():
+    """When FORCE_HTTPS is on, bounce plain HTTP to HTTPS (App Store–friendly)."""
+    if not app.config.get('FORCE_HTTPS'):
+        return None
+    if request.is_secure:
+        return None
+    proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
+    if proto == 'https':
+        return None
+    host = (request.host or '').split(':')[0].lower()
+    # Docker healthchecks and local tooling hit the app container over HTTP
+    if host in ('127.0.0.1', 'localhost', 'web', 'app'):
+        return None
+    url = request.url.replace('http://', 'https://', 1)
+    return redirect(url, code=301)
 
 
 @app.before_request

@@ -57,27 +57,15 @@
 	<string>LittleBowl may save meal photos you capture to your library when you choose to keep them.</string>
 
 	<!--
-	  App Transport Security — production app loads http://littlebowl.in
-	  Prefer migrating the site to HTTPS; until then allow this host over HTTP.
+	  App Transport Security — production uses https://littlebowl.in
+	  (Caddy / Let's Encrypt). Local networking kept for device debugging.
 	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true/>
+		<false/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>littlebowl.in</key>
-			<dict>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-			</dict>
-		</dict>
 	</dict>
 </dict>
 </plist>

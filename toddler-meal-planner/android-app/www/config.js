@@ -1,2 +1,2 @@
-// Production LittleBowl app entry — /home restores session then opens dashboard or marketing.
-window.LITTLEBOWL_DEFAULT_SERVER = 'http://littlebowl.in/home';
+// Production LittleBowl app entry (HTTPS).
+window.LITTLEBOWL_DEFAULT_SERVER = 'https://littlebowl.in/home';

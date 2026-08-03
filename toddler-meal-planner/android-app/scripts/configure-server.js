@@ -15,7 +15,7 @@ const root = path.join(__dirname, '..');
 const configPath = path.join(root, 'capacitor.config.json');
 const envPath = path.join(root, '.env');
 const webConfigPath = path.join(root, 'www', 'config.js');
-const DEFAULT_URL = 'http://littlebowl.in/home';
+const DEFAULT_URL = 'https://littlebowl.in/home';
 
 function readEnvFile() {
   if (!fs.existsSync(envPath)) return {};
@@ -51,7 +51,7 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 const host = new URL(serverUrl).hostname;
 config.server = {
   url: serverUrl,
-  cleartext: true,
+  cleartext: /^http:\/\//i.test(serverUrl),
   allowNavigation: [
     host,
     `*.${host}`,

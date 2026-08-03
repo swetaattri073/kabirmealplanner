@@ -16,7 +16,6 @@ const requiredInfoKeys = [
   'NSPhotoLibraryUsageDescription',
   'NSPhotoLibraryAddUsageDescription',
   'NSAppTransportSecurity',
-  'NSAllowsArbitraryLoadsInWebContent',
   'NSAllowsLocalNetworking',
   'ITSAppUsesNonExemptEncryption',
   'CFBundleDisplayName',
@@ -46,11 +45,15 @@ if (!fs.existsSync(infoPath)) {
     if (info.includes(`<key>${key}</key>`) || info.includes(key)) ok(`Info.plist has ${key}`);
     else bad(`Info.plist missing ${key}`);
   }
-  if (/NSAllowsArbitraryLoads<\/key>\s*<true\/>/.test(info) &&
-      !info.includes('NSAllowsArbitraryLoadsInWebContent')) {
-    bad('Prefer NSAllowsArbitraryLoadsInWebContent over blanket NSAllowsArbitraryLoads');
+  if (/NSAllowsArbitraryLoads<\/key>\s*<true\/>/.test(info)) {
+    bad('Do not enable blanket NSAllowsArbitraryLoads — use HTTPS production URL');
   } else {
-    ok('ATS scoped to web content / local networking (not blanket arbitrary loads)');
+    ok('No blanket NSAllowsArbitraryLoads');
+  }
+  if (info.includes('NSExceptionAllowsInsecureHTTPLoads')) {
+    bad('Remove HTTP ATS exceptions — production is https://littlebowl.in');
+  } else {
+    ok('No HTTP ATS exceptions (HTTPS-only production)');
   }
 }
 
@@ -82,13 +85,15 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 const info = fs.existsSync(infoPath) ? fs.readFileSync(infoPath, 'utf8') : '';
 if (config.server && config.server.url) {
   ok(`server.url baked → ${config.server.url}`);
+  if (/^https:\/\//i.test(config.server.url)) ok('server.url uses HTTPS');
+  else bad('server.url must be https:// for App Store / Play');
 } else {
-  bad('capacitor.config.json must set server.url (production littlebowl.in/home)');
+  bad('capacitor.config.json must set server.url (production https://littlebowl.in/home)');
 }
 if (info.includes('littlebowl.in') && info.includes('NSExceptionAllowsInsecureHTTPLoads')) {
-  ok('Info.plist ATS exception for littlebowl.in HTTP');
+  bad('Info.plist still allows insecure HTTP for littlebowl.in');
 } else {
-  bad('Info.plist missing ATS exception for littlebowl.in');
+  ok('Info.plist does not allow insecure HTTP for production host');
 }
 if (config.server && Array.isArray(config.server.allowNavigation)) {
   ok('server.allowNavigation present (plugins survive remote redirect)');
