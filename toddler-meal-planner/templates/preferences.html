@@ -3,13 +3,33 @@
 {% block title %}Food Preferences - {{ toddler.name }} | LittleBowl{% endblock %}
 
 {% block content %}
-<body data-page="preferences" data-toddler-id="{{ toddler.ref }}">
+<script>
+  document.body.dataset.page = 'preferences';
+  document.body.dataset.toddlerId = {{ toddler.ref|tojson }};
+  document.body.dataset.toddlerName = {{ toddler.name|tojson }};
+</script>
     <div class="page-header">
         <h1>❤️ Food Preferences</h1>
         <p>Track what {{ toddler.name }} loves — and how you like to cook for them</p>
     </div>
 
-    <div class="card" id="cooking-habits">
+    <div class="card" id="meal-reminders">
+        <div class="card-header">
+            <h2><i class="fas fa-bell"></i> Meal log reminders</h2>
+            <span class="badge badge-success" style="font-size:0.75rem;">On by default</span>
+        </div>
+        <div class="card-body">
+            <p style="color:var(--text-secondary);margin:0 0 1rem;line-height:1.45;">
+                Daily reminders to log {{ toddler.name }}’s meals. Adjust times to your routine —
+                also available under <a href="{{ url_for('profile') }}#notifications">My Account</a>.
+            </p>
+            <div id="notification-settings">
+                <p class="text-muted">Loading reminder settings…</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="cooking-habits" style="margin-top: 1.5rem;">
         <div class="card-header">
             <h2>🧑‍🍳 Your cooking habits</h2>
         </div>

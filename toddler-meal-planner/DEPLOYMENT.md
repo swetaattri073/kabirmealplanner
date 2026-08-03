@@ -13,10 +13,10 @@
 | AWS App Runner | ⭐⭐ Medium | $5-15/mo | 20 min |
 | AWS EC2 | ⭐⭐⭐ Advanced | $0-10/mo | 30 min |
 
-After the web app is live, build the **native apps** from [`android-app/`](android-app/) (Android + iOS Capacitor shell):
+After the web app is live on **HTTPS** (see [`HTTPS.md`](HTTPS.md)), build the **native apps**:
 
 ```bash
-cd android-app && npm install && npm run sync && npm run verify:ios
+cd android-app && npm install && npm run sync && npm run verify && npm run verify:ios
 # Android APK:
 npm run build:debug
 # Install: adb install -r android/app/build/outputs/apk/debug/app-debug.apk
@@ -24,7 +24,7 @@ npm run build:debug
 npm run open:ios
 ```
 
-On first launch, enter your server URL. Details: [`android-app/README.md`](android-app/README.md).
+Apps open `https://littlebowl.in/home` with Secure cookies. Details: [`android-app/README.md`](android-app/README.md).
 
 ---
 
@@ -100,12 +100,28 @@ sudo docker-compose up -d --build
 ### Step 3: Configure Networking
 
 1. Go to your instance → **"Networking"** tab
-2. Under **"IPv4 Firewall"**, add rule:
-   - **Application**: HTTP (port 80)
+2. Under **"IPv4 Firewall"**, add rules:
+   - **HTTP** (port 80) and **HTTPS** (port 443) — both required for Let’s Encrypt
 3. Note your **Public IP address**
-4. Access your app at `http://YOUR_PUBLIC_IP`
+4. Point `littlebowl.in` A record here, then follow [`HTTPS.md`](HTTPS.md)
 
-### Step 4: (Optional) Add Custom Domain + HTTPS
+### Step 4: Custom Domain + HTTPS (required for store apps)
+
+See **[`HTTPS.md`](HTTPS.md)** for Cloudflare or Caddy + Let’s Encrypt on `littlebowl.in`.
+
+Quick path on the VPS (ports 80/443 open, DNS A → this server):
+
+```bash
+export DOMAIN=littlebowl.in
+export ACME_EMAIL=you@example.com
+# In ~/meal-data/.env:
+#   FORCE_HTTPS=true
+#   SESSION_COOKIE_SECURE=true
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+curl -I https://littlebowl.in/
+```
+
+Legacy nginx + certbot (optional alternative):
 
 ```bash
 # Install Certbot for free SSL

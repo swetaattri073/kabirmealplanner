@@ -1,0 +1,18 @@
+# Auto-HTTPS for {$DOMAIN:littlebowl.in}
+{$DOMAIN:littlebowl.in} {
+	encode gzip
+	email {$ACME_EMAIL:admin@littlebowl.in}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy web:5000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_up X-Real-IP {remote}
+	}
+}

@@ -7,17 +7,17 @@ const config = JSON.parse(fs.readFileSync(path.join(root, 'capacitor.config.json
 const webConfig = fs.readFileSync(path.join(root, 'www', 'config.js'), 'utf8');
 const hasBaked = /LITTLEBOWL_DEFAULT_SERVER\s*=\s*['"]https?:\/\//.test(webConfig);
 
-if (config.server && config.server.url) {
-  console.warn('Warning: capacitor server.url is set. Prefer local www + in-app setup.');
-  console.warn('server.url =', config.server.url);
+if (!config.server || !config.server.url) {
+  console.error('Error: capacitor server.url must be set (production app endpoint).');
+  process.exit(1);
 }
 
-console.log('OK — Capacitor shell uses local setup screen (Android + iOS).');
+console.log('OK — native apps open baked server.url:', config.server.url);
 if (hasBaked) {
-  console.log('Default server is baked into www/config.js');
+  console.log('www/config.js default matches production branding splash.');
 } else {
-  console.log('No baked default — users enter the server URL on first launch.');
+  console.warn('Warning: www/config.js has no baked LITTLEBOWL_DEFAULT_SERVER');
 }
 if (!(config.server && Array.isArray(config.server.allowNavigation))) {
-  console.warn('Warning: server.allowNavigation missing — plugins may break after redirect.');
+  console.warn('Warning: server.allowNavigation missing — plugins may break after navigation.');
 }

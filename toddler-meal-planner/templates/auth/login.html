@@ -329,6 +329,21 @@
             </div>
         </div>
     </div>
+    <script src="{{ url_for('static', filename='js/session-persist.js') }}"></script>
     <script src="{{ url_for('static', filename='js/analytics.js') }}" defer></script>
+    <script>
+      // If already signed in / restored on this phone, skip the form.
+      (async function () {
+        if (!window.LittleBowlSession) return;
+        try {
+          const result = await LittleBowlSession.resolveDashboardPath();
+          if (result.toddlers && result.toddlers.length) {
+            window.location.replace(result.path);
+          } else if (result.authenticated) {
+            window.location.replace('/onboarding');
+          }
+        } catch (e) { /* stay on login */ }
+      })();
+    </script>
 </body>
 </html>

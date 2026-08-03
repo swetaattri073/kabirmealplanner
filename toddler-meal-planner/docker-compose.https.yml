@@ -1,0 +1,44 @@
+# Automatic HTTPS for littlebowl.in via Caddy (Let's Encrypt).
+#
+# Usage on the VPS (DNS A record → this server, ports 80 + 443 open):
+#   cd toddler-meal-planner
+#   export DOMAIN=littlebowl.in
+#   export ACME_EMAIL=you@example.com
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+#
+# Then put in ~/meal-data/.env:
+#   FORCE_HTTPS=true
+#   SESSION_COOKIE_SECURE=true
+
+services:
+  web:
+    # App stays internal — Caddy terminates TLS on 80/443
+    ports: !reset []
+    expose:
+      - "5000"
+    environment:
+      FLASK_ENV: production
+      FORCE_HTTPS: ${FORCE_HTTPS:-true}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/instance/toddler_meals.db}
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-littlebowl.in}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@littlebowl.in}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:

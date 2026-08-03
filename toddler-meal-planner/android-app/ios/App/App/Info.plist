@@ -57,14 +57,13 @@
 	<string>LittleBowl may save meal photos you capture to your library when you choose to keep them.</string>
 
 	<!--
-	  App Transport Security
-	  Web content (Capacitor WebView) may load your LittleBowl server over HTTP during
-	  setup (LAN/VPS IP). Prefer HTTPS in production. Local networking is also allowed.
+	  App Transport Security — production uses https://littlebowl.in
+	  (Caddy / Let's Encrypt). Local networking kept for device debugging.
 	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true/>
+		<false/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
