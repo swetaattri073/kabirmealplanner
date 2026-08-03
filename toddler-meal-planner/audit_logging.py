@@ -58,7 +58,34 @@ def setup_logging(instance_dir: str) -> None:
     global _file_logger, _audit_logger
 
     log_dir = os.path.join(instance_dir, 'logs')
-    os.makedirs(log_dir, exist_ok=True)
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        probe = os.path.join(log_dir, '.write_test')
+        with open(probe, 'a', encoding='utf-8'):
+            pass
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
+    except OSError:
+        # Bind-mounted volume may be root-owned; keep the app up on stderr only.
+        logging.getLogger('littlebowl').warning(
+            'Cannot write %s — file audit logs disabled (fix volume permissions).',
+            log_dir,
+        )
+        _file_logger = logging.getLogger('littlebowl.app')
+        _audit_logger = logging.getLogger('littlebowl.audit')
+        for lg in (_file_logger, _audit_logger):
+            lg.setLevel(logging.INFO)
+            if not lg.handlers:
+                h = logging.StreamHandler()
+                h.setFormatter(logging.Formatter(
+                    '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                ))
+                lg.addHandler(h)
+            lg.propagate = False
+        return
 
     fmt = logging.Formatter(
         '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
