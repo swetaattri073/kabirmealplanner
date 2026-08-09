@@ -2,13 +2,19 @@
 #
 # Usage on the VPS (DNS A record → this server, ports 80 + 443 open):
 #   cd toddler-meal-planner
+#   export MEAL_DATA_DIR=/home/ec2-user/meal-data   # IMPORTANT with sudo
 #   export DOMAIN=littlebowl.in
 #   export ACME_EMAIL=you@example.com
-#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+#   # Admin (or keep them in $MEAL_DATA_DIR/.env):
+#   # export ADMIN_EMAILS=you@example.com
+#   # export ADMIN_PASSWORD='...'
+#   sudo -E docker-compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
 #
-# Then put in ~/meal-data/.env:
+# In $MEAL_DATA_DIR/.env:
 #   FORCE_HTTPS=true
 #   SESSION_COOKIE_SECURE=true
+#   ADMIN_EMAILS=you@example.com
+#   ADMIN_PASSWORD=choose-a-strong-password
 
 services:
   web:
@@ -21,6 +27,8 @@ services:
       FORCE_HTTPS: ${FORCE_HTTPS:-true}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/instance/toddler_meals.db}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
 
   caddy:
     image: caddy:2.8-alpine
