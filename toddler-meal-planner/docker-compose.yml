@@ -3,13 +3,18 @@ services:
     build: .
     ports:
       - "80:5000"
+    # IMPORTANT: with `sudo`, HOME often becomes /root and the wrong folder is mounted.
+    # Always set MEAL_DATA_DIR explicitly on Lightsail, e.g.:
+    #   export MEAL_DATA_DIR=/home/ec2-user/meal-data
     environment:
       FLASK_ENV: production
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/instance/toddler_meals.db}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
-      # Persists SQLite DB and .env (put secrets in ~/meal-data/.env).
-      # The app loads /app/instance/.env automatically on startup.
-      - ${HOME}/meal-data:/app/instance
+      # Persists SQLite DB and .env (put secrets in meal-data/.env).
+      # The app also load_dotenv's /app/instance/.env on startup.
+      - ${MEAL_DATA_DIR:-${HOME}/meal-data}:/app/instance
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/"]
