@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { DEFAULT_REMINDER_TIMES, MEAL_LABELS } from './theme';
 import {
@@ -7,15 +8,33 @@ import {
   type NotifyPrefs,
 } from './storage';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+/**
+ * Expo Go (SDK 53+) removed Android remote-notification support and can throw
+ * when notifications APIs are touched. Skip scheduling there; use a
+ * development / production build for real reminders.
+ */
+export function notificationsSupported(): boolean {
+  if (Platform.OS === 'web') return false;
+  // Expo Go: appOwnership === 'expo'
+  if (Constants.appOwnership === 'expo') return false;
+  return true;
+}
+
+try {
+  if (notificationsSupported()) {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  }
+} catch {
+  /* Expo Go / unsupported */
+}
 
 const MEAL_ORDER = Object.keys(DEFAULT_REMINDER_TIMES);
 
@@ -50,7 +69,7 @@ export async function saveNotifyPrefs(prefs: NotifyPrefs) {
 }
 
 export async function ensureNotificationPermission(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+  if (!notificationsSupported()) return false;
   try {
     const current = await Notifications.getPermissionsAsync();
     if (current.granted) return true;
@@ -68,21 +87,27 @@ function parseTime(hhmm: string): { hour: number; minute: number } {
 
 export async function rescheduleMealReminders(prefs?: NotifyPrefs) {
   const p = prefs || (await loadNotifyPrefs());
+  if (!notificationsSupported()) return;
+  if (!p.enabled || !p.mealReminders) return;
+
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
   } catch {
-    /* web / unsupported */
+    return;
   }
-  if (!p.enabled || !p.mealReminders) return;
-  if (Platform.OS === 'web') return;
+
   const ok = await ensureNotificationPermission();
   if (!ok) return;
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('meal-reminders', {
-      name: 'Meal reminders',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('meal-reminders', {
+        name: 'Meal reminders',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+  } catch {
+    return;
   }
 
   const name = p.toddlerName || 'your toddler';
