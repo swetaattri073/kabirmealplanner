@@ -1,10 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Dimensions,
-  FlatList,
   Image,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Platform,
   Pressable,
   StyleSheet,
@@ -17,10 +14,12 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
+  FadeIn,
   FadeInDown,
-  FadeInRight,
   SharedValue,
+  cancelAnimation,
   interpolate,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -29,17 +28,13 @@ import Animated, {
 import { StatusBar } from 'expo-status-bar';
 
 const { width } = Dimensions.get('window');
+const STORY_MS = 5200;
 
-/**
- * Colors / angles match toddler-meal-planner/templates/landing.html
- * .slide-bg / .alt-a / .alt-b / .alt-c / .alt-d
- */
 type Slide = {
   key: string;
   kind: 'hero' | 'post';
   colors: [string, string, ...string[]];
   locations: number[];
-  /** Approximate CSS angle → LinearGradient start/end */
   start: { x: number; y: number };
   end: { x: number; y: number };
   kicker?: string;
@@ -50,11 +45,11 @@ type Slide = {
   solution?: string;
 };
 
+/** Colors match toddler-meal-planner/templates/landing.html */
 const SLIDES: Slide[] = [
   {
     key: 'hero',
     kind: 'hero',
-    // linear-gradient(145deg, #6366f1 0%, #8b5cf6 35%, #ec4899 70%, #f97316 100%)
     colors: ['#6366f1', '#8b5cf6', '#ec4899', '#f97316'],
     locations: [0, 0.35, 0.7, 1],
     start: { x: 0.15, y: 0 },
@@ -66,7 +61,6 @@ const SLIDES: Slide[] = [
   {
     key: 'pain',
     kind: 'post',
-    // alt-a: 160deg #312e81 → #7c3aed → #db2777
     colors: ['#312e81', '#7c3aed', '#db2777'],
     locations: [0, 0.45, 1],
     start: { x: 0.2, y: 0 },
@@ -80,7 +74,6 @@ const SLIDES: Slide[] = [
   {
     key: 'plan',
     kind: 'post',
-    // alt-b: 160deg #0f766e → #2563eb → #7c3aed
     colors: ['#0f766e', '#2563eb', '#7c3aed'],
     locations: [0, 0.5, 1],
     start: { x: 0.2, y: 0 },
@@ -94,7 +87,6 @@ const SLIDES: Slide[] = [
   {
     key: 'nutrition',
     kind: 'post',
-    // alt-c: 160deg #9a3412 → #ea580c → #db2777
     colors: ['#9a3412', '#ea580c', '#db2777'],
     locations: [0, 0.4, 1],
     start: { x: 0.2, y: 0 },
@@ -108,7 +100,6 @@ const SLIDES: Slide[] = [
   {
     key: 'foods',
     kind: 'post',
-    // alt-d: 160deg #1e3a8a → #4f46e5 → #06b6d4
     colors: ['#1e3a8a', '#4f46e5', '#06b6d4'],
     locations: [0, 0.5, 1],
     start: { x: 0.2, y: 0 },
@@ -122,7 +113,6 @@ const SLIDES: Slide[] = [
 ];
 
 function GradientHi({ text }: { text: string }) {
-  // Web MaskedView is unreliable — use amber that matches .hi gradient midpoint.
   if (Platform.OS === 'web') {
     return <Text style={[styles.heroTitle, styles.heroTitleHiFallback]}>{text}</Text>;
   }
@@ -145,39 +135,43 @@ function GradientHi({ text }: { text: string }) {
   );
 }
 
-function ProgressBars({ index, count }: { index: number; count: number }) {
+function StoryProgress({
+  index,
+  count,
+  fill,
+}: {
+  index: number;
+  count: number;
+  fill: SharedValue<number>;
+}) {
   return (
     <View style={styles.progress}>
       {Array.from({ length: count }).map((_, i) => (
-        <ProgressSeg key={i} filled={i <= index} active={i === index} />
+        <StorySeg key={i} state={i < index ? 'done' : i === index ? 'active' : 'todo'} fill={fill} />
       ))}
     </View>
   );
 }
 
-function ProgressSeg({ filled, active }: { filled: boolean; active: boolean }) {
-  const progress = useSharedValue(filled ? 1 : 0);
+function StorySeg({
+  state,
+  fill,
+}: {
+  state: 'done' | 'active' | 'todo';
+  fill: SharedValue<number>;
+}) {
   const [trackW, setTrackW] = useState(0);
-  useEffect(() => {
-    progress.value = withTiming(filled ? 1 : 0, {
-      duration: active ? 280 : 220,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [filled, active, progress]);
-  const style = useAnimatedStyle(() => ({
-    width: trackW * progress.value,
-  }));
+  const style = useAnimatedStyle(() => {
+    const p = state === 'done' ? 1 : state === 'active' ? fill.value : 0;
+    return { width: trackW * p };
+  });
   return (
-    <View
-      style={styles.bar}
-      onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
-    >
+    <View style={styles.bar} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
       <Animated.View style={[styles.barFill, style]} />
     </View>
   );
 }
 
-/** Same orbit as web onboarding/landing: meals circle the toddler in the middle. */
 const ORBIT_FOODS = ['🥕', '🍎', '🥦', '🍌', '🍚', '🧀'] as const;
 const ORBIT_RADIUS = Math.min(width * 0.28, 108);
 const ORBIT_SIZE = Math.min(width * 0.72, 260);
@@ -196,7 +190,6 @@ function OrbitFood({
   const phase = (index / total) * Math.PI * 2;
   const style = useAnimatedStyle(() => {
     const angle = spin.value * Math.PI * 2 + phase;
-    // CSS: rotate(θ) translateX(r) rotate(-θ) — keeps emoji upright while orbiting
     const deg = (angle * 180) / Math.PI;
     return {
       transform: [
@@ -216,9 +209,9 @@ function OrbitFood({
 function OrbitingMealsHero() {
   const spin = useSharedValue(0);
   const bob = useSharedValue(0);
+  const foodBounce = useSharedValue(0);
 
   useEffect(() => {
-    // 8s linear infinite — matches web @keyframes orbit / flyAround
     spin.value = withRepeat(
       withTiming(1, { duration: 8000, easing: Easing.linear }),
       -1,
@@ -229,7 +222,12 @@ function OrbitingMealsHero() {
       -1,
       true,
     );
-  }, [spin, bob]);
+    foodBounce.value = withRepeat(
+      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, [spin, bob, foodBounce]);
 
   const plateStyle = useAnimatedStyle(() => ({
     transform: [
@@ -237,15 +235,6 @@ function OrbitingMealsHero() {
       { rotate: `${interpolate(bob.value, [0, 1], [-2, 2])}deg` },
     ],
   }));
-
-  const foodBounce = useSharedValue(0);
-  useEffect(() => {
-    foodBounce.value = withRepeat(
-      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true,
-    );
-  }, [foodBounce]);
   const centerFoodStyle = useAnimatedStyle(() => ({
     transform: [{ scale: interpolate(foodBounce.value, [0, 1], [1, 1.08]) }],
   }));
@@ -253,13 +242,7 @@ function OrbitingMealsHero() {
   return (
     <View style={styles.orbitScene} accessibilityLabel="Toddler with meals orbiting">
       {ORBIT_FOODS.map((emoji, i) => (
-        <OrbitFood
-          key={emoji}
-          emoji={emoji}
-          index={i}
-          total={ORBIT_FOODS.length}
-          spin={spin}
-        />
+        <OrbitFood key={emoji} emoji={emoji} index={i} total={ORBIT_FOODS.length} spin={spin} />
       ))}
       <Animated.View style={[styles.orbitPlate, plateStyle]}>
         <View style={styles.orbitPlateRing} />
@@ -272,26 +255,6 @@ function OrbitingMealsHero() {
         </Animated.View>
       </Animated.View>
     </View>
-  );
-}
-
-function NudgeHint() {
-  const t = useSharedValue(0);
-  useEffect(() => {
-    t.value = withRepeat(
-      withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true,
-    );
-  }, [t]);
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(t.value, [0, 1], [0, 6]) }],
-    opacity: interpolate(t.value, [0, 0.5, 1], [0.75, 1, 0.75]),
-  }));
-  return (
-    <Animated.Text style={[styles.swipeHint, style]}>
-      Swipe for more  →
-    </Animated.Text>
   );
 }
 
@@ -329,17 +292,78 @@ function PillButton({
   );
 }
 
+function SlideBody({ slide }: { slide: Slide }) {
+  if (slide.kind === 'hero') {
+    return (
+      <Animated.View
+        key={slide.key}
+        entering={FadeInDown.duration(480).springify().damping(15)}
+        style={styles.heroInner}
+      >
+        <OrbitingMealsHero />
+        <Text style={styles.heroTitle}>{slide.title}</Text>
+        {slide.titleHi ? <GradientHi text={slide.titleHi} /> : null}
+        <Text style={styles.heroSub}>{slide.body}</Text>
+      </Animated.View>
+    );
+  }
+  return (
+    <Animated.View
+      key={slide.key}
+      entering={FadeInDown.duration(420).springify().damping(15)}
+      style={styles.postCard}
+    >
+      {slide.kicker ? <Text style={styles.kicker}>{slide.kicker}</Text> : null}
+      {slide.emoji ? <Text style={styles.emoji}>{slide.emoji}</Text> : null}
+      <Text style={styles.cardTitle}>{slide.title}</Text>
+      <Text style={styles.cardBody}>{slide.body}</Text>
+      {slide.solution ? (
+        <View style={styles.solution}>
+          <Text style={styles.solutionIcon}>✓</Text>
+          <Text style={styles.solutionText}>{slide.solution}</Text>
+        </View>
+      ) : null}
+    </Animated.View>
+  );
+}
+
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
-  const listRef = useRef<FlatList>(null);
-  const isLast = index === SLIDES.length - 1;
+  const fill = useSharedValue(0);
+  const bgFade = useSharedValue(1);
 
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const i = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (i !== index && i >= 0 && i < SLIDES.length) setIndex(i);
-  };
+  const go = useCallback(
+    (next: number) => {
+      const i = ((next % SLIDES.length) + SLIDES.length) % SLIDES.length;
+      cancelAnimation(fill);
+      fill.value = 0;
+      bgFade.value = 0;
+      bgFade.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) });
+      setIndex(i);
+    },
+    [fill, bgFade],
+  );
+
+  const advance = useCallback(() => {
+    go(index + 1);
+  }, [go, index]);
+
+  // Instagram-style timed progress → smooth auto-advance (no swipe)
+  useEffect(() => {
+    cancelAnimation(fill);
+    fill.value = 0;
+    fill.value = withTiming(
+      1,
+      { duration: STORY_MS, easing: Easing.linear },
+      (finished) => {
+        if (finished) runOnJS(advance)();
+      },
+    );
+    return () => cancelAnimation(fill);
+  }, [index, fill, advance]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') go(index + 1);
@@ -350,39 +374,47 @@ export default function WelcomeScreen() {
       return () => window.removeEventListener('keydown', onKey);
     }
     return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index]);
+  }, [go, index]);
 
-  const go = (i: number) => {
-    const next = Math.max(0, Math.min(SLIDES.length - 1, i));
-    listRef.current?.scrollToIndex({ index: next, animated: true });
-    setIndex(next);
-  };
+  const bgStyle = useAnimatedStyle(() => ({
+    opacity: bgFade.value,
+  }));
+
+  const slide = SLIDES[index];
 
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
 
-      {/* Exact full-bleed slide gradients (no dark vignette tinting) */}
+      {/* Crossfading backgrounds */}
       <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
-        {SLIDES.map((slide, i) => (
-          <View
-            key={slide.key}
-            style={[StyleSheet.absoluteFill, { opacity: i === index ? 1 : 0 }]}
-          >
-            <LinearGradient
-              colors={slide.colors}
-              locations={slide.locations}
-              start={slide.start}
-              end={slide.end}
-              style={StyleSheet.absoluteFill}
-            />
-          </View>
-        ))}
+        {SLIDES.map((s, i) =>
+          i === index ? (
+            <Animated.View key={s.key} style={[StyleSheet.absoluteFill, bgStyle]}>
+              <LinearGradient
+                colors={s.colors}
+                locations={s.locations}
+                start={s.start}
+                end={s.end}
+                style={StyleSheet.absoluteFill}
+              />
+            </Animated.View>
+          ) : null,
+        )}
+        {/* Keep previous color under fade to avoid black flash */}
+        <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
+          <LinearGradient
+            colors={slide.colors}
+            locations={slide.locations}
+            start={slide.start}
+            end={slide.end}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
       </View>
 
       <View style={{ paddingTop: Math.max(insets.top, 10) + 4, zIndex: 2 }}>
-        <ProgressBars index={index} count={SLIDES.length} />
+        <StoryProgress index={index} count={SLIDES.length} fill={fill} />
         <View style={styles.top}>
           <Image source={require('../assets/littlebowl-mark.png')} style={styles.mark} />
           <Text style={styles.brand}>
@@ -395,92 +427,43 @@ export default function WelcomeScreen() {
         </View>
       </View>
 
-      {/* Swipe carousel — same horizontal story track as web */}
-      <FlatList
-        ref={listRef}
-        data={SLIDES}
-        keyExtractor={(item) => item.key}
-        horizontal
-        pagingEnabled
-        decelerationRate="fast"
-        showsHorizontalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-        onScrollToIndexFailed={(info) => {
-          setTimeout(() => {
-            listRef.current?.scrollToIndex({ index: info.index, animated: true });
-          }, 100);
-        }}
-        style={{ flex: 1, zIndex: 1 }}
-        renderItem={({ item }) => (
-          <View style={[styles.slide, { width }]}>
-            {item.kind === 'hero' ? (
-              <Animated.View
-                entering={FadeInDown.duration(480).springify().damping(15)}
-                style={styles.heroInner}
-              >
-                <OrbitingMealsHero />
-                <Text style={styles.heroTitle}>{item.title}</Text>
-                {item.titleHi ? <GradientHi text={item.titleHi} /> : null}
-                <Text style={styles.heroSub}>{item.body}</Text>
-                <NudgeHint />
-              </Animated.View>
-            ) : (
-              <Animated.View
-                entering={FadeInRight.delay(30).duration(420).springify().damping(15)}
-                style={styles.postCard}
-              >
-                {item.kicker ? <Text style={styles.kicker}>{item.kicker}</Text> : null}
-                {item.emoji ? <Text style={styles.emoji}>{item.emoji}</Text> : null}
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardBody}>{item.body}</Text>
-                {item.solution ? (
-                  <View style={styles.solution}>
-                    <Text style={styles.solutionIcon}>✓</Text>
-                    <Text style={styles.solutionText}>{item.solution}</Text>
-                  </View>
-                ) : null}
-              </Animated.View>
-            )}
-          </View>
-        )}
-      />
+      {/* Tap zones: left = previous, right = next — no swipe */}
+      <View style={styles.stage}>
+        <Pressable
+          style={styles.tapLeft}
+          onPress={() => go(index - 1)}
+          accessibilityLabel="Previous story"
+        />
+        <Pressable
+          style={styles.tapRight}
+          onPress={() => go(index + 1)}
+          accessibilityLabel="Next story"
+        />
+        <View style={styles.stageContent} pointerEvents="box-none">
+          <Animated.View
+            key={slide.key}
+            entering={FadeIn.duration(380)}
+            style={styles.slide}
+          >
+            <SlideBody slide={slide} />
+          </Animated.View>
+        </View>
+      </View>
 
+      {/* Always-visible CTAs */}
       <View
         style={[
           styles.cta,
           { paddingBottom: Math.max(insets.bottom, 14), zIndex: 4 },
         ]}
       >
-        {index === 0 || isLast ? (
-          <>
-            <PillButton
-              label="Create account"
-              onPress={() => router.push('/register')}
-            />
-            <PillButton
-              label="Sign in"
-              variant="ghost"
-              onPress={() => router.push('/login')}
-            />
-            {isLast ? (
-              <PillButton
-                label="Continue without an account"
-                variant="guest"
-                onPress={() => router.push('/onboarding')}
-              />
-            ) : (
-              <PillButton
-                label="Continue as guest"
-                variant="guest"
-                onPress={() => router.push('/onboarding')}
-              />
-            )}
-          </>
-        ) : (
-          <PillButton label="Next" onPress={() => go(index + 1)} />
-        )}
+        <PillButton label="Create account" onPress={() => router.push('/register')} />
+        <PillButton label="Sign in" variant="ghost" onPress={() => router.push('/login')} />
+        <PillButton
+          label="Continue as guest"
+          variant="guest"
+          onPress={() => router.push('/onboarding')}
+        />
       </View>
     </View>
   );
@@ -530,14 +513,38 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_700Bold',
     opacity: 0.92,
   },
-  slide: {
+  stage: {
     flex: 1,
+    zIndex: 1,
+  },
+  tapLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '35%',
+    zIndex: 3,
+  },
+  tapRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: '35%',
+    zIndex: 3,
+  },
+  stageContent: {
+    flex: 1,
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  slide: {
     paddingHorizontal: 22,
     justifyContent: 'center',
   },
   heroInner: {
     alignItems: 'center',
-    paddingBottom: 24,
+    paddingBottom: 8,
   },
   orbitScene: {
     width: ORBIT_SIZE,
@@ -603,10 +610,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: -0.5,
   },
-  heroTitleHiMask: {
-    marginTop: 2,
-    marginBottom: 12,
-  },
   heroTitleHiFallback: {
     marginTop: 2,
     marginBottom: 12,
@@ -619,12 +622,6 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     textAlign: 'center',
     maxWidth: 340,
-    marginBottom: 18,
-  },
-  swipeHint: {
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 14,
   },
   postCard: {
     backgroundColor: 'rgba(255,255,255,0.14)',
