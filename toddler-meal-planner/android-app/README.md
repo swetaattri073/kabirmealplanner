@@ -1,5 +1,14 @@
 # LittleBowl native apps (Android + iOS)
 
+> **Prefer the Expo native app** in [`../mobile/`](../mobile/) — a complete
+> React Native client that uses JSON APIs (not a WebView of the website).
+>
+> This Capacitor project is the **legacy** shell that loads
+> `https://littlebowl.in/home` remotely. Keep it only if you still need that
+> approach.
+
+---
+
 Official LittleBowl apps for **https://littlebowl.in** — Capacitor + native
 chrome (splash, status bar, notifications, camera).
 

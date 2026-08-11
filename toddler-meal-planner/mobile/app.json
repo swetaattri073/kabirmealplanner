@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "LittleBowl",
+    "slug": "littlebowl",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "littlebowl",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6b8f3c"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.littlebowl.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "LittleBowl uses the camera to photograph meals for logging.",
+        "NSPhotoLibraryUsageDescription": "LittleBowl uses your photos to attach meal pictures.",
+        "UIBackgroundModes": ["remote-notification"]
+      }
+    },
+    "android": {
+      "package": "com.littlebowl.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6b8f3c"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "SCHEDULE_EXACT_ALARM"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#6b8f3c",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#6b8f3c"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LittleBowl to attach meal photos.",
+          "cameraPermission": "Allow LittleBowl to photograph meals."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiBaseUrl": "https://littlebowl.in",
+      "eas": {
+        "projectId": "littlebowl-native"
+      }
+    }
+  }
+}
