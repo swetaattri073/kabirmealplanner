@@ -1,4 +1,4 @@
-# LittleBowl — Windows Android build helper
+# LittleBowl Windows Android build helper
 # Fixes the two most common local build failures:
 #   1) Java 24/25 (use JDK 17)
 #   2) CMake path-too-long (use a short subst drive)
@@ -50,8 +50,8 @@ if (-not $jdk) {
 }
 
 $env:JAVA_HOME = $jdk.FullName
-$env:Path = "$env:JAVA_HOME\bin;" + $env:Path
-Write-Host "==> JAVA_HOME = $env:JAVA_HOME"
+$env:Path = "$($env:JAVA_HOME)\bin;" + $env:Path
+Write-Host "==> JAVA_HOME = $($env:JAVA_HOME)"
 & java -version
 
 # Unset broken JVM opts some machines inherit
@@ -61,37 +61,37 @@ Remove-Item Env:_JAVA_OPTIONS -ErrorAction SilentlyContinue
 if (-not $env:CMAKE_VERSION) {
   $env:CMAKE_VERSION = "3.31.1"
 }
-Write-Host "==> CMAKE_VERSION = $env:CMAKE_VERSION"
+Write-Host "==> CMAKE_VERSION = $($env:CMAKE_VERSION)"
 
 # --- Short path via subst (avoids CMAKE_OBJECT_PATH_MAX ~250 on Windows) ---
 $Drive = "L:"
-if (Test-Path "$Drive\") {
+if (Test-Path ($Drive + "\")) {
   Write-Host "==> Removing existing subst $Drive"
   subst $Drive /d | Out-Null
 }
 subst $Drive $MobileRoot
-Write-Host "==> Mounted $MobileRoot as $Drive\"
-Set-Location "$Drive\"
+Write-Host ("==> Mounted {0} as {1}\" -f $MobileRoot, $Drive)
+Set-Location ($Drive + "\")
 
 # --- SDK local.properties ---
-$sdk = "$env:LOCALAPPDATA\Android\Sdk"
+$sdk = Join-Path $env:LOCALAPPDATA "Android\Sdk"
 if (-not (Test-Path $sdk)) {
-  Write-Error "Android SDK not found at $sdk. Open Android Studio → SDK Manager and install the SDK."
+  Write-Error "Android SDK not found at $sdk. Open Android Studio SDK Manager and install the SDK."
 }
 
 if (-not (Test-Path "android")) {
-  Write-Host "==> android/ missing — running expo prebuild"
+  Write-Host "==> android/ missing - running expo prebuild"
   npx expo prebuild --platform android
 }
 
 $localProps = "android\local.properties"
-$sdkEscaped = ($sdk -replace '\\', '\\')
+$sdkEscaped = $sdk.Replace('\', '\\')
 Set-Content -Path $localProps -Value "sdk.dir=$sdkEscaped" -Encoding ASCII
 Write-Host "==> Wrote $localProps"
 
 # Pin Gradle JVM to JDK 17 inside generated android/ project
 $gradleProps = "android\gradle.properties"
-$jdkEscaped = ($env:JAVA_HOME -replace '\\', '\\')
+$jdkEscaped = $env:JAVA_HOME.Replace('\', '\\')
 $javaHomeLine = "org.gradle.java.home=$jdkEscaped"
 if (Test-Path $gradleProps) {
   $lines = Get-Content $gradleProps | Where-Object { $_ -notmatch '^\s*org\.gradle\.java\.home=' }
@@ -130,6 +130,6 @@ if (Test-Path "android\gradlew.bat") {
 }
 
 Write-Host ""
-Write-Host "==> Building and installing (from short path $Drive\) ..."
+Write-Host ("==> Building and installing (from short path {0}\) ..." -f $Drive)
 Write-Host "    Keep this window open while the build runs."
 npx expo run:android
