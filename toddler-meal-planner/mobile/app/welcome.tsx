@@ -19,6 +19,7 @@ import Animated, {
   Easing,
   FadeInDown,
   FadeInRight,
+  SharedValue,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
@@ -176,26 +177,101 @@ function ProgressSeg({ filled, active }: { filled: boolean; active: boolean }) {
   );
 }
 
-function FloatingMark() {
-  const t = useSharedValue(0);
+/** Same orbit as web onboarding/landing: meals circle the toddler in the middle. */
+const ORBIT_FOODS = ['🥕', '🍎', '🥦', '🍌', '🍚', '🧀'] as const;
+const ORBIT_RADIUS = Math.min(width * 0.28, 108);
+const ORBIT_SIZE = Math.min(width * 0.72, 260);
+
+function OrbitFood({
+  emoji,
+  index,
+  total,
+  spin,
+}: {
+  emoji: string;
+  index: number;
+  total: number;
+  spin: SharedValue<number>;
+}) {
+  const phase = (index / total) * Math.PI * 2;
+  const style = useAnimatedStyle(() => {
+    const angle = spin.value * Math.PI * 2 + phase;
+    // CSS: rotate(θ) translateX(r) rotate(-θ) — keeps emoji upright while orbiting
+    const deg = (angle * 180) / Math.PI;
+    return {
+      transform: [
+        { rotate: `${deg}deg` },
+        { translateX: ORBIT_RADIUS },
+        { rotate: `${-deg}deg` },
+      ],
+    };
+  });
+  return (
+    <Animated.View style={[styles.orbitFood, style]}>
+      <Text style={styles.orbitFoodEmoji}>{emoji}</Text>
+    </Animated.View>
+  );
+}
+
+function OrbitingMealsHero() {
+  const spin = useSharedValue(0);
+  const bob = useSharedValue(0);
+
   useEffect(() => {
-    t.value = withRepeat(
-      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
+    // 8s linear infinite — matches web @keyframes orbit / flyAround
+    spin.value = withRepeat(
+      withTiming(1, { duration: 8000, easing: Easing.linear }),
+      -1,
+      false,
+    );
+    bob.value = withRepeat(
+      withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.sin) }),
       -1,
       true,
     );
-  }, [t]);
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(t.value, [0, 1], [0, -10]) }],
+  }, [spin, bob]);
+
+  const plateStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(bob.value, [0, 1], [0, -12]) },
+      { rotate: `${interpolate(bob.value, [0, 1], [-2, 2])}deg` },
+    ],
   }));
+
+  const foodBounce = useSharedValue(0);
+  useEffect(() => {
+    foodBounce.value = withRepeat(
+      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, [foodBounce]);
+  const centerFoodStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(foodBounce.value, [0, 1], [1, 1.08]) }],
+  }));
+
   return (
-    <Animated.View style={[styles.heroMarkWrap, style]}>
-      <Image
-        source={require('../assets/littlebowl-mark.png')}
-        style={styles.heroMark}
-        accessibilityLabel="LittleBowl"
-      />
-    </Animated.View>
+    <View style={styles.orbitScene} accessibilityLabel="Toddler with meals orbiting">
+      {ORBIT_FOODS.map((emoji, i) => (
+        <OrbitFood
+          key={emoji}
+          emoji={emoji}
+          index={i}
+          total={ORBIT_FOODS.length}
+          spin={spin}
+        />
+      ))}
+      <Animated.View style={[styles.orbitPlate, plateStyle]}>
+        <View style={styles.orbitPlateRing} />
+        <Animated.View style={centerFoodStyle}>
+          <Image
+            source={require('../assets/littlebowl-mark.png')}
+            style={styles.orbitToddler}
+            accessibilityLabel="LittleBowl toddler"
+          />
+        </Animated.View>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -344,7 +420,7 @@ export default function WelcomeScreen() {
                 entering={FadeInDown.duration(480).springify().damping(15)}
                 style={styles.heroInner}
               >
-                <FloatingMark />
+                <OrbitingMealsHero />
                 <Text style={styles.heroTitle}>{item.title}</Text>
                 {item.titleHi ? <GradientHi text={item.titleHi} /> : null}
                 <Text style={styles.heroSub}>{item.body}</Text>
@@ -463,26 +539,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 24,
   },
-  heroMarkWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
+  orbitScene: {
+    width: ORBIT_SIZE,
+    height: ORBIT_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 16 },
+    marginBottom: 8,
   },
-  heroMark: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  orbitPlate: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 10,
+    zIndex: 2,
+  },
+  orbitPlateRing: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    bottom: 10,
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: '#e9d5ff',
+    borderStyle: 'dashed',
+  },
+  orbitToddler: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     backgroundColor: '#fffaf0',
+  },
+  orbitFood: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 44,
+    height: 44,
+    marginTop: -22,
+    marginLeft: -22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  orbitFoodEmoji: {
+    fontSize: 34,
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 6 },
+    textShadowRadius: 10,
   },
   heroTitle: {
     color: '#fff',
