@@ -34,7 +34,7 @@ type Slide = {
   key: string;
   kind: 'hero' | 'post';
   colors: [string, string, ...string[]];
-  locations: number[];
+  locations: [number, number, ...number[]];
   start: { x: number; y: number };
   end: { x: number; y: number };
   kicker?: string;
