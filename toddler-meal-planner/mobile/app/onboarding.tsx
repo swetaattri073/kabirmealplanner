@@ -50,7 +50,11 @@ export default function OnboardingScreen() {
         allergies,
       });
       await addToddlerLocal(toddler);
-      await refresh();
+      try {
+        await refresh();
+      } catch {
+        /* local state already has toddler */
+      }
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
       Alert.alert('Could not save profile', e?.message || 'Try again');

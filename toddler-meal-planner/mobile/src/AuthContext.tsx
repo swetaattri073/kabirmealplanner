@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setActiveToddlerState(t);
     if (t) {
       await setLastToddlerRef(t.ref);
-      await syncRemindersFromToddler(t.ref, t.name);
+      await syncRemindersFromToddler(t.ref, t.name).catch(() => undefined);
     }
   }, []);
 
