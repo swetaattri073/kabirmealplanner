@@ -20,24 +20,21 @@ reference only. Prefer this `mobile/` project for store builds.
 
 Admin (`/admin`) is web-only and unchanged.
 
-## Prerequisites
+## Expo Go vs development build
 
-- Node.js 18+
-- Expo CLI (`npx expo`)
-- **Android:** Android Studio + emulator/device
-- **iOS:** macOS + Xcode (for device/App Store builds)
+**Expo Go** (QR code) is fine for quick UI checks, but on recent Expo SDKs
+Android notifications are **not** supported there and may log an error.
 
-```bash
-cd toddler-meal-planner/mobile
-npm install
-npx expo start
-```
-
-Optional local API:
+For a real device/emulator build (notifications + camera like production):
 
 ```bash
-EXPO_PUBLIC_API_BASE_URL=http://localhost:5000 npx expo start
+# Emulator running in Android Studio, OR phone with USB debugging
+npx expo run:android
 ```
+
+That generates `android/`, compiles, and installs **LittleBowl** (not Expo Go).
+
+Store / cloud builds: `eas build -p android` (see below).
 
 ## Store builds
 
