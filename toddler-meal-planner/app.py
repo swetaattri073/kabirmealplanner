@@ -39,6 +39,7 @@ from toddler_refs import (
     resolve_toddler_id,
 )
 
+from api_auth import issue_api_token, verify_api_token
 from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe
 from admin_stats import build_admin_stats
 from analytics import record_analytics_event
@@ -158,6 +159,14 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+@login_manager.unauthorized_handler
+def unauthorized():
+    # Native / JSON clients should get 401 instead of an HTML redirect.
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Authentication required'}), 401
+    return redirect(url_for('login'))
+
+
 def get_session_id():
     """Get or create a session ID for anonymous users.
 
@@ -207,8 +216,15 @@ def owns_toddler(toddler):
 
 def _transfer_anonymous_toddlers(user):
     """Move guest session toddlers to a newly logged-in/signed-up user"""
-    session_id = session.get('anonymous_session_id') or request.cookies.get(GUEST_COOKIE_NAME)
+    session_id = (
+        session.get('anonymous_session_id')
+        or request.cookies.get(GUEST_COOKIE_NAME)
+        or (request.headers.get('X-Guest-Id') or '').strip()
+        or (request.get_json(silent=True) or {}).get('guest_id')
+    )
     if not session_id:
+        return 0
+    if not is_valid_guest_id(session_id):
         return 0
     anonymous_toddlers = Toddler.query.filter_by(
         session_id=session_id,
@@ -218,6 +234,44 @@ def _transfer_anonymous_toddlers(user):
         toddler.user_id = user.id
         toddler.session_id = None
     return len(anonymous_toddlers)
+
+
+def _auth_payload(user, transferred=0):
+    toddlers = Toddler.query.filter_by(user_id=user.id).all()
+    token = issue_api_token(app.config['SECRET_KEY'], user.id)
+    return {
+        'ok': True,
+        'token': token,
+        'token_type': 'Bearer',
+        'user': user.to_dict(),
+        'toddlers': [t.to_dict() for t in toddlers],
+        'transferred_toddlers': transferred,
+    }
+
+
+@app.before_request
+def _native_api_auth_headers():
+    """Accept Bearer tokens + X-Guest-Id for native clients (web cookies unchanged)."""
+    if not (request.path or '').startswith('/api/'):
+        return None
+
+    guest = (request.headers.get('X-Guest-Id') or '').strip()
+    if guest and is_valid_guest_id(guest) and not current_user.is_authenticated:
+        try:
+            adopt_guest_id(guest)
+        except ValueError:
+            pass
+
+    auth = request.headers.get('Authorization') or ''
+    if auth.lower().startswith('bearer '):
+        token = auth[7:].strip()
+        uid = verify_api_token(app.config['SECRET_KEY'], token)
+        if uid:
+            user = User.query.get(uid)
+            if user and user.is_active:
+                # Establish Flask-Login context for this request only
+                login_user(user, remember=False)
+    return None
 
 
 # Initialize database and food data
@@ -646,6 +700,83 @@ def logout():
     return redirect(url_for('index', signed_out=1))
 
 
+# ==================== NATIVE / JSON AUTH (web UI unchanged) ====================
+
+@app.route('/api/auth/signup', methods=['POST'])
+def api_auth_signup():
+    """JSON signup for native apps. Also sets cookies for web compatibility."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    confirm = data.get('confirm_password') if data.get('confirm_password') is not None else data.get('password_confirm')
+    if confirm is None:
+        confirm = password
+    name = (data.get('name') or '').strip()
+    guest_id = (data.get('guest_id') or request.headers.get('X-Guest-Id') or '').strip()
+    if guest_id and is_valid_guest_id(guest_id):
+        try:
+            adopt_guest_id(guest_id)
+        except ValueError:
+            pass
+
+    errors = []
+    if not email or '@' not in email:
+        errors.append('Please enter a valid email address.')
+    if len(password) < 8:
+        errors.append('Password must be at least 8 characters.')
+    if password != confirm:
+        errors.append('Passwords do not match.')
+    if User.query.filter_by(email=email).first():
+        errors.append('An account with this email already exists.')
+    if errors:
+        return jsonify({'ok': False, 'errors': errors}), 400
+
+    user = User(email=email, name=name or None)
+    user.set_password(password)
+    db.session.add(user)
+    db.session.flush()
+    transferred = _transfer_anonymous_toddlers(user)
+    db.session.commit()
+    login_user(user, remember=True)
+    user.last_login = datetime.utcnow()
+    db.session.commit()
+    return jsonify(_auth_payload(user, transferred)), 201
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_auth_login():
+    """JSON login for native apps."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    guest_id = (data.get('guest_id') or request.headers.get('X-Guest-Id') or '').strip()
+    if guest_id and is_valid_guest_id(guest_id):
+        try:
+            adopt_guest_id(guest_id)
+        except ValueError:
+            pass
+
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        return jsonify({'ok': False, 'error': 'Invalid email or password.'}), 401
+    if not user.is_active:
+        return jsonify({'ok': False, 'error': 'This account has been deactivated.'}), 403
+
+    transferred = _transfer_anonymous_toddlers(user)
+    login_user(user, remember=True)
+    user.last_login = datetime.utcnow()
+    db.session.commit()
+    return jsonify(_auth_payload(user, transferred))
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_auth_logout():
+    """JSON logout for native apps."""
+    logout_user()
+    clear_admin_session()
+    return jsonify({'ok': True})
+
+
 @app.route('/profile')
 @login_required
 def profile():
@@ -664,6 +795,8 @@ def auth_status():
             'user': current_user.to_dict(),
             'toddlers': [t.to_dict() for t in toddlers],
             'guest_id': None,
+            'token': issue_api_token(app.config['SECRET_KEY'], current_user.id),
+            'token_type': 'Bearer',
         })
 
     guest_id = get_session_id()
