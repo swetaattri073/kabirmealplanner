@@ -48,7 +48,7 @@ export default function DashboardScreen() {
       ]);
       setData(d);
       const list = r.recipes || r || [];
-      setRecipes(Array.isArray(list) ? list.slice(0, 6) : []);
+      setRecipes(Array.isArray(list) ? list : []);
       setWeeklyNutrition(wn);
       setWeeklyAlerts(wa?.alerts || wa || []);
     } catch (e) {
@@ -223,18 +223,29 @@ export default function DashboardScreen() {
               const planMeal = data?.today_plan?.meals?.[meal];
               const planName = planMeal?.summary || planMeal?.food?.name || planMeal?.main?.name || 'Tap to log';
               const emoji = MEAL_EMOJI[meal] || '🍽️';
+              const recipeSlug = planMeal?.recipe_slug;
+              const matchedRecipe = recipeSlug
+                ? recipes.find((r) => r.slug === recipeSlug)
+                : recipes.find((r) =>
+                    r.name.toLowerCase() === (planMeal?.food?.name || planMeal?.main?.name || '').toLowerCase()
+                  );
+              const coverImg = matchedRecipe?.cover_image_path || matchedRecipe?.cover_url || planMeal?.cover_image_path;
               return (
                 <Pressable
                   key={meal}
                   style={[styles.mealSlot, eaten && styles.mealSlotDone]}
                   onPress={() => router.push({ pathname: '/(tabs)/log', params: { meal } })}
                 >
-                  <LinearGradient
-                    colors={eaten ? (['#22c55e', '#4ade80'] as [string, string]) : (['#6366f1', '#8b5cf6'] as [string, string])}
-                    style={styles.mealIcon}
-                  >
-                    <Text style={{ fontSize: 22 }}>{emoji}</Text>
-                  </LinearGradient>
+                  {coverImg ? (
+                    <Image source={{ uri: coverImg }} style={styles.mealImage} resizeMode="cover" />
+                  ) : (
+                    <LinearGradient
+                      colors={eaten ? (['#22c55e', '#4ade80'] as [string, string]) : (['#6366f1', '#8b5cf6'] as [string, string])}
+                      style={styles.mealIcon}
+                    >
+                      <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                    </LinearGradient>
+                  )}
                   <View style={styles.mealInfo}>
                     <Text style={styles.mealName}>{MEAL_LABELS[meal] || meal}</Text>
                     <Text style={styles.mealFood} numberOfLines={1}>{planName}</Text>
@@ -260,7 +271,7 @@ export default function DashboardScreen() {
                 </Pressable>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 8 }}>
-                {recipes.map((r, i) => {
+                {recipes.slice(0, 6).map((r, i) => {
                   const emojis = ['🥣', '🍲', '🥗', '🍛', '🥘', '🍜'];
                   return (
                     <Pressable key={r.slug} style={styles.recipeCard} onPress={() => router.push(`/recipe/${r.slug}`)}>
@@ -432,6 +443,11 @@ const styles = StyleSheet.create({
   mealSlotDone: {
     borderColor: colors.success,
     backgroundColor: 'rgba(34,197,94,0.06)',
+  },
+  mealImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   mealIcon: {
     width: 48,
