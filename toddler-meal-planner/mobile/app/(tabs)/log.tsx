@@ -22,7 +22,7 @@ import {
   LoadingBlock,
   Screen,
 } from '../../src/components/ui';
-import { colors, HIDDEN_VEGGIES, MEAL_EMOJI, MEAL_LABELS, MEAL_ORDER, radii, REACTIONS } from '../../src/theme';
+import { colors, getServingForAge, HIDDEN_VEGGIES, MEAL_EMOJI, MEAL_LABELS, MEAL_ORDER, portionGuide, radii, REACTIONS } from '../../src/theme';
 import type { Food } from '../../src/types';
 
 export default function LogMealScreen() {
@@ -288,7 +288,12 @@ export default function LogMealScreen() {
 
             {/* Portion selector */}
             <Text style={styles.fieldLabel}>Portion eaten</Text>
-            <PortionPicker value={portion} onChange={setPortion} />
+            <PortionPicker
+              value={portion}
+              onChange={setPortion}
+              servingGrams={activeToddler ? getServingForAge(planMeal?.food || planMeal?.main || {}, activeToddler.age_months) : undefined}
+              foodCategory={planMeal?.food?.category || planMeal?.main?.category}
+            />
 
             {/* Reaction picker */}
             <Text style={styles.fieldLabel}>Reaction</Text>
@@ -417,7 +422,12 @@ export default function LogMealScreen() {
               {selected && (
                 <>
                   <Text style={styles.fieldLabel}>Portion eaten</Text>
-                  <PortionPicker value={portion} onChange={setPortion} />
+                  <PortionPicker
+                    value={portion}
+                    onChange={setPortion}
+                    servingGrams={selected && activeToddler ? getServingForAge(selected, activeToddler.age_months) : undefined}
+                    foodCategory={selected?.category}
+                  />
 
                   <Text style={styles.fieldLabel}>Reaction</Text>
                   <View style={styles.reactionsRow}>
@@ -513,28 +523,82 @@ const PORTION_STEPS = [
   { value: 100, label: 'All', short: '100%' },
 ];
 
-function PortionPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function PortionPicker({
+  value,
+  onChange,
+  servingGrams,
+  foodCategory,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  servingGrams?: number;
+  foodCategory?: string;
+}) {
+  const guide = servingGrams ? portionGuide(servingGrams, foodCategory) : '';
+  const actualGrams = servingGrams ? Math.round(servingGrams * value / 100) : 0;
+  const actualGuide = actualGrams > 0 ? portionGuide(actualGrams, foodCategory) : '';
+
   return (
-    <View style={portionStyles.row}>
-      {PORTION_STEPS.map((s) => (
-        <Pressable
-          key={s.value}
-          style={[portionStyles.btn, value === s.value && portionStyles.btnOn]}
-          onPress={() => onChange(s.value)}
-        >
-          <Text style={[portionStyles.label, value === s.value && portionStyles.labelOn]}>
-            {s.label}
-          </Text>
-          <Text style={[portionStyles.pct, value === s.value && portionStyles.labelOn]}>
-            {s.short}
-          </Text>
-        </Pressable>
-      ))}
+    <View>
+      {guide ? (
+        <View style={portionStyles.guideBox}>
+          <Text style={portionStyles.guideIcon}>📏</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={portionStyles.guideText}>
+              Full portion = {guide}
+            </Text>
+            {value > 0 && value < 100 && actualGrams > 0 && (
+              <Text style={portionStyles.guideActual}>
+                {value}% = ~{actualGuide}
+              </Text>
+            )}
+          </View>
+        </View>
+      ) : null}
+      <View style={portionStyles.row}>
+        {PORTION_STEPS.map((s) => (
+          <Pressable
+            key={s.value}
+            style={[portionStyles.btn, value === s.value && portionStyles.btnOn]}
+            onPress={() => onChange(s.value)}
+          >
+            <Text style={[portionStyles.label, value === s.value && portionStyles.labelOn]}>
+              {s.label}
+            </Text>
+            <Text style={[portionStyles.pct, value === s.value && portionStyles.labelOn]}>
+              {s.short}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
 
 const portionStyles = StyleSheet.create({
+  guideBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(99,102,241,0.06)',
+    borderRadius: radii.sm,
+    padding: 10,
+    marginBottom: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(99,102,241,0.15)',
+  },
+  guideIcon: { fontSize: 16, marginTop: 1 },
+  guideText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 13,
+    color: colors.text,
+  },
+  guideActual: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   row: { flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' },
   btn: {
     flex: 1,

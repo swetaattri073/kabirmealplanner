@@ -36,6 +36,9 @@ export type Food = {
   iron_mg?: number;
   calcium_mg?: number;
   allergens?: string[];
+  serving_size_6_12?: number;
+  serving_size_12_24?: number;
+  serving_size_24_36?: number;
 };
 
 export type MealLog = {

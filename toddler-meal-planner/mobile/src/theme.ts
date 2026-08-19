@@ -101,6 +101,34 @@ export const PRIORITY_NUTRIENTS = [
   'omega3_mg', 'vitamin_a_mcg', 'vitamin_c_mg', 'vitamin_d_mcg',
 ] as const;
 
+/**
+ * Maps a serving size in grams to a relatable household description.
+ */
+export function portionGuide(grams: number, category?: string): string {
+  if (grams <= 0) return '';
+  const cat = (category || '').toLowerCase();
+
+  if (cat.includes('milk') || cat.includes('liquid') || cat.includes('juice')) {
+    if (grams <= 60) return `${grams}ml (~${Math.round(grams / 15)} tbsp)`;
+    if (grams <= 120) return `${grams}ml (~½ cup)`;
+    return `${grams}ml (~1 small cup)`;
+  }
+
+  if (grams <= 15) return `${grams}g (~1 tbsp)`;
+  if (grams <= 30) return `${grams}g (~2 tbsp / 1 small katori)`;
+  if (grams <= 50) return `${grams}g (~3-4 tbsp / ½ small bowl)`;
+  if (grams <= 75) return `${grams}g (~1 small bowl / ½ plate)`;
+  if (grams <= 100) return `${grams}g (~1 bowl / 1 small plate)`;
+  if (grams <= 150) return `${grams}g (~1 big bowl)`;
+  return `${grams}g (~1 plate)`;
+}
+
+export function getServingForAge(food: { serving_size_6_12?: number; serving_size_12_24?: number; serving_size_24_36?: number }, ageMonths: number): number {
+  if (ageMonths < 12) return food.serving_size_6_12 || 30;
+  if (ageMonths < 24) return food.serving_size_12_24 || 50;
+  return food.serving_size_24_36 || 75;
+}
+
 export const HIDDEN_VEGGIES = [
   { key: 'spinach', label: 'Spinach', emoji: '🥬', default_g: 15 },
   { key: 'carrot', label: 'Carrot', emoji: '🥕', default_g: 15 },
