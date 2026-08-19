@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
@@ -55,12 +55,16 @@ export default function LogMealScreen() {
       const dash = await api.dashboard(activeToddler.ref);
       setTodayPlan(dash?.today_plan?.meals || {});
       setTodayLogs(dash?.today_logs || []);
-    } catch {}
+    } catch (e) {
+      console.warn('loadPlan failed:', e);
+    }
   }, [activeToddler]);
 
-  useEffect(() => {
-    loadPlan();
-  }, [loadPlan]);
+  useFocusEffect(
+    useCallback(() => {
+      loadPlan();
+    }, [loadPlan]),
+  );
 
   const setVeggieQty = (key: string, qty: number) => {
     setHiddenVeggies((prev) => {
@@ -109,14 +113,15 @@ export default function LogMealScreen() {
       const nutriMsg = nutri
         ? `\n🔥 ${Math.round(nutri.calories || 0)} kcal  💪 ${Math.round((nutri.protein_g || 0) * 10) / 10}g protein  🩸 ${Math.round((nutri.iron_mg || 0) * 10) / 10}mg iron`
         : '';
-      Alert.alert('Logged', `${selected.name} saved for ${MEAL_LABELS[mealType] || mealType}${nutriMsg}`);
       setSelected(null);
       setQuery('');
       setFoods([]);
       setPortion(100);
       setReaction('liked');
       setNotes('');
-      loadPlan();
+      setHiddenVeggies(new Map());
+      await loadPlan();
+      Alert.alert('Logged', `${selected.name} saved for ${MEAL_LABELS[mealType] || mealType}${nutriMsg}`);
     } catch (e: any) {
       Alert.alert('Could not log', e?.message || 'Try again');
     } finally {
@@ -147,8 +152,12 @@ export default function LogMealScreen() {
       const nutriMsg = nutri
         ? `\n🔥 ${Math.round(nutri.calories || 0)} kcal  💪 ${Math.round((nutri.protein_g || 0) * 10) / 10}g protein`
         : '';
+      setPortion(100);
+      setReaction('liked');
+      setNotes('');
+      setHiddenVeggies(new Map());
+      await loadPlan();
       Alert.alert('Logged', `Planned meal logged.${nutriMsg}`);
-      loadPlan();
     } catch (e: any) {
       Alert.alert('Could not log', e?.message || 'Try again');
     } finally {
@@ -161,9 +170,9 @@ export default function LogMealScreen() {
     setSaving(true);
     try {
       await api.smartLog({ toddler_id: activeToddler.ref, text: nlp.trim() });
-      Alert.alert('Logged', 'Meal parsed and saved.');
       setNlp('');
-      loadPlan();
+      await loadPlan();
+      Alert.alert('Logged', 'Meal parsed and saved.');
     } catch (e: any) {
       Alert.alert('Smart log failed', e?.message || 'Try again');
     } finally {
@@ -194,13 +203,13 @@ export default function LogMealScreen() {
       } as any);
       form.append('toddler_id', activeToddler.ref);
       const result = await api.recognizeFood(form);
+      await loadPlan();
       Alert.alert(
         'Photo analyzed',
         result?.message ||
           result?.foods?.map((f: any) => f.name).join(', ') ||
           'Review suggestions on the server response.',
       );
-      loadPlan();
     } catch (e: any) {
       Alert.alert('Photo log unavailable', e?.message || 'Try typing the meal instead.');
     } finally {
@@ -351,11 +360,13 @@ export default function LogMealScreen() {
 
             <Button label="Log this meal" onPress={() => logPlanned(planMeal)} loading={saving} />
             <Button
-              label="Ate something else"
-              variant="ghost"
+              label="Ate something else instead"
+              variant="secondary"
               onPress={() => {
                 setTab('search');
-                scrollRef.current?.scrollToEnd({ animated: true });
+                setTimeout(() => {
+                  scrollRef.current?.scrollToEnd({ animated: true });
+                }, 150);
               }}
             />
           </Card>
