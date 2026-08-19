@@ -385,9 +385,11 @@ def admin_required(f):
 
 
 def can_use_chat_assistant():
-    """Chat UI/API: feature flag on AND logged-in premium subscriber."""
+    """Chat UI/API: feature flag on AND (premium OR free-access period)."""
     if not is_chat_feature_enabled():
         return False
+    if _env_flag('CHAT_FREE_ACCESS', default=True):
+        return True
     try:
         return bool(
             current_user
