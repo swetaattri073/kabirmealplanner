@@ -20,6 +20,7 @@ CURATED_RECIPES = [
         "why": "Pasta is already an easy nutrition carrier for many toddlers.",
         "cheese": "Use a cheese cube or skip it — paneer is the main protein here.",
         "steps": "Blend paneer + milk + tiny boiled pumpkin/carrot + butter. Mix with pasta. Keep sauce light in color.",
+        "cover_image_url": "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400&h=300&fit=crop",
     },
     {
         "name": "Cheese Corn Paratha",
@@ -28,6 +29,7 @@ CURATED_RECIPES = [
         "why": "Similar to paneer paratha — mild and familiar.",
         "cheese": "Use a cheese slice or grated mozzarella. Avoid too much processed cheese daily.",
         "steps": "Mash boiled corn + potato + cheese. Stuff lightly in paratha. Serve with curd.",
+        "cover_image_url": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=300&fit=crop",
     },
     {
         "name": "Curd Rice Balls",
@@ -36,6 +38,7 @@ CURATED_RECIPES = [
         "why": "Uses common safe foods: white rice, curd, ghee, in a finger-food format.",
         "cheese": "No cheese needed.",
         "steps": "Mix cold rice + curd + ghee. Make small balls. Keep them plain; avoid mixing in colored dal/sabji.",
+        "cover_image_url": "https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=400&h=300&fit=crop",
     },
     {
         "name": "Mini Pizza Toast",
@@ -44,6 +47,7 @@ CURATED_RECIPES = [
         "why": "Fun format that can hide a little veggie sauce.",
         "cheese": "Use mozzarella or a grated cheese cube. Keep the layer thin.",
         "steps": "Bread + very light hidden pumpkin/carrot sauce + cheese. Toast and cut into fingers.",
+        "cover_image_url": "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&h=300&fit=crop",
     },
     {
         "name": "Paneer Dosa",
@@ -52,6 +56,7 @@ CURATED_RECIPES = [
         "why": "Close to the idli/dosa family many toddlers already accept.",
         "cheese": "Optional cheese spread — paneer mash is enough.",
         "steps": "Make a plain dosa. Add paneer mash + ghee. Fold and cut into strips.",
+        "cover_image_url": "https://images.unsplash.com/photo-1630383249896-424e482df921?w=400&h=300&fit=crop",
     },
     {
         "name": "Ragi Banana Pancake",
@@ -60,6 +65,7 @@ CURATED_RECIPES = [
         "why": "Similar to a regular pancake, but adds iron.",
         "cheese": "No cheese needed.",
         "steps": "Mix banana + ragi flour + milk/egg + nut powder. Cook small pancakes in ghee.",
+        "cover_image_url": "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop",
     },
     {
         "name": "Cheese Toast Fingers",
@@ -68,6 +74,7 @@ CURATED_RECIPES = [
         "why": "Good snack when a dry, predictable texture is wanted.",
         "cheese": "Use a cheese slice for easiest melting, or grated cheese cube.",
         "steps": "Toast bread with a thin cheese layer. Cut into long fingers. Offer cucumber on the side.",
+        "cover_image_url": "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=400&h=300&fit=crop",
     },
     {
         "name": "Stuffed Idli",
@@ -76,6 +83,7 @@ CURATED_RECIPES = [
         "why": "Uses an accepted idli format with hidden protein.",
         "cheese": "Optional tiny grated cheese cube — paneer stuffing works better nutritionally.",
         "steps": "Add idli batter, then a tiny paneer mash, then batter again. Steam as usual.",
+        "cover_image_url": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=400&h=300&fit=crop",
     },
     {
         "name": "Soft Chicken Strips",
@@ -84,6 +92,7 @@ CURATED_RECIPES = [
         "why": "Mild animal protein that fits non-veg preferences.",
         "cheese": "No cheese needed.",
         "steps": "Pressure-cook or steam boneless chicken until soft. Shred into thin strips. Serve with rice or soft roti and a mild gravy.",
+        "cover_image_url": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=400&h=300&fit=crop",
     },
     {
         "name": "Mild Fish Mash",
@@ -92,6 +101,7 @@ CURATED_RECIPES = [
         "why": "Soft fish is a good iron and protein option when bones are carefully removed.",
         "cheese": "No cheese needed.",
         "steps": "Steam boneless fish fillet. Flake carefully and check for bones. Mash with a little ghee or curd. Serve with soft rice.",
+        "cover_image_url": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=400&h=300&fit=crop",
     },
     {
         "name": "Soft Boiled Egg",
@@ -100,6 +110,7 @@ CURATED_RECIPES = [
         "why": "Simple protein for eggetarian and non-veg plans.",
         "cheese": "No cheese needed.",
         "steps": "Boil egg until yolk is firm. Mash with a drop of ghee. For bhurji/omelette, keep spices very mild and cook through.",
+        "cover_image_url": "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400&h=300&fit=crop",
     },
 ]
 
@@ -184,7 +195,7 @@ def _curated_to_recipe(item: Dict[str, Any]) -> Dict[str, Any]:
         "source": "curated",
         "allergens": [],
         "suitable_from_months": None,
-        "cover_image_path": None,
+        "cover_image_path": item.get("cover_image_url") or None,
         "video_url": None,
         "video_platform": None,
         "video_embed_url": None,

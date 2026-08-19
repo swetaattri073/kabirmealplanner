@@ -103,5 +103,14 @@ export type Recipe = {
   cheese?: string;
   steps?: string;
   cover_url?: string | null;
+  cover_image_path?: string | null;
   video_url?: string | null;
+  hidden_veggies?: string | null;
+  suitable_from_months?: number | null;
+  calories?: number | null;
+  protein_g?: number | null;
+  iron_mg?: number | null;
+  calcium_mg?: number | null;
+  fat_g?: number | null;
+  carbs_g?: number | null;
 };

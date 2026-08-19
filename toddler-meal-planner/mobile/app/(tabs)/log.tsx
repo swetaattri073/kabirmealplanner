@@ -96,7 +96,7 @@ export default function LogMealScreen() {
     }
     setSaving(true);
     try {
-      await api.createMealLog({
+      const result = await api.createMealLog({
         toddler_id: activeToddler.ref,
         meal_type: mealType,
         food_id: selected.id,
@@ -105,7 +105,11 @@ export default function LogMealScreen() {
         notes: notes || undefined,
         replace_existing: true,
       });
-      Alert.alert('Logged', `${selected.name} saved for ${MEAL_LABELS[mealType] || mealType}`);
+      const nutri = result?.nutrients || result?.nutrition_calculation;
+      const nutriMsg = nutri
+        ? `\n🔥 ${Math.round(nutri.calories || 0)} kcal  💪 ${Math.round((nutri.protein_g || 0) * 10) / 10}g protein  🩸 ${Math.round((nutri.iron_mg || 0) * 10) / 10}mg iron`
+        : '';
+      Alert.alert('Logged', `${selected.name} saved for ${MEAL_LABELS[mealType] || mealType}${nutriMsg}`);
       setSelected(null);
       setQuery('');
       setFoods([]);
@@ -130,7 +134,7 @@ export default function LogMealScreen() {
         setSaving(false);
         return;
       }
-      await api.createMealLog({
+      const result = await api.createMealLog({
         toddler_id: activeToddler.ref,
         meal_type: mealType,
         food_id: foodId,
@@ -139,7 +143,11 @@ export default function LogMealScreen() {
         notes: notes || undefined,
         replace_existing: true,
       });
-      Alert.alert('Logged', 'Planned meal logged.');
+      const nutri = result?.nutrients || result?.nutrition_calculation;
+      const nutriMsg = nutri
+        ? `\n🔥 ${Math.round(nutri.calories || 0)} kcal  💪 ${Math.round((nutri.protein_g || 0) * 10) / 10}g protein`
+        : '';
+      Alert.alert('Logged', `Planned meal logged.${nutriMsg}`);
       loadPlan();
     } catch (e: any) {
       Alert.alert('Could not log', e?.message || 'Try again');

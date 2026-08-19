@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -260,7 +261,11 @@ export default function DashboardScreen() {
                   return (
                     <Pressable key={r.slug} style={styles.recipeCard} onPress={() => router.push(`/recipe/${r.slug}`)}>
                       <LinearGradient colors={['#f3e8ff', '#ffffff'] as [string, string]} style={styles.recipeInner}>
-                        <Text style={styles.recipeEmoji}>{emojis[i % emojis.length]}</Text>
+                        {(r.cover_image_path || r.cover_url) ? (
+                          <Image source={{ uri: r.cover_image_path || r.cover_url || '' }} style={styles.recipeCover} resizeMode="cover" />
+                        ) : (
+                          <Text style={styles.recipeEmoji}>{emojis[i % emojis.length]}</Text>
+                        )}
                         <Text style={styles.recipeName} numberOfLines={2}>{r.name}</Text>
                         <Text style={styles.recipeCategory}>{r.category || 'Recipe'}</Text>
                       </LinearGradient>
@@ -438,6 +443,7 @@ const styles = StyleSheet.create({
   mealActionText: { fontFamily: 'Nunito_700Bold', fontSize: 13, color: '#ffffff' },
   recipeCard: { width: 150, marginRight: 10, borderRadius: 20, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   recipeInner: { padding: 14, minHeight: 130, borderRadius: 20 },
+  recipeCover: { width: '100%', height: 70, borderRadius: 10, marginBottom: 6 },
   recipeEmoji: { fontSize: 32, marginBottom: 8 },
   recipeName: { fontFamily: 'Nunito_700Bold', fontSize: 13, color: colors.text, marginBottom: 4 },
   recipeCategory: { fontFamily: 'Nunito_600SemiBold', fontSize: 11, color: colors.primary, textTransform: 'uppercase' },

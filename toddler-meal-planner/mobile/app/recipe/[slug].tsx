@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { api } from '../../src/api';
 import { AppHeader } from '../../src/components/AppHeader';
@@ -45,6 +45,13 @@ export default function RecipeDetailScreen() {
         <EmptyState text="Recipe not found." />
       ) : (
         <ScrollView contentContainerStyle={styles.pad}>
+          {(recipe.cover_image_path || recipe.cover_url) && (
+            <Image
+              source={{ uri: recipe.cover_image_path || recipe.cover_url || '' }}
+              style={styles.coverImage}
+              resizeMode="cover"
+            />
+          )}
           <Card>
             <Text style={styles.name}>{recipe.name}</Text>
             <Text style={styles.category}>{recipe.category}</Text>
@@ -104,6 +111,12 @@ export default function RecipeDetailScreen() {
 
 const styles = StyleSheet.create({
   pad: { padding: 16, paddingBottom: 40 },
+  coverImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: radii.md,
+    marginBottom: 14,
+  },
   name: { fontFamily: 'Nunito_800ExtraBold', fontSize: 22, color: colors.text },
   category: {
     fontFamily: 'Nunito_600SemiBold',

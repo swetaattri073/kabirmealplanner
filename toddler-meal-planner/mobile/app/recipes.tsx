@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api } from '../src/api';
 import { AppHeader } from '../src/components/AppHeader';
@@ -69,7 +69,15 @@ export default function RecipesScreen() {
               style={[styles.card, { backgroundColor: RECIPE_COLORS[i % RECIPE_COLORS.length] }]}
               onPress={() => router.push(`/recipe/${r.slug}`)}
             >
-              <Text style={styles.emoji}>{RECIPE_EMOJIS[i % RECIPE_EMOJIS.length]}</Text>
+              {(r.cover_image_path || r.cover_url) ? (
+                <Image
+                  source={{ uri: r.cover_image_path || r.cover_url || '' }}
+                  style={styles.coverImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.emoji}>{RECIPE_EMOJIS[i % RECIPE_EMOJIS.length]}</Text>
+              )}
               <Text style={styles.name} numberOfLines={2}>{r.name}</Text>
               <Text style={styles.category}>{r.category || 'Recipe'}</Text>
               {r.why ? (
@@ -96,6 +104,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: 14,
     minHeight: 150,
+  },
+  coverImage: {
+    width: '100%',
+    height: 90,
+    borderRadius: 10,
+    marginBottom: 8,
   },
   emoji: {
     fontSize: 36,
