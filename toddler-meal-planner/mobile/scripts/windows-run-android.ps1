@@ -108,8 +108,9 @@ if (-not $jdk) {
 $env:JAVA_HOME = $jdk.FullName
 $env:Path = "$($env:JAVA_HOME)\bin;" + $env:Path
 Write-Host "==> JAVA_HOME = $($env:JAVA_HOME)"
-$javaVer = & java -version 2>&1
-$javaVer | ForEach-Object { Write-Host "    $_" }
+$ErrorActionPreference = "Continue"
+& java -version 2>&1 | ForEach-Object { Write-Host "    $_" }
+$ErrorActionPreference = "Stop"
 
 # Unset _JAVA_OPTIONS (some machines inherit broken flags)
 Remove-Item Env:_JAVA_OPTIONS -ErrorAction SilentlyContinue
