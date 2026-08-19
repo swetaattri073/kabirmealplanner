@@ -107,11 +107,11 @@ export default function LogMealScreen() {
         toddler_reaction: reaction,
         portion_eaten_percent: portion,
         notes: notes || undefined,
-        replace_existing: true,
       });
       const nutri = result?.nutrients || result?.nutrition_calculation;
-      const nutriMsg = nutri
-        ? `\n🔥 ${Math.round(nutri.calories || 0)} kcal  💪 ${Math.round((nutri.protein_g || 0) * 10) / 10}g protein  🩸 ${Math.round((nutri.iron_mg || 0) * 10) / 10}mg iron`
+      const nutriNested = nutri?.nutrients || nutri;
+      const nutriMsg = nutriNested
+        ? `\n🔥 ${Math.round(nutriNested.calories || 0)} kcal  💪 ${Math.round((nutriNested.protein_g || 0) * 10) / 10}g protein  🩸 ${Math.round((nutriNested.iron_mg || 0) * 10) / 10}mg iron`
         : '';
       setSelected(null);
       setQuery('');
@@ -146,11 +146,11 @@ export default function LogMealScreen() {
         toddler_reaction: reaction,
         portion_eaten_percent: portion,
         notes: notes || undefined,
-        replace_existing: true,
       });
       const nutri = result?.nutrients || result?.nutrition_calculation;
-      const nutriMsg = nutri
-        ? `\n🔥 ${Math.round(nutri.calories || 0)} kcal  💪 ${Math.round((nutri.protein_g || 0) * 10) / 10}g protein`
+      const nutriNested = nutri?.nutrients || nutri;
+      const nutriMsg = nutriNested
+        ? `\n🔥 ${Math.round(nutriNested.calories || 0)} kcal  💪 ${Math.round((nutriNested.protein_g || 0) * 10) / 10}g protein`
         : '';
       setPortion(100);
       setReaction('liked');

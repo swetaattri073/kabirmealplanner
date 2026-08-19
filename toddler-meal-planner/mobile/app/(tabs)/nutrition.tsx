@@ -30,6 +30,7 @@ export default function NutritionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [selectedNutrient, setSelectedNutrient] = useState<string | null>(null);
+  const [selectedBreakdownItem, setSelectedBreakdownItem] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!activeToddler) {
@@ -131,7 +132,10 @@ export default function NutritionScreen() {
               const consumed = n.consumed ?? n.actual ?? 0;
               const target = n.target ?? n.rda ?? 0;
               const grad = statusGrad(pct);
-              const suggestions = n.include_examples || n.suggestions || n.try_including || [];
+              const rawSuggestions = n.include_examples || n.suggestions || n.try_including || [];
+              const suggestionNames = rawSuggestions
+                .map((s: any) => (typeof s === 'string' ? s : s?.name || ''))
+                .filter(Boolean);
 
               return (
                 <Pressable key={key} onPress={() => setSelectedNutrient(key)} style={styles.nutriCard}>
@@ -156,9 +160,9 @@ export default function NutritionScreen() {
                   <Text style={[styles.nutriStatus, { color: grad[0] }]}>
                     {statusLabel(pct)}
                   </Text>
-                  {pct < 80 && suggestions.length > 0 && (
+                  {pct < 80 && suggestionNames.length > 0 && (
                     <Text style={styles.nutriSuggestion}>
-                      Try: {suggestions.slice(0, 3).join(', ')}
+                      Try: {suggestionNames.slice(0, 3).join(', ')}
                     </Text>
                   )}
                   <Text style={styles.tapHint}>Tap for details</Text>
@@ -210,28 +214,52 @@ export default function NutritionScreen() {
           {breakdown?.items && breakdown.items.length > 0 && (
             <>
               <Text style={styles.h}>Today's Food Breakdown</Text>
-              {breakdown.items.map((item: any, i: number) => (
-                <Card key={i} style={styles.breakdownCard}>
-                  <Text style={styles.breakdownFood}>{item.food_name || 'Food'}</Text>
-                  <Text style={styles.breakdownMeal}>
-                    {item.meal_type ? (item.meal_type.charAt(0).toUpperCase() + item.meal_type.slice(1)).replace(/_/g, ' ') : ''} · {item.portion_percent || 100}% eaten
-                  </Text>
-                  <View style={styles.nutriChips}>
-                    {item.calories != null && (
-                      <Text style={styles.nutriChip}>🔥 {Math.round(item.calories)} kcal</Text>
-                    )}
-                    {item.protein_g != null && (
-                      <Text style={styles.nutriChip}>💪 {Math.round(item.protein_g * 10) / 10}g</Text>
-                    )}
-                    {item.iron_mg != null && (
-                      <Text style={styles.nutriChip}>🩸 {Math.round(item.iron_mg * 10) / 10}mg</Text>
-                    )}
-                    {item.calcium_mg != null && (
-                      <Text style={styles.nutriChip}>🦴 {Math.round(item.calcium_mg)}mg</Text>
-                    )}
-                  </View>
-                </Card>
-              ))}
+              {breakdown.items.map((item: any, i: number) => {
+                const n = item.nutrients || {};
+                return (
+                  <Pressable key={i} onPress={() => setSelectedBreakdownItem(selectedBreakdownItem === i ? null : i)}>
+                    <Card style={styles.breakdownCard}>
+                      <Text style={styles.breakdownFood}>{item.food_name || 'Food'}</Text>
+                      <Text style={styles.breakdownMeal}>
+                        {item.meal_type ? (item.meal_type.charAt(0).toUpperCase() + item.meal_type.slice(1)).replace(/_/g, ' ') : ''} · {item.portion_eaten_percent || item.portion_percent || 100}% eaten
+                        {item.actual_g ? ` · ${Math.round(item.actual_g)}g` : ''}
+                      </Text>
+                      <View style={styles.nutriChips}>
+                        {n.calories != null && (
+                          <Text style={styles.nutriChip}>🔥 {Math.round(n.calories)} kcal</Text>
+                        )}
+                        {n.protein_g != null && (
+                          <Text style={styles.nutriChip}>💪 {Math.round(n.protein_g * 10) / 10}g</Text>
+                        )}
+                        {n.iron_mg != null && (
+                          <Text style={styles.nutriChip}>🩸 {Math.round(n.iron_mg * 10) / 10}mg</Text>
+                        )}
+                        {n.calcium_mg != null && (
+                          <Text style={styles.nutriChip}>🦴 {Math.round(n.calcium_mg)}mg</Text>
+                        )}
+                      </View>
+                      {selectedBreakdownItem === i && (
+                        <View style={styles.expandedNutri}>
+                          {Object.entries(n).map(([nk, nv]: [string, any]) => {
+                            const nmeta = NUTRIENTS.find((x) => x.key === nk);
+                            if (!nmeta || nv == null || nv === 0) return null;
+                            return (
+                              <View key={nk} style={styles.expandedRow}>
+                                <Text style={styles.expandedIcon}>{nmeta.icon}</Text>
+                                <Text style={styles.expandedName}>{nmeta.name}</Text>
+                                <Text style={styles.expandedVal}>{Math.round(nv * 10) / 10} {nmeta.unit}</Text>
+                              </View>
+                            );
+                          })}
+                          {item.formula && (
+                            <Text style={styles.formulaText}>{item.formula}</Text>
+                          )}
+                        </View>
+                      )}
+                    </Card>
+                  </Pressable>
+                );
+              })}
             </>
           )}
 
@@ -280,12 +308,13 @@ function NutrientDetailModal({
   const items: Array<{ food_name: string; value: number; portion: number; meal_type: string }> = [];
   if (breakdown?.items) {
     for (const item of breakdown.items) {
-      const val = item[nutrientKey];
+      const nutrients = item.nutrients || {};
+      const val = nutrients[nutrientKey] ?? item[nutrientKey];
       if (val != null && val > 0) {
         items.push({
           food_name: item.food_name || 'Food',
           value: val,
-          portion: item.portion_percent || 100,
+          portion: item.portion_eaten_percent || item.portion_percent || 100,
           meal_type: item.meal_type || '',
         });
       }
@@ -641,6 +670,37 @@ const styles = StyleSheet.create({
   },
   breakdownCard: {
     marginBottom: 8,
+  },
+  expandedNutri: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  expandedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    gap: 6,
+  },
+  expandedIcon: { fontSize: 14, width: 20 },
+  expandedName: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 13,
+    color: colors.text,
+    flex: 1,
+  },
+  expandedVal: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 13,
+    color: colors.primary,
+  },
+  formulaText: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   breakdownFood: {
     fontFamily: 'Nunito_700Bold',
