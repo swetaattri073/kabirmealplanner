@@ -69,12 +69,15 @@ export default function NutritionScreen() {
     );
   }
 
-  const rawNutrients = daily?.nutrients || daily?.status?.nutrients || {};
+  const rawNutrients = daily?.nutrition || daily?.nutrients || daily?.status?.nutrients || {};
   const displayKeys = showAll
     ? NUTRIENTS.map((n) => n.key)
     : [...PRIORITY_NUTRIENTS];
 
-  const overallPct = Math.round(daily?.overall_percent || 0);
+  const nutrientValues = Object.values(rawNutrients) as any[];
+  const overallPct = nutrientValues.length > 0
+    ? Math.round(nutrientValues.reduce((s: number, n: any) => s + (n.percentage || n.percent || 0), 0) / nutrientValues.length)
+    : 0;
 
   return (
     <Screen>
@@ -123,12 +126,12 @@ export default function NutritionScreen() {
             {displayKeys.map((key) => {
               const meta = NUTRIENTS.find((n) => n.key === key);
               const n = rawNutrients[key] || {};
-              const pct = Math.min(Math.round(n.percent || 0), 200);
+              const pct = Math.min(Math.round(n.percent || n.percentage || 0), 200);
               const displayPct = Math.min(pct, 100);
-              const consumed = n.consumed ?? 0;
-              const target = n.target ?? 0;
+              const consumed = n.consumed ?? n.actual ?? 0;
+              const target = n.target ?? n.rda ?? 0;
               const grad = statusGrad(pct);
-              const suggestions = n.suggestions || n.try_including || [];
+              const suggestions = n.include_examples || n.suggestions || n.try_including || [];
 
               return (
                 <Pressable key={key} onPress={() => setSelectedNutrient(key)} style={styles.nutriCard}>
@@ -269,9 +272,9 @@ function NutrientDetailModal({
 
   const meta = NUTRIENTS.find((n) => n.key === nutrientKey);
   const n = rawNutrients[nutrientKey] || {};
-  const pct = Math.round(n.percent || 0);
-  const consumed = n.consumed ?? 0;
-  const target = n.target ?? 0;
+  const pct = Math.round(n.percent || n.percentage || 0);
+  const consumed = n.consumed ?? n.actual ?? 0;
+  const target = n.target ?? n.rda ?? 0;
   const grad = statusGrad(pct);
 
   const items: Array<{ food_name: string; value: number; portion: number; meal_type: string }> = [];

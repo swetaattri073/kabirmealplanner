@@ -83,8 +83,12 @@ export default function DashboardScreen() {
     ...(data?.schedule?.snacks || []),
   ]);
   const schedule = MEAL_ORDER.filter((m) => rawSchedule.has(m));
-  const nutrients = Object.entries(data?.nutrition?.nutrients || {}).slice(0, 8);
-  const overallPct = Math.round(data?.nutrition?.overall_percent || 0);
+  const rawNutri = data?.nutrition || {};
+  const nutrients = Object.entries(rawNutri).filter(([k]) => !['toddler_id', 'date', 'age_months'].includes(k)).slice(0, 8);
+  const nutriVals = Object.values(rawNutri).filter((v: any) => typeof v === 'object' && v?.percentage != null) as any[];
+  const overallPct = nutriVals.length > 0
+    ? Math.round(nutriVals.reduce((s: number, n: any) => s + (n.percentage || 0), 0) / nutriVals.length)
+    : 0;
   const streak = data?.logging_stats?.current_streak ?? 0;
   const mealsLogged = data?.meals_eaten?.length || 0;
   const mealsTotal = schedule.length || 5;

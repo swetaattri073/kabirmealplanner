@@ -66,21 +66,23 @@ export type DashboardData = {
     date: string;
     meals: Record<string, any>;
   } | null;
-  nutrition: {
-    nutrients?: Record<
-      string,
-      {
-        name?: string;
-        icon?: string;
-        consumed?: number;
-        target?: number;
-        percent?: number;
-        status?: string;
-        unit?: string;
-      }
-    >;
-    overall_percent?: number;
-  };
+  nutrition: Record<
+    string,
+    {
+      actual?: number;
+      rda?: number;
+      percentage?: number;
+      status?: string;
+      consumed?: number;
+      target?: number;
+      percent?: number;
+      name?: string;
+      icon?: string;
+      unit?: string;
+      include_examples?: string[];
+      include_tip?: string | null;
+    }
+  >;
   alerts: Array<{
     alert_type?: string;
     nutrient?: string;
