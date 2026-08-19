@@ -1,9 +1,9 @@
 # LittleBowl Windows Android build helper
 # Fixes the two most common local build failures:
 #   1) Java 24/25 (use JDK 17)
-#   2) CMake path-too-long (use a short subst drive)
+#   2) CMake path-too-long on Windows
 #
-# Run from anywhere:
+# Run from the mobile/ folder:
 #   powershell -ExecutionPolicy Bypass -File .\scripts\windows-run-android.ps1
 
 $ErrorActionPreference = "Stop"
@@ -12,8 +12,34 @@ $MobileRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path (Join-Path $MobileRoot "package.json"))) {
   Write-Error "Could not find mobile/package.json next to scripts/. Expected: $MobileRoot"
 }
-
+Set-Location $MobileRoot
 Write-Host "==> Mobile project: $MobileRoot"
+
+# Warn if path is too deep (reanimated CMake hits ~250 char limit)
+if ($MobileRoot.Length -gt 50) {
+  Write-Host ""
+  Write-Host "WARNING: Your project path is $($MobileRoot.Length) chars long."
+  Write-Host "  CMake may fail with CMAKE_OBJECT_PATH_MAX errors."
+  Write-Host "  For best results, clone the repo to a short path like C:\lb"
+  Write-Host "  and run from C:\lb\toddler-meal-planner\mobile"
+  Write-Host ""
+}
+
+# --- Enable Windows long path support (requires admin, safe to re-run) ---
+try {
+  $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
+  $current = (Get-ItemProperty -Path $regPath -Name "LongPathsEnabled" -ErrorAction SilentlyContinue).LongPathsEnabled
+  if ($current -ne 1) {
+    Write-Host "==> Enabling Windows long path support (needs admin)..."
+    New-ItemProperty -Path $regPath -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force -ErrorAction Stop | Out-Null
+    Write-Host "==> Long paths enabled. A reboot may be needed for full effect."
+  } else {
+    Write-Host "==> Windows long paths already enabled."
+  }
+} catch {
+  Write-Host "==> Could not enable long paths (needs admin). Run this once as Administrator:"
+  Write-Host '    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force'
+}
 
 # --- JDK 17 (required; Java 25 breaks CMake / Gradle native tasks) ---
 $jdkCandidates = @()
@@ -62,16 +88,6 @@ if (-not $env:CMAKE_VERSION) {
   $env:CMAKE_VERSION = "3.31.1"
 }
 Write-Host "==> CMAKE_VERSION = $($env:CMAKE_VERSION)"
-
-# --- Short path via subst (avoids CMAKE_OBJECT_PATH_MAX ~250 on Windows) ---
-$Drive = "L:"
-if (Test-Path ($Drive + "\")) {
-  Write-Host "==> Removing existing subst $Drive"
-  subst $Drive /d | Out-Null
-}
-subst $Drive $MobileRoot
-Write-Host ("==> Mounted {0} as {1}\" -f $MobileRoot, $Drive)
-Set-Location ($Drive + "\")
 
 # --- SDK local.properties ---
 $sdk = Join-Path $env:LOCALAPPDATA "Android\Sdk"
@@ -130,6 +146,7 @@ if (Test-Path "android\gradlew.bat") {
 }
 
 Write-Host ""
-Write-Host ("==> Building and installing (from short path {0}\) ..." -f $Drive)
+Write-Host "==> Building and installing..."
 Write-Host "    Keep this window open while the build runs."
+Write-Host ""
 npx expo run:android
