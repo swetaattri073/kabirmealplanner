@@ -16,26 +16,26 @@ export function AppHeader({ title }: { title?: string }) {
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 6) + 6 }]}>
       <Pressable
         onPress={() => router.push('/(tabs)/dashboard')}
-        style={styles.brandPress}
         hitSlop={8}
       >
         <Image
           source={require('../../assets/littlebowl-mark.png')}
           style={styles.logo}
         />
-        <View>
-          <Text style={styles.brandLittle}>
-            Little<Text style={styles.brandBowl}>Bowl</Text>
-          </Text>
-        </View>
       </Pressable>
-      <View style={styles.mid}>
+
+      <View style={styles.center}>
+        <Text style={styles.brandText}>
+          <Text style={styles.brandLittle}>Little</Text>
+          <Text style={styles.brandBowl}>Bowl</Text>
+        </Text>
         {title ? <Text style={styles.title}>{title}</Text> : null}
       </View>
+
       <Pressable
         style={styles.avatar}
         onPress={() => router.push('/account')}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
         accessibilityLabel="My account"
         accessibilityRole="button"
       >
@@ -53,8 +53,9 @@ export function LogoHero() {
         style={{ width: 72, height: 72 }}
         accessibilityLabel="LittleBowl"
       />
-      <Text style={styles.heroLittle}>
-        Little<Text style={styles.heroBowl}>Bowl</Text>
+      <Text style={styles.heroText}>
+        <Text style={styles.heroLittle}>Little</Text>
+        <Text style={styles.heroBowl}>Bowl</Text>
       </Text>
       <Text style={styles.tagline}>Little meals, big growth.</Text>
     </View>
@@ -70,60 +71,64 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    gap: 10,
-  },
-  brandPress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    height: 64,
   },
   logo: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
   },
-  brandLittle: {
-    fontFamily: 'Nunito_800ExtraBold',
-    fontSize: 17,
-    color: '#2d5016',
-  },
-  brandBowl: {
-    fontFamily: 'Nunito_800ExtraBold',
-    color: '#d97706',
-  },
-  mid: { flex: 1, paddingLeft: 4 },
-  title: {
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.primary,
+  center: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
+  },
+  brandText: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 18,
+  },
+  brandLittle: {
+    color: '#4a7c28',
+  },
+  brandBowl: {
+    color: '#d97706',
+  },
+  title: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: -1,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#f97316',
   },
   avatarText: {
     color: colors.white,
     fontFamily: 'Nunito_800ExtraBold',
-    fontSize: 16,
+    fontSize: 17,
   },
   logoHero: {
     alignItems: 'center',
     gap: 8,
     marginBottom: 24,
   },
-  heroLittle: {
+  heroText: {
     fontFamily: 'Nunito_800ExtraBold',
     fontSize: 28,
-    color: '#2d5016',
+  },
+  heroLittle: {
+    color: '#4a7c28',
   },
   heroBowl: {
     color: '#d97706',
