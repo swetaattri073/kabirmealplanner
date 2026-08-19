@@ -22,16 +22,8 @@ import {
   LoadingBlock,
   Screen,
 } from '../../src/components/ui';
-import { colors, MEAL_LABELS, MEAL_ORDER, radii, REACTIONS } from '../../src/theme';
+import { colors, HIDDEN_VEGGIES, MEAL_EMOJI, MEAL_LABELS, MEAL_ORDER, radii, REACTIONS } from '../../src/theme';
 import type { Food } from '../../src/types';
-
-const MEAL_EMOJI: Record<string, string> = {
-  breakfast: '🥣',
-  mid_morning_snack: '🍌',
-  lunch: '🍲',
-  evening_snack: '🍎',
-  dinner: '🥗',
-};
 
 export default function LogMealScreen() {
   const { activeToddler } = useAuth();
@@ -50,6 +42,7 @@ export default function LogMealScreen() {
   const [tab, setTab] = useState<'search' | 'describe' | 'photo'>('search');
   const [todayPlan, setTodayPlan] = useState<any>(null);
   const [todayLogs, setTodayLogs] = useState<any[]>([]);
+  const [hiddenVeggies, setHiddenVeggies] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -68,6 +61,15 @@ export default function LogMealScreen() {
   useEffect(() => {
     loadPlan();
   }, [loadPlan]);
+
+  const toggleVeggie = (key: string) => {
+    setHiddenVeggies((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const search = useCallback(async (q: string) => {
     setQuery(q);
@@ -306,6 +308,23 @@ export default function LogMealScreen() {
               multiline
             />
 
+            {/* Hidden veggies */}
+            <Text style={styles.fieldLabel}>Add hidden veggies (1-2 tbsp each)</Text>
+            <View style={styles.veggieRow}>
+              {HIDDEN_VEGGIES.map((v) => (
+                <Pressable
+                  key={v.key}
+                  style={[styles.veggieChip, hiddenVeggies.has(v.key) && styles.veggieChipOn]}
+                  onPress={() => toggleVeggie(v.key)}
+                >
+                  <Text style={styles.veggieEmoji}>{v.emoji}</Text>
+                  <Text style={[styles.veggieLabel, hiddenVeggies.has(v.key) && styles.veggieLabelOn]}>
+                    {v.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
             <Button label="Log this meal" onPress={() => logPlanned(planMeal)} loading={saving} />
             <Button
               label="Ate something else"
@@ -357,6 +376,20 @@ export default function LogMealScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.foodName}>{f.name}</Text>
                     <Text style={styles.foodMeta}>{f.category}</Text>
+                    <View style={styles.foodNutriRow}>
+                      {f.calories != null && (
+                        <Text style={styles.foodNutriChip}>🔥 {Math.round(f.calories)}</Text>
+                      )}
+                      {f.protein_g != null && (
+                        <Text style={styles.foodNutriChip}>💪 {Math.round(f.protein_g * 10) / 10}g</Text>
+                      )}
+                      {f.iron_mg != null && (
+                        <Text style={styles.foodNutriChip}>🩸 {Math.round(f.iron_mg * 10) / 10}mg</Text>
+                      )}
+                      {f.calcium_mg != null && (
+                        <Text style={styles.foodNutriChip}>🦴 {Math.round(f.calcium_mg || 0)}mg</Text>
+                      )}
+                    </View>
                   </View>
                   {selected?.id === f.id && <Text style={styles.checkMark}>✓</Text>}
                 </Pressable>
@@ -392,6 +425,22 @@ export default function LogMealScreen() {
                     placeholder="Any observations..."
                     multiline
                   />
+
+                  <Text style={styles.fieldLabel}>Hidden veggies</Text>
+                  <View style={styles.veggieRow}>
+                    {HIDDEN_VEGGIES.map((v) => (
+                      <Pressable
+                        key={v.key}
+                        style={[styles.veggieChip, hiddenVeggies.has(v.key) && styles.veggieChipOn]}
+                        onPress={() => toggleVeggie(v.key)}
+                      >
+                        <Text style={styles.veggieEmoji}>{v.emoji}</Text>
+                        <Text style={[styles.veggieLabel, hiddenVeggies.has(v.key) && styles.veggieLabelOn]}>
+                          {v.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
 
                   <Button label="Save meal" onPress={save} loading={saving} />
                 </>
@@ -622,6 +671,49 @@ const styles = StyleSheet.create({
   foodMeta: { fontFamily: 'Nunito_400Regular', color: colors.textSecondary, fontSize: 12 },
   checkMark: { fontFamily: 'Nunito_800ExtraBold', color: colors.primary, fontSize: 18 },
 
+  veggieRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 14,
+  },
+  veggieChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    borderColor: '#22c55e40',
+    backgroundColor: 'rgba(34,197,94,0.06)',
+  },
+  veggieChipOn: {
+    backgroundColor: '#22c55e',
+    borderColor: '#22c55e',
+  },
+  veggieEmoji: { fontSize: 14 },
+  veggieLabel: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 12,
+    color: '#22c55e',
+  },
+  veggieLabelOn: { color: colors.white },
+  foodNutriRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  foodNutriChip: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 10,
+    color: colors.textSecondary,
+    backgroundColor: colors.bgTertiary,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
   photoHint: {
     fontFamily: 'Nunito_400Regular',
     color: colors.textSecondary,

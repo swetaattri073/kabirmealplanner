@@ -55,6 +55,14 @@ export const MEAL_LABELS: Record<string, string> = {
   dinner: 'Dinner',
 };
 
+export const MEAL_EMOJI: Record<string, string> = {
+  breakfast: '🥣',
+  mid_morning_snack: '🍌',
+  lunch: '🍲',
+  evening_snack: '🍎',
+  dinner: '🥗',
+};
+
 export const DEFAULT_REMINDER_TIMES: Record<string, string> = {
   breakfast: '08:00',
   mid_morning_snack: '10:30',
@@ -69,4 +77,36 @@ export const REACTIONS = [
   { id: 'neutral', label: 'Neutral', emoji: '😐' },
   { id: 'disliked', label: 'Disliked', emoji: '😕' },
   { id: 'refused', label: 'Refused', emoji: '🙅' },
+] as const;
+
+export const NUTRIENTS = [
+  { key: 'calories', name: 'Energy', unit: 'kcal', icon: '🔥' },
+  { key: 'protein_g', name: 'Protein', unit: 'g', icon: '💪' },
+  { key: 'fat_g', name: 'Fat', unit: 'g', icon: '🧈' },
+  { key: 'carbs_g', name: 'Carbs', unit: 'g', icon: '🍚' },
+  { key: 'fiber_g', name: 'Fiber', unit: 'g', icon: '🥬' },
+  { key: 'calcium_mg', name: 'Calcium', unit: 'mg', icon: '🦴' },
+  { key: 'iron_mg', name: 'Iron', unit: 'mg', icon: '🩸' },
+  { key: 'zinc_mg', name: 'Zinc', unit: 'mg', icon: '⚡' },
+  { key: 'vitamin_a_mcg', name: 'Vitamin A', unit: 'mcg', icon: '👁️' },
+  { key: 'vitamin_c_mg', name: 'Vitamin C', unit: 'mg', icon: '🍊' },
+  { key: 'vitamin_d_mcg', name: 'Vitamin D', unit: 'mcg', icon: '☀️' },
+  { key: 'vitamin_b12_mcg', name: 'Vitamin B12', unit: 'mcg', icon: '🔴' },
+  { key: 'folate_mcg', name: 'Folate', unit: 'mcg', icon: '🧬' },
+  { key: 'omega3_mg', name: 'Omega-3', unit: 'mg', icon: '🐟' },
+] as const;
+
+export const PRIORITY_NUTRIENTS = [
+  'calories', 'protein_g', 'iron_mg', 'calcium_mg',
+  'omega3_mg', 'vitamin_a_mcg', 'vitamin_c_mg', 'vitamin_d_mcg',
+] as const;
+
+export const HIDDEN_VEGGIES = [
+  { key: 'spinach', label: 'Spinach', emoji: '🥬', default_g: 15 },
+  { key: 'carrot', label: 'Carrot', emoji: '🥕', default_g: 15 },
+  { key: 'beetroot', label: 'Beetroot', emoji: '🫒', default_g: 15 },
+  { key: 'lauki', label: 'Lauki', emoji: '🥒', default_g: 15 },
+  { key: 'pumpkin', label: 'Pumpkin', emoji: '🎃', default_g: 15 },
+  { key: 'cauliflower', label: 'Cauliflower', emoji: '🥦', default_g: 15 },
+  { key: 'methi', label: 'Methi', emoji: '🌿', default_g: 15 },
 ] as const;

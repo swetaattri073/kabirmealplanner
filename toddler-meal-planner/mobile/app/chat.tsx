@@ -1,48 +1,102 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { AppHeader } from '../src/components/AppHeader';
-import { Button, Field, Screen } from '../src/components/ui';
+import { Button, Screen } from '../src/components/ui';
 import { colors, radii } from '../src/theme';
 
 type Msg = { role: 'user' | 'assistant'; text: string };
 
-export default function ChatScreen() {
-  const { activeToddler } = useAuth();
-  const [input, setInput] = useState('');
-  const [msgs, setMsgs] = useState<Msg[]>([
-    {
-      role: 'assistant',
-      text: 'Ask about meals, picky eating, or nutrition for your toddler.',
-    },
-  ]);
-  const [loading, setLoading] = useState(false);
+const SUGGESTIONS = [
+  'What iron-rich foods can I give?',
+  'Ideas for picky eaters',
+  'Is honey safe for my toddler?',
+  'Healthy breakfast ideas',
+  'How much milk should a 2-year-old drink?',
+];
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text) return;
+export default function ChatScreen() {
+  const { activeToddler, user } = useAuth();
+  const [input, setInput] = useState('');
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [chatAvailable, setChatAvailable] = useState<boolean | null>(null);
+  const [summary, setSummary] = useState('');
+  const flatListRef = useRef<FlatList>(null);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => {
+      setMsgs([]);
+      setSummary('');
+    }, 15 * 60 * 1000);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const health = await api.chatHealth();
+        setChatAvailable(health?.available !== false && health?.enabled !== false);
+      } catch {
+        setChatAvailable(false);
+      }
+    })();
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+    };
+  }, []);
+
+  const compactHistory = useCallback(async (messages: Msg[]) => {
+    if (messages.length <= 10) return;
+    const older = messages.slice(0, messages.length - 6);
+    try {
+      const res = await api.chatSummarize({
+        messages: older.map((m) => ({ role: m.role, content: m.text })),
+        existing_summary: summary,
+      });
+      if (res?.summary) {
+        setSummary(res.summary);
+        setMsgs(messages.slice(messages.length - 6));
+      }
+    } catch {}
+  }, [summary]);
+
+  const send = async (text?: string) => {
+    const msg = (text || input).trim();
+    if (!msg) return;
     setInput('');
-    setMsgs((m) => [...m, { role: 'user', text }]);
+    const newMsgs: Msg[] = [...msgs, { role: 'user', text: msg }];
+    setMsgs(newMsgs);
     setLoading(true);
+    resetIdleTimer();
+
     try {
       const data = await api.chat({
-        message: text,
+        message: msg,
         toddler_id: activeToddler?.ref,
+        summary: summary || undefined,
+        messages: newMsgs.slice(-8).map((m) => ({ role: m.role, content: m.text })),
       });
       const reply =
         data.reply || data.message || data.response || 'Sorry, I could not answer that.';
-      setMsgs((m) => [...m, { role: 'assistant', text: reply }]);
+      const updated = [...newMsgs, { role: 'assistant' as const, text: reply }];
+      setMsgs(updated);
+      compactHistory(updated);
     } catch (e: any) {
-      setMsgs((m) => [
-        ...m,
+      setMsgs([
+        ...newMsgs,
         { role: 'assistant', text: e?.message || 'Chat is unavailable right now.' },
       ]);
     } finally {
@@ -58,10 +112,52 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
+        {/* Premium banner */}
+        <LinearGradient
+          colors={['#6366f1', '#8b5cf6', '#ec4899'] as [string, string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.premiumBanner}
+        >
+          <Text style={styles.premiumIcon}>💬</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.premiumTitle}>AI Chat Assistant</Text>
+            <Text style={styles.premiumSub}>
+              Free during early access. Will become a premium feature.
+            </Text>
+          </View>
+        </LinearGradient>
+
+        {chatAvailable === false && (
+          <View style={styles.unavailable}>
+            <Text style={styles.unavailableText}>
+              Chat is currently unavailable. Please try again later.
+            </Text>
+          </View>
+        )}
+
         <FlatList
+          ref={flatListRef}
           data={msgs}
           keyExtractor={(_, i) => String(i)}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, msgs.length === 0 && styles.listEmpty]}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <View style={styles.emptyChat}>
+              <Text style={styles.emptyChatIcon}>🤖</Text>
+              <Text style={styles.emptyChatTitle}>Ask me anything!</Text>
+              <Text style={styles.emptyChatSub}>
+                I can help with meals, picky eating, nutrition, food safety, and toddler feeding tips.
+              </Text>
+              <View style={styles.suggestions}>
+                {SUGGESTIONS.map((s) => (
+                  <Pressable key={s} style={styles.suggestionChip} onPress={() => send(s)}>
+                    <Text style={styles.suggestionText}>{s}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          }
           renderItem={({ item }) => (
             <View
               style={[
@@ -69,6 +165,9 @@ export default function ChatScreen() {
                 item.role === 'user' ? styles.user : styles.assistant,
               ]}
             >
+              {item.role === 'assistant' && (
+                <Text style={styles.botAvatar}>🤖</Text>
+              )}
               <Text
                 style={[
                   styles.bubbleText,
@@ -79,15 +178,38 @@ export default function ChatScreen() {
               </Text>
             </View>
           )}
+          ListFooterComponent={
+            loading ? (
+              <View style={[styles.bubble, styles.assistant]}>
+                <Text style={styles.botAvatar}>🤖</Text>
+                <Text style={styles.thinkingText}>Thinking...</Text>
+              </View>
+            ) : null
+          }
         />
+
         <View style={styles.composer}>
-          <Field
-            label="Message"
-            value={input}
-            onChangeText={setInput}
-            placeholder="e.g. Ideas for iron-rich dinner?"
-          />
-          <Button label="Send" onPress={send} loading={loading} />
+          <View style={styles.inputRow}>
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder="Ask about meals, nutrition..."
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              multiline
+              maxLength={500}
+              onSubmitEditing={() => send()}
+              returnKeyType="send"
+              editable={chatAvailable !== false}
+            />
+            <Pressable
+              style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
+              onPress={() => send()}
+              disabled={!input.trim() || loading}
+            >
+              <Text style={styles.sendIcon}>↑</Text>
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -95,7 +217,73 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  premiumBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  premiumIcon: { fontSize: 24 },
+  premiumTitle: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 14,
+    color: '#ffffff',
+  },
+  premiumSub: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  unavailable: {
+    padding: 16,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+  },
+  unavailableText: {
+    fontFamily: 'Nunito_600SemiBold',
+    color: colors.danger,
+    textAlign: 'center',
+  },
   list: { padding: 16, paddingBottom: 8 },
+  listEmpty: { flex: 1, justifyContent: 'center' },
+  emptyChat: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyChatIcon: { fontSize: 48, marginBottom: 12 },
+  emptyChatTitle: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 20,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  emptyChatSub: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  suggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  suggestionChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 9999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: colors.bgTertiary,
+  },
+  suggestionText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 12,
+    color: colors.primary,
+  },
   bubble: {
     maxWidth: '88%',
     padding: 12,
@@ -105,22 +293,75 @@ const styles = StyleSheet.create({
   user: {
     alignSelf: 'flex-end',
     backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
   },
   assistant: {
     alignSelf: 'flex-start',
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
+    borderBottomLeftRadius: 4,
+  },
+  botAvatar: {
+    fontSize: 14,
+    marginBottom: 4,
   },
   bubbleText: {
     fontFamily: 'Nunito_400Regular',
     color: colors.text,
+    lineHeight: 22,
+  },
+  thinkingText: {
+    fontFamily: 'Nunito_600SemiBold',
+    color: colors.textMuted,
+    fontStyle: 'italic',
   },
   composer: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    backgroundColor: colors.white,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.bg,
+    borderRadius: radii.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 15,
+    color: colors.text,
+    maxHeight: 100,
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sendBtnDisabled: {
+    backgroundColor: colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  sendIcon: {
+    color: '#ffffff',
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 18,
   },
 });

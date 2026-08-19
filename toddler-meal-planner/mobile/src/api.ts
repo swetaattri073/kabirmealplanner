@@ -157,5 +157,11 @@ export const api = {
 
   chat: (body: Record<string, unknown>) =>
     apiRequest('/api/chat', { method: 'POST', body }),
+  chatHealth: () => apiRequest('/api/chat/health'),
+  chatSummarize: (body: Record<string, unknown>) =>
+    apiRequest('/api/chat/summarize', { method: 'POST', body }),
   dailyTip: (ref: string) => apiRequest(`/api/daily-tip/${encodeURIComponent(ref)}`),
+  flavorExplore: (ref: string) =>
+    apiRequest(`/api/explore-flavors/${encodeURIComponent(ref)}`),
+  nutritionBoosters: () => apiRequest('/api/nutrition-boosters'),
 };

@@ -13,16 +13,8 @@ import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
 import { Button, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
-import { colors, MEAL_LABELS, MEAL_ORDER, radii } from '../../src/theme';
+import { colors, MEAL_EMOJI, MEAL_LABELS, MEAL_ORDER, radii } from '../../src/theme';
 import type { DashboardData, Recipe } from '../../src/types';
-
-const MEAL_EMOJI: Record<string, string> = {
-  breakfast: '🥣',
-  mid_morning_snack: '🍌',
-  lunch: '🍲',
-  evening_snack: '🍎',
-  dinner: '🥗',
-};
 
 const GREETING = (): string => {
   const h = new Date().getHours();
