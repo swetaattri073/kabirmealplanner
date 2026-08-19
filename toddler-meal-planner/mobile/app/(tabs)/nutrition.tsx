@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../src/api';
@@ -29,6 +29,7 @@ export default function NutritionScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [selectedNutrient, setSelectedNutrient] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!activeToddler) {
@@ -130,7 +131,7 @@ export default function NutritionScreen() {
               const suggestions = n.suggestions || n.try_including || [];
 
               return (
-                <View key={key} style={styles.nutriCard}>
+                <Pressable key={key} onPress={() => setSelectedNutrient(key)} style={styles.nutriCard}>
                   <View style={styles.nutriHeader}>
                     <Text style={styles.nutriIcon}>{meta?.icon || '📊'}</Text>
                     <Text style={styles.nutriName}>{meta?.name || n.name || key}</Text>
@@ -157,7 +158,8 @@ export default function NutritionScreen() {
                       Try: {suggestions.slice(0, 3).join(', ')}
                     </Text>
                   )}
-                </View>
+                  <Text style={styles.tapHint}>Tap for details</Text>
+                </Pressable>
               );
             })}
           </View>
@@ -233,9 +235,254 @@ export default function NutritionScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      {/* Nutrient detail modal */}
+      <Modal
+        visible={!!selectedNutrient}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedNutrient(null)}
+      >
+        <NutrientDetailModal
+          nutrientKey={selectedNutrient}
+          breakdown={breakdown}
+          rawNutrients={rawNutrients}
+          onClose={() => setSelectedNutrient(null)}
+        />
+      </Modal>
     </Screen>
   );
 }
+
+function NutrientDetailModal({
+  nutrientKey,
+  breakdown,
+  rawNutrients,
+  onClose,
+}: {
+  nutrientKey: string | null;
+  breakdown: any;
+  rawNutrients: any;
+  onClose: () => void;
+}) {
+  if (!nutrientKey) return null;
+
+  const meta = NUTRIENTS.find((n) => n.key === nutrientKey);
+  const n = rawNutrients[nutrientKey] || {};
+  const pct = Math.round(n.percent || 0);
+  const consumed = n.consumed ?? 0;
+  const target = n.target ?? 0;
+  const grad = statusGrad(pct);
+
+  const items: Array<{ food_name: string; value: number; portion: number; meal_type: string }> = [];
+  if (breakdown?.items) {
+    for (const item of breakdown.items) {
+      const val = item[nutrientKey];
+      if (val != null && val > 0) {
+        items.push({
+          food_name: item.food_name || 'Food',
+          value: val,
+          portion: item.portion_percent || 100,
+          meal_type: item.meal_type || '',
+        });
+      }
+    }
+  }
+  items.sort((a, b) => b.value - a.value);
+
+  const totalFromItems = items.reduce((s, i) => s + i.value, 0);
+
+  return (
+    <View style={modalStyles.overlay}>
+      <View style={modalStyles.sheet}>
+        <View style={modalStyles.header}>
+          <View style={modalStyles.headerLeft}>
+            <Text style={modalStyles.headerIcon}>{meta?.icon || '📊'}</Text>
+            <Text style={modalStyles.headerTitle}>{meta?.name || nutrientKey}</Text>
+          </View>
+          <Pressable onPress={onClose} hitSlop={12}>
+            <Text style={modalStyles.closeBtn}>✕</Text>
+          </Pressable>
+        </View>
+
+        <View style={modalStyles.summaryRow}>
+          <View style={modalStyles.summaryItem}>
+            <Text style={modalStyles.summaryValue}>{Math.round(consumed * 10) / 10}</Text>
+            <Text style={modalStyles.summaryUnit}>{meta?.unit || ''} consumed</Text>
+          </View>
+          <View style={modalStyles.summaryItem}>
+            <Text style={modalStyles.summaryValue}>{Math.round(target * 10) / 10}</Text>
+            <Text style={modalStyles.summaryUnit}>{meta?.unit || ''} target</Text>
+          </View>
+          <View style={modalStyles.summaryItem}>
+            <Text style={[modalStyles.summaryValue, { color: grad[0] }]}>{pct}%</Text>
+            <Text style={modalStyles.summaryUnit}>{statusLabel(pct)}</Text>
+          </View>
+        </View>
+
+        <Text style={modalStyles.sectionTitle}>
+          Foods contributing to {meta?.name || nutrientKey} today
+        </Text>
+
+        <ScrollView style={modalStyles.list}>
+          {items.length > 0 ? (
+            items.map((item, i) => {
+              const share = totalFromItems > 0 ? Math.round((item.value / totalFromItems) * 100) : 0;
+              return (
+                <View key={i} style={modalStyles.foodRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={modalStyles.foodName}>{item.food_name}</Text>
+                    <Text style={modalStyles.foodMeal}>
+                      {(item.meal_type || '').replace(/_/g, ' ')} · {item.portion}% eaten
+                    </Text>
+                  </View>
+                  <View style={modalStyles.foodRight}>
+                    <Text style={modalStyles.foodValue}>
+                      {Math.round(item.value * 10) / 10} {meta?.unit || ''}
+                    </Text>
+                    <Text style={modalStyles.foodShare}>{share}%</Text>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <View style={modalStyles.emptyState}>
+              <Text style={modalStyles.emptyIcon}>🍽️</Text>
+              <Text style={modalStyles.emptyText}>
+                No foods logged today contribute to {meta?.name || nutrientKey}.
+              </Text>
+              <Text style={modalStyles.emptyHint}>
+                Log a meal to see which foods provide this nutrient.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 32,
+    maxHeight: '75%',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIcon: { fontSize: 22 },
+  headerTitle: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 18,
+    color: colors.text,
+  },
+  closeBtn: {
+    fontSize: 20,
+    color: colors.textMuted,
+    fontFamily: 'Nunito_700Bold',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryValue: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 20,
+    color: colors.text,
+  },
+  summaryUnit: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  sectionTitle: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 14,
+    color: colors.textSecondary,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  list: {
+    paddingHorizontal: 18,
+  },
+  foodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  foodName: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 15,
+    color: colors.text,
+  },
+  foodMeal: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  foodRight: {
+    alignItems: 'flex-end',
+  },
+  foodValue: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 14,
+    color: colors.primary,
+  },
+  foodShare: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  emptyIcon: { fontSize: 32, marginBottom: 8 },
+  emptyText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  emptyHint: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+});
 
 const styles = StyleSheet.create({
   pad: { padding: 16, paddingBottom: 40 },
@@ -346,6 +593,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_600SemiBold',
     fontSize: 11,
     marginTop: 2,
+  },
+  tapHint: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 9,
+    color: colors.textMuted,
+    marginTop: 4,
+    textAlign: 'right',
   },
   nutriSuggestion: {
     fontFamily: 'Nunito_400Regular',
