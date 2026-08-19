@@ -39,6 +39,14 @@ export const spacing = {
   xl: 32,
 };
 
+export const MEAL_ORDER = [
+  'breakfast',
+  'mid_morning_snack',
+  'lunch',
+  'evening_snack',
+  'dinner',
+] as const;
+
 export const MEAL_LABELS: Record<string, string> = {
   breakfast: 'Breakfast',
   mid_morning_snack: 'Mid-morning snack',

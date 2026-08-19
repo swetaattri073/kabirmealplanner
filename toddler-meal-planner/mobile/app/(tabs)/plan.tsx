@@ -13,7 +13,7 @@ import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
 import { Button, Card, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
-import { colors, MEAL_LABELS } from '../../src/theme';
+import { colors, MEAL_LABELS, MEAL_ORDER } from '../../src/theme';
 
 export default function PlanScreen() {
   const { activeToddler } = useAuth();
@@ -89,7 +89,8 @@ export default function PlanScreen() {
               <Text style={styles.day}>
                 {day.weekday || day.day_name || day.date}
               </Text>
-              {Object.entries(day.meals || {}).map(([meal, info]: any) => {
+              {MEAL_ORDER.filter((m) => (day.meals || {})[m]).map((meal) => {
+                const info = (day.meals || {})[meal] as any;
                 const name =
                   info?.summary ||
                   info?.food?.name ||

@@ -13,7 +13,7 @@ import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
 import { Button, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
-import { colors, MEAL_LABELS, radii } from '../../src/theme';
+import { colors, MEAL_LABELS, MEAL_ORDER, radii } from '../../src/theme';
 import type { DashboardData, Recipe } from '../../src/types';
 
 const MEAL_EMOJI: Record<string, string> = {
@@ -79,10 +79,11 @@ export default function DashboardScreen() {
     );
   }
 
-  const schedule = [
+  const rawSchedule = new Set([
     ...(data?.schedule?.meals || []),
     ...(data?.schedule?.snacks || []),
-  ];
+  ]);
+  const schedule = MEAL_ORDER.filter((m) => rawSchedule.has(m));
   const nutrients = Object.entries(data?.nutrition?.nutrients || {}).slice(0, 6);
   const overallPct = Math.round(data?.nutrition?.overall_percent || 0);
   const streak = data?.logging_stats?.current_streak ?? 0;
