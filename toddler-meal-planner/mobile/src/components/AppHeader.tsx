@@ -71,12 +71,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    height: 64,
+    minHeight: 56,
   },
   logo: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 6,
   },
   center: {
     flex: 1,
@@ -85,19 +85,19 @@ const styles = StyleSheet.create({
   },
   brandText: {
     fontFamily: 'Nunito_800ExtraBold',
-    fontSize: 18,
+    fontSize: 20,
   },
   brandLittle: {
-    color: '#4a7c28',
+    color: '#2d5016',
   },
   brandBowl: {
-    color: '#d97706',
+    color: '#c2410c',
   },
   title: {
     fontFamily: 'Nunito_600SemiBold',
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
-    marginTop: -1,
+    marginTop: -2,
   },
   avatar: {
     width: 40,
