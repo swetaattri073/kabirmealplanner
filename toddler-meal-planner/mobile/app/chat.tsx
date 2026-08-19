@@ -10,11 +10,16 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
+import { getChatCount, incrementChatCount } from '../src/storage';
 import { AppHeader } from '../src/components/AppHeader';
 import { Button, Screen } from '../src/components/ui';
 import { colors, radii } from '../src/theme';
+
+const GUEST_LIMIT = 5;
+const USER_DAILY_LIMIT = 20;
 
 type Msg = { role: 'user' | 'assistant'; text: string };
 
@@ -27,14 +32,18 @@ const SUGGESTIONS = [
 ];
 
 export default function ChatScreen() {
-  const { activeToddler, user } = useAuth();
+  const { activeToddler, user, authenticated } = useAuth();
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
   const [chatAvailable, setChatAvailable] = useState<boolean | null>(null);
   const [summary, setSummary] = useState('');
+  const [dailyCount, setDailyCount] = useState(0);
+  const [limitReached, setLimitReached] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isGuest = !authenticated;
 
   const resetIdleTimer = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -47,8 +56,14 @@ export default function ChatScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const health = await api.chatHealth();
+        const [health, chatCount] = await Promise.all([
+          api.chatHealth().catch(() => ({ available: true })),
+          getChatCount(),
+        ]);
         setChatAvailable(health?.available !== false && health?.enabled !== false);
+        setDailyCount(chatCount.count);
+        const limit = isGuest ? GUEST_LIMIT : USER_DAILY_LIMIT;
+        setLimitReached(chatCount.count >= limit);
       } catch {
         setChatAvailable(false);
       }
@@ -56,7 +71,7 @@ export default function ChatScreen() {
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
-  }, []);
+  }, [isGuest]);
 
   const compactHistory = useCallback(async (messages: Msg[]) => {
     if (messages.length <= 10) return;
@@ -76,11 +91,39 @@ export default function ChatScreen() {
   const send = async (text?: string) => {
     const msg = (text || input).trim();
     if (!msg) return;
+
+    const limit = isGuest ? GUEST_LIMIT : USER_DAILY_LIMIT;
+    if (dailyCount >= limit) {
+      setLimitReached(true);
+      if (isGuest) {
+        setMsgs((m) => [
+          ...m,
+          {
+            role: 'assistant',
+            text: `You've reached the ${GUEST_LIMIT}-message limit for guest users today. Sign in or create an account to get ${USER_DAILY_LIMIT} messages per day!`,
+          },
+        ]);
+      } else {
+        setMsgs((m) => [
+          ...m,
+          {
+            role: 'assistant',
+            text: `You've reached your daily limit of ${USER_DAILY_LIMIT} messages. Premium users will have unlimited access — stay tuned!`,
+          },
+        ]);
+      }
+      return;
+    }
+
     setInput('');
     const newMsgs: Msg[] = [...msgs, { role: 'user', text: msg }];
     setMsgs(newMsgs);
     setLoading(true);
     resetIdleTimer();
+
+    const updated = await incrementChatCount();
+    setDailyCount(updated.count);
+    if (updated.count >= limit) setLimitReached(true);
 
     try {
       const data = await api.chat({
@@ -127,6 +170,39 @@ export default function ChatScreen() {
             </Text>
           </View>
         </LinearGradient>
+
+        {/* Usage counter */}
+        <View style={styles.usageBar}>
+          <Text style={styles.usageText}>
+            {dailyCount}/{isGuest ? GUEST_LIMIT : USER_DAILY_LIMIT} messages today
+            {isGuest ? ' (guest)' : ''}
+          </Text>
+          {isGuest && (
+            <Pressable onPress={() => router.push('/login')} hitSlop={8}>
+              <Text style={styles.usageLink}>Sign in for more</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {limitReached && (
+          <View style={styles.limitBanner}>
+            <Text style={styles.limitText}>
+              {isGuest
+                ? `Guest limit reached (${GUEST_LIMIT}/day). Sign in or register for ${USER_DAILY_LIMIT} messages per day.`
+                : `Daily limit reached (${USER_DAILY_LIMIT}/day). Premium users will have unlimited access.`}
+            </Text>
+            {isGuest && (
+              <View style={styles.limitActions}>
+                <Pressable style={styles.limitBtn} onPress={() => router.push('/login')}>
+                  <Text style={styles.limitBtnText}>Sign in</Text>
+                </Pressable>
+                <Pressable style={styles.limitBtn} onPress={() => router.push('/register')}>
+                  <Text style={styles.limitBtnText}>Register</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
 
         {chatAvailable === false && (
           <View style={styles.unavailable}>
@@ -200,12 +276,12 @@ export default function ChatScreen() {
               maxLength={500}
               onSubmitEditing={() => send()}
               returnKeyType="send"
-              editable={chatAvailable !== false}
+              editable={chatAvailable !== false && !limitReached}
             />
             <Pressable
-              style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
+              style={[styles.sendBtn, (!input.trim() || loading || limitReached) && styles.sendBtnDisabled]}
               onPress={() => send()}
-              disabled={!input.trim() || loading}
+              disabled={!input.trim() || loading || limitReached}
             >
               <Text style={styles.sendIcon}>↑</Text>
             </Pressable>
@@ -234,6 +310,54 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_400Regular',
     fontSize: 11,
     color: 'rgba(255,255,255,0.8)',
+  },
+  usageBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: colors.bgTertiary,
+  },
+  usageText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  usageLink: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 12,
+    color: colors.primary,
+  },
+  limitBanner: {
+    padding: 14,
+    backgroundColor: 'rgba(234,179,8,0.1)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(234,179,8,0.3)',
+  },
+  limitText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 13,
+    color: '#92400e',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  limitActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 10,
+  },
+  limitBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 9999,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  limitBtnText: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 13,
+    color: colors.white,
   },
   unavailable: {
     padding: 16,

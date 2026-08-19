@@ -70,3 +70,30 @@ export async function getNotifyPrefs(): Promise<NotifyPrefs | null> {
 export async function setNotifyPrefs(prefs: NotifyPrefs) {
   await AsyncStorage.setItem(NOTIFY_KEY, JSON.stringify(prefs));
 }
+
+const CHAT_COUNT_KEY = 'littlebowl_chat_count';
+
+type ChatCount = { date: string; count: number };
+
+export async function getChatCount(): Promise<ChatCount> {
+  const today = new Date().toISOString().split('T')[0];
+  const raw = await AsyncStorage.getItem(CHAT_COUNT_KEY);
+  if (raw) {
+    try {
+      const parsed: ChatCount = JSON.parse(raw);
+      if (parsed.date === today) return parsed;
+    } catch {}
+  }
+  return { date: today, count: 0 };
+}
+
+export async function incrementChatCount(): Promise<ChatCount> {
+  const current = await getChatCount();
+  const today = new Date().toISOString().split('T')[0];
+  const next: ChatCount = {
+    date: today,
+    count: current.date === today ? current.count + 1 : 1,
+  };
+  await AsyncStorage.setItem(CHAT_COUNT_KEY, JSON.stringify(next));
+  return next;
+}
