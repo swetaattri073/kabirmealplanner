@@ -97,3 +97,72 @@ export async function incrementChatCount(): Promise<ChatCount> {
   await AsyncStorage.setItem(CHAT_COUNT_KEY, JSON.stringify(next));
   return next;
 }
+
+const CHAT_SESSION_PREFIX = 'littlebowl_chat_session_';
+const CHAT_IDLE_MS = 15 * 60 * 1000;
+const CHAT_MAX_RECENT = 10;
+
+export type ChatMsg = { role: 'user' | 'assistant'; text: string };
+export type ChatSession = { messages: ChatMsg[]; summary: string };
+
+// Keyed per toddler so switching profiles doesn't bleed one conversation into
+// another, matching the web widget's lb_chat_session_<toddlerId> scheme.
+const chatSessionKey = (toddlerRef?: string | null) =>
+  `${CHAT_SESSION_PREFIX}${toddlerRef || 'guest'}`;
+
+function isValidChatMsg(m: any): m is ChatMsg {
+  return (
+    !!m &&
+    (m.role === 'user' || m.role === 'assistant') &&
+    typeof m.text === 'string' &&
+    m.text.trim().length > 0
+  );
+}
+
+export async function getChatSession(toddlerRef?: string | null): Promise<ChatSession> {
+  const empty: ChatSession = { messages: [], summary: '' };
+  try {
+    const raw = await AsyncStorage.getItem(chatSessionKey(toddlerRef));
+    if (!raw) return empty;
+    const data = JSON.parse(raw);
+    const last = Number(data?.lastActivity) || 0;
+    if (!last || Date.now() - last > CHAT_IDLE_MS) {
+      await clearChatSession(toddlerRef);
+      return empty;
+    }
+    const messages = Array.isArray(data.messages) ? data.messages.filter(isValidChatMsg) : [];
+    return {
+      messages: messages.slice(-CHAT_MAX_RECENT),
+      summary: typeof data.summary === 'string' ? data.summary : '',
+    };
+  } catch {
+    await clearChatSession(toddlerRef);
+    return empty;
+  }
+}
+
+export async function setChatSession(
+  toddlerRef: string | null | undefined,
+  session: ChatSession,
+) {
+  try {
+    await AsyncStorage.setItem(
+      chatSessionKey(toddlerRef),
+      JSON.stringify({
+        messages: session.messages.slice(-CHAT_MAX_RECENT),
+        summary: session.summary,
+        lastActivity: Date.now(),
+      }),
+    );
+  } catch {
+    // Device storage full or unavailable — fall back to in-memory only.
+  }
+}
+
+export async function clearChatSession(toddlerRef?: string | null) {
+  try {
+    await AsyncStorage.removeItem(chatSessionKey(toddlerRef));
+  } catch {
+    // Nothing to recover from; the in-memory reset already happened.
+  }
+}

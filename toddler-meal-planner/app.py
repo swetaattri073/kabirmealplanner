@@ -40,7 +40,8 @@ from toddler_refs import (
 )
 
 from api_auth import issue_api_token, verify_api_token
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe
+from sqlalchemy.exc import IntegrityError
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe, ChatUsage
 from admin_stats import build_admin_stats
 from analytics import record_analytics_event
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
@@ -2915,8 +2916,132 @@ def api_usda_food(fdc_id):
         return jsonify({'error': str(exc)}), 502
 
 
+CHAT_GUEST_DAILY_LIMIT = 5
+CHAT_USER_DAILY_LIMIT = 20
+
+
+def _chat_device_id():
+    """The client's reinstall-surviving device id, if it sent a usable one."""
+    raw = (request.headers.get('X-Device-Id') or '').strip()
+    if raw and len(raw) <= 191 and _re.fullmatch(r'[A-Za-z0-9_.:-]+', raw):
+        return raw
+    return None
+
+
+def _chat_quota_key():
+    """What the daily allowance is counted against.
+
+    Signed-in users are metered per account, so the allowance follows them
+    across devices instead of multiplying with each one. Guests are metered per
+    device, which is the part a reinstall used to reset. The guest/session id is
+    the last resort so a client that omits the header is still metered rather
+    than handed an unlimited allowance.
+    """
+    if current_user.is_authenticated:
+        return f'user:{current_user.id}'
+    device_id = _chat_device_id()
+    if device_id:
+        return f'dev:{device_id}'
+    try:
+        return f'guest:{get_session_id()}'
+    except Exception:
+        return None
+
+
+def _chat_daily_limit():
+    return CHAT_USER_DAILY_LIMIT if current_user.is_authenticated else CHAT_GUEST_DAILY_LIMIT
+
+
+def _chat_usage_snapshot(count):
+    limit = _chat_daily_limit()
+    used = max(0, int(count or 0))
+    return {'count': used, 'limit': limit, 'remaining': max(0, limit - used)}
+
+
+def _chat_usage_row(quota_key):
+    today = date.today()
+    row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=today).first()
+    if row is not None:
+        return row
+    row = ChatUsage(quota_key=quota_key, usage_date=today, count=0)
+    db.session.add(row)
+    try:
+        db.session.flush()
+    except IntegrityError:
+        # Another request created the row first; take theirs.
+        db.session.rollback()
+        row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=today).first()
+    return row
+
+
+def _chat_reserve_quota(quota_key):
+    """Claim one message up front. Returns (allowed, usage snapshot)."""
+    limit = _chat_daily_limit()
+    if not quota_key:
+        return True, _chat_usage_snapshot(0)
+    try:
+        row = _chat_usage_row(quota_key)
+        if row is None:
+            return True, _chat_usage_snapshot(0)
+        used = int(row.count or 0)
+        if used >= limit:
+            return False, _chat_usage_snapshot(used)
+        row.count = used + 1
+        row.device_id = _chat_device_id() or row.device_id
+        if current_user.is_authenticated:
+            row.user_id = current_user.id
+        db.session.commit()
+        return True, _chat_usage_snapshot(row.count)
+    except Exception as exc:
+        db.session.rollback()
+        # Never let quota bookkeeping take the chat down.
+        app.logger.warning('Chat quota check skipped: %s', exc)
+        return True, _chat_usage_snapshot(0)
+
+
+def _chat_refund_quota(quota_key):
+    """Hand back a reserved message when the request failed on our side."""
+    if not quota_key:
+        return
+    try:
+        # Drop whatever the failed turn left pending (a half-applied tool call,
+        # say) so the refund commits on its own.
+        db.session.rollback()
+        row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=date.today()).first()
+        if row and (row.count or 0) > 0:
+            row.count = int(row.count) - 1
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def _chat_limit_response(usage):
+    if current_user.is_authenticated:
+        message = (
+            f"You've reached your daily limit of {usage['limit']} messages. "
+            'Premium users will have unlimited access — stay tuned!'
+        )
+    else:
+        message = (
+            f"You've reached the {usage['limit']}-message limit for guest users today. "
+            f'Sign in or create an account to get {CHAT_USER_DAILY_LIMIT} messages per day!'
+        )
+    return jsonify({'error': message, 'limit_reached': True, 'usage': usage}), 429
+
+
 @app.route('/api/chat/health', methods=['GET'])
 def api_chat_health():
+    used = 0
+    try:
+        quota_key = _chat_quota_key()
+        if quota_key:
+            row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=date.today()).first()
+            used = int(row.count or 0) if row else 0
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.warning('Chat usage lookup failed: %s', exc)
+    usage = _chat_usage_snapshot(used)
+
     if not can_use_chat_assistant():
         return jsonify({
             'ok': False,
@@ -2924,12 +3049,14 @@ def api_chat_health():
             'feature_enabled': is_chat_feature_enabled(),
             'premium_required': True,
             'available': False,
+            'usage': usage,
         })
     return jsonify({
         'ok': chat_configured(),
         'configured': chat_configured(),
         'feature_enabled': True,
         'available': True,
+        'usage': usage,
     })
 
 
@@ -3067,6 +3194,13 @@ def api_chat():
             'error': 'OPENAI_API_KEY is not set. Add it to .env and restart the app.'
         }), 501
 
+    # Reserved before the model call so parallel requests can't slip past the
+    # limit; refunded below if we fail for a reason that isn't the caller's.
+    quota_key = _chat_quota_key()
+    allowed, usage = _chat_reserve_quota(quota_key)
+    if not allowed:
+        return _chat_limit_response(usage)
+
     plan_meals, foods = _chat_context_for_toddler(toddler)
     system_prompt = build_system_prompt(
         toddler_name=toddler.name,
@@ -3133,16 +3267,21 @@ def api_chat():
 
         reply = assistant_msg.get('content') or 'Got it.'
         return jsonify({
+            'reply': reply,
             'message': {'role': 'assistant', 'content': reply},
             'tool_result': tool_results[0]['result'] if len(tool_results) == 1 else None,
             'tool_results': tool_results,
+            'usage': usage,
         })
     except ChatConfigError as exc:
+        _chat_refund_quota(quota_key)
         status = 501 if exc.code == 'NO_API_KEY' else 400
         return jsonify({'error': str(exc)}), status
     except ChatRequestError as exc:
+        _chat_refund_quota(quota_key)
         return jsonify({'error': str(exc)}), exc.status
     except Exception as exc:
+        _chat_refund_quota(quota_key)
         return jsonify({'error': f'Chat failed: {exc}'}), 502
 
 

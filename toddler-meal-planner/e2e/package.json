@@ -1,0 +1,17 @@
+{
+  "name": "littlebowl-e2e",
+  "version": "1.0.0",
+  "description": "Playwright end-to-end tests for the LittleBowl web app",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

@@ -950,3 +950,40 @@ class NutritionAlert(db.Model):
             'recommended_foods': self.recommended_foods,
             'is_resolved': self.is_resolved
         }
+
+
+class ChatUsage(db.Model):
+    """Daily chat allowance.
+
+    Guests are counted per device, because guest ids live in app storage and a
+    reinstall wiped them, handing out a fresh allowance every time. IMEI is
+    unavailable to third-party apps from Android 10 onward, so the client sends
+    Android's SSAID or an iOS Keychain-backed id instead. Signed-in users are
+    counted per account so the allowance follows them across devices.
+    """
+    __tablename__ = 'chat_usage'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Either 'user:<id>' or 'dev:<device id>' / 'guest:<session id>'.
+    quota_key = db.Column(db.String(191), nullable=False, index=True)
+    usage_date = db.Column(db.Date, nullable=False, default=date.today, index=True)
+    count = db.Column(db.Integer, nullable=False, default=0)
+
+    # Last device and account seen against this row. Not used for metering —
+    # kept so repeat abuse can be traced back to a handset.
+    device_id = db.Column(db.String(191), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('quota_key', 'usage_date', name='uq_chat_usage_key_date'),
+    )
+
+    def to_dict(self):
+        return {
+            'date': self.usage_date.isoformat() if self.usage_date else None,
+            'count': self.count or 0,
+        }

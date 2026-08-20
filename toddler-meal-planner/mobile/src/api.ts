@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { getDeviceId } from './device';
 import { getGuestId, getToken, setGuestId, setToken } from './storage';
 
 const DEFAULT_BASE = 'https://littlebowl.in';
@@ -41,6 +42,8 @@ export async function apiRequest<T = any>(path: string, opts: RequestOpts = {}):
     const guest = await getGuestId();
     if (guest) headers['X-Guest-Id'] = guest;
   }
+  const deviceId = await getDeviceId();
+  if (deviceId) headers['X-Device-Id'] = deviceId;
 
   const res = await fetch(`${apiBaseUrl()}${path}`, {
     method: opts.method || (opts.body || opts.formData ? 'POST' : 'GET'),

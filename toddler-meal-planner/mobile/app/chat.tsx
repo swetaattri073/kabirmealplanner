@@ -13,7 +13,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
-import { getChatCount, incrementChatCount } from '../src/storage';
+import {
+  clearChatSession,
+  getChatCount,
+  getChatSession,
+  incrementChatCount,
+  setChatSession,
+} from '../src/storage';
 import { AppHeader } from '../src/components/AppHeader';
 import { Button, Screen } from '../src/components/ui';
 import { colors, radii } from '../src/theme';
@@ -22,6 +28,15 @@ const GUEST_LIMIT = 5;
 const USER_DAILY_LIMIT = 20;
 
 type Msg = { role: 'user' | 'assistant'; text: string };
+
+// The server may answer with a flat string or an OpenAI-style {role, content}
+// object; anything non-string reaching a <Text> child crashes the renderer.
+const replyText = (data: any): string => {
+  const candidate = data?.reply ?? data?.message ?? data?.response;
+  if (typeof candidate === 'string') return candidate;
+  if (typeof candidate?.content === 'string') return candidate.content;
+  return 'Sorry, I could not answer that.';
+};
 
 const SUGGESTIONS = [
   'What iron-rich foods can I give?',
@@ -40,10 +55,13 @@ export default function ChatScreen() {
   const [chatAvailable, setChatAvailable] = useState<boolean | null>(null);
   const [summary, setSummary] = useState('');
   const [dailyCount, setDailyCount] = useState(0);
+  const [dailyLimit, setDailyLimit] = useState(authenticated ? USER_DAILY_LIMIT : GUEST_LIMIT);
   const [limitReached, setLimitReached] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isGuest = !authenticated;
+  const toddlerRef = activeToddler?.ref ?? null;
 
   const resetIdleTimer = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -53,6 +71,50 @@ export default function ChatScreen() {
     }, 15 * 60 * 1000);
   }, []);
 
+  // Restore the conversation for this toddler. getChatSession drops anything
+  // older than the 15 minute idle window, so a stale thread never comes back.
+  useEffect(() => {
+    let cancelled = false;
+    setHydrated(false);
+    (async () => {
+      const session = await getChatSession(toddlerRef);
+      if (cancelled) return;
+      setMsgs(session.messages);
+      setSummary(session.summary);
+      setHydrated(true);
+      if (session.messages.length) resetIdleTimer();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [toddlerRef, resetIdleTimer]);
+
+  // Emptying state is also how the idle timeout expires a thread, so treating
+  // "nothing left" as a delete keeps the timer from needing its own cleanup.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!msgs.length && !summary) {
+      clearChatSession(toddlerRef);
+      return;
+    }
+    setChatSession(toddlerRef, { messages: msgs, summary });
+  }, [hydrated, toddlerRef, msgs, summary]);
+
+  // The server owns the allowance and counts per device, so a reinstall can't
+  // reset it. The on-device tally is only a fallback for builds pointed at a
+  // backend that predates server-side metering.
+  const applyUsage = useCallback(
+    (usage: any, fallbackCount?: number) => {
+      const max =
+        typeof usage?.limit === 'number' ? usage.limit : isGuest ? GUEST_LIMIT : USER_DAILY_LIMIT;
+      const count = typeof usage?.count === 'number' ? usage.count : fallbackCount ?? 0;
+      setDailyLimit(max);
+      setDailyCount(count);
+      setLimitReached(count >= max);
+    },
+    [isGuest],
+  );
+
   useEffect(() => {
     (async () => {
       try {
@@ -61,9 +123,7 @@ export default function ChatScreen() {
           getChatCount(),
         ]);
         setChatAvailable(health?.available !== false && health?.enabled !== false);
-        setDailyCount(chatCount.count);
-        const limit = isGuest ? GUEST_LIMIT : USER_DAILY_LIMIT;
-        setLimitReached(chatCount.count >= limit);
+        applyUsage(health?.usage, chatCount.count);
       } catch {
         setChatAvailable(false);
       }
@@ -71,7 +131,7 @@ export default function ChatScreen() {
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
-  }, [isGuest]);
+  }, [isGuest, applyUsage]);
 
   const compactHistory = useCallback(async (messages: Msg[]) => {
     if (messages.length <= 10) return;
@@ -92,7 +152,7 @@ export default function ChatScreen() {
     const msg = (text || input).trim();
     if (!msg) return;
 
-    const limit = isGuest ? GUEST_LIMIT : USER_DAILY_LIMIT;
+    const limit = dailyLimit;
     if (dailyCount >= limit) {
       setLimitReached(true);
       if (isGuest) {
@@ -100,7 +160,7 @@ export default function ChatScreen() {
           ...m,
           {
             role: 'assistant',
-            text: `You've reached the ${GUEST_LIMIT}-message limit for guest users today. Sign in or create an account to get ${USER_DAILY_LIMIT} messages per day!`,
+            text: `You've reached the ${limit}-message limit for guest users today. Sign in or create an account to get ${USER_DAILY_LIMIT} messages per day!`,
           },
         ]);
       } else {
@@ -108,7 +168,7 @@ export default function ChatScreen() {
           ...m,
           {
             role: 'assistant',
-            text: `You've reached your daily limit of ${USER_DAILY_LIMIT} messages. Premium users will have unlimited access — stay tuned!`,
+            text: `You've reached your daily limit of ${limit} messages. Premium users will have unlimited access — stay tuned!`,
           },
         ]);
       }
@@ -121,9 +181,9 @@ export default function ChatScreen() {
     setLoading(true);
     resetIdleTimer();
 
-    const updated = await incrementChatCount();
-    setDailyCount(updated.count);
-    if (updated.count >= limit) setLimitReached(true);
+    const local = await incrementChatCount();
+    setDailyCount(local.count);
+    if (local.count >= limit) setLimitReached(true);
 
     try {
       const data = await api.chat({
@@ -132,12 +192,15 @@ export default function ChatScreen() {
         summary: summary || undefined,
         messages: newMsgs.slice(-8).map((m) => ({ role: m.role, content: m.text })),
       });
-      const reply =
-        data.reply || data.message || data.response || 'Sorry, I could not answer that.';
-      const updated = [...newMsgs, { role: 'assistant' as const, text: reply }];
+      applyUsage(data?.usage, local.count);
+      const updated = [...newMsgs, { role: 'assistant' as const, text: replyText(data) }];
       setMsgs(updated);
       compactHistory(updated);
     } catch (e: any) {
+      if (e?.status === 429) {
+        applyUsage(e?.body?.usage, local.count);
+        setLimitReached(true);
+      }
       setMsgs([
         ...newMsgs,
         { role: 'assistant', text: e?.message || 'Chat is unavailable right now.' },
@@ -174,7 +237,7 @@ export default function ChatScreen() {
         {/* Usage counter */}
         <View style={styles.usageBar}>
           <Text style={styles.usageText}>
-            {dailyCount}/{isGuest ? GUEST_LIMIT : USER_DAILY_LIMIT} messages today
+            {dailyCount}/{dailyLimit} messages today
             {isGuest ? ' (guest)' : ''}
           </Text>
           {isGuest && (
@@ -188,8 +251,8 @@ export default function ChatScreen() {
           <View style={styles.limitBanner}>
             <Text style={styles.limitText}>
               {isGuest
-                ? `Guest limit reached (${GUEST_LIMIT}/day). Sign in or register for ${USER_DAILY_LIMIT} messages per day.`
-                : `Daily limit reached (${USER_DAILY_LIMIT}/day). Premium users will have unlimited access.`}
+                ? `Guest limit reached (${dailyLimit}/day). Sign in or register for ${USER_DAILY_LIMIT} messages per day.`
+                : `Daily limit reached (${dailyLimit}/day). Premium users will have unlimited access.`}
             </Text>
             {isGuest && (
               <View style={styles.limitActions}>
