@@ -992,7 +992,48 @@ class MealPlanner:
             'week_end': (week_start + timedelta(days=6)).isoformat(),
             'days': sorted_days,
             'weaning': plan_context(age_months),
+            'prep_checklist': self.generate_prep_checklist(sorted_days),
         }
+
+    def generate_prep_checklist(self, days: list) -> list:
+        """Emit soak/prep tasks for the next few days of the plan."""
+        tasks = []
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        for day in days[:7]:
+            day_label = day.get('day_name') or day.get('date', '')
+            for meal_type, meal in (day.get('meals') or {}).items():
+                if not isinstance(meal, dict):
+                    continue
+                names = []
+                if meal.get('display_name'):
+                    names.append(str(meal['display_name']))
+                food = meal.get('food') or {}
+                if food.get('name'):
+                    names.append(food['name'])
+                for comp_key in ('main', 'carb', 'side'):
+                    comp = meal.get(comp_key) or {}
+                    if isinstance(comp, dict) and comp.get('food_name'):
+                        names.append(comp['food_name'])
+                blob = ' '.join(names).lower()
+                if not blob:
+                    continue
+                task = None
+                if any(k in blob for k in ('moong dal', 'toor dal', 'urad dal', 'chana dal', 'rajma', 'chole')):
+                    task = f'Soak dal tonight for {day_label} {meal_type.replace("_", " ")}'
+                elif 'dosa' in blob or 'idli' in blob:
+                    task = f'Ferment batter ahead for {day_label} {meal_type.replace("_", " ")}'
+                elif 'dalia' in blob or 'broken wheat' in blob:
+                    task = f'Rinse daliya for {day_label} {meal_type.replace("_", " ")}'
+                elif 'khichdi' in blob:
+                    task = f'Wash rice and dal for {day_label} khichdi'
+                if task:
+                    tasks.append({
+                        'day': day.get('date'),
+                        'day_name': day_label,
+                        'meal_type': meal_type,
+                        'task': task,
+                    })
+        return tasks[:12]
 
     def _component_recipes(self, complete_meal):
         """Recipe links for main/carb/side components."""

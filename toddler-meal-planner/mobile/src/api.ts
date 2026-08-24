@@ -149,16 +149,39 @@ export const api = {
       body,
     }),
 
-  recipes: (q?: string, category?: string) => {
+  recipes: (opts?: { q?: string; category?: string; age_months?: number }) => {
     const p = new URLSearchParams();
-    if (q) p.set('q', q);
-    if (category) p.set('category', category);
+    if (opts?.q) p.set('q', opts.q);
+    if (opts?.category) p.set('category', opts.category);
+    if (opts?.age_months != null) p.set('age_months', String(opts.age_months));
     const qs = p.toString();
     return apiRequest(`/api/recipes${qs ? `?${qs}` : ''}`);
   },
   recipe: (slug: string) => apiRequest(`/api/recipes/${encodeURIComponent(slug)}`),
 
   weaning: (ref: string) => apiRequest(`/api/weaning/${encodeURIComponent(ref)}`),
+  tryWeaningFood: (ref: string, body: Record<string, unknown>) =>
+    apiRequest(`/api/weaning/${encodeURIComponent(ref)}/try-food`, { method: 'POST', body }),
+
+  miniPlans: (ageMonths?: number) => {
+    const q = ageMonths != null ? `?age_months=${ageMonths}` : '';
+    return apiRequest(`/api/meal-plan/mini${q}`);
+  },
+  applyMiniPlan: (templateKey: string, ref: string) =>
+    apiRequest(
+      `/api/meal-plan/mini/${encodeURIComponent(templateKey)}/${encodeURIComponent(ref)}`,
+      { method: 'POST' },
+    ),
+
+  growth: (ref: string) => apiRequest(`/api/growth/${encodeURIComponent(ref)}`),
+  addGrowthRecord: (ref: string, body: Record<string, unknown>) =>
+    apiRequest(`/api/growth/${encodeURIComponent(ref)}`, { method: 'POST', body }),
+
+  savedRecipes: () => apiRequest('/api/recipes/saved'),
+  saveRecipe: (slug: string) =>
+    apiRequest(`/api/recipes/${encodeURIComponent(slug)}/save`, { method: 'POST' }),
+  unsaveRecipe: (slug: string) =>
+    apiRequest(`/api/recipes/${encodeURIComponent(slug)}/save`, { method: 'DELETE' }),
 
   chat: (body: Record<string, unknown>) =>
     apiRequest('/api/chat', { method: 'POST', body }),

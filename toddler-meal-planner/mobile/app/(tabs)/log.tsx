@@ -43,6 +43,10 @@ export default function LogMealScreen() {
   const [todayPlan, setTodayPlan] = useState<any>(null);
   const [todayLogs, setTodayLogs] = useState<any[]>([]);
   const [hiddenVeggies, setHiddenVeggies] = useState<Map<string, number>>(new Map());
+  const [editingLog, setEditingLog] = useState<any | null>(null);
+  const [editPortion, setEditPortion] = useState(100);
+  const [editReaction, setEditReaction] = useState('liked');
+  const [editNotes, setEditNotes] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -73,6 +77,60 @@ export default function LogMealScreen() {
       else next.set(key, qty);
       return next;
     });
+  };
+
+  const startEditLog = (log: any) => {
+    setEditingLog(log);
+    setEditPortion(log.portion_eaten_percent ?? 100);
+    setEditReaction(log.toddler_reaction || 'liked');
+    setEditNotes(log.notes || '');
+  };
+
+  const cancelEditLog = () => {
+    setEditingLog(null);
+    setEditNotes('');
+  };
+
+  const saveEditLog = async () => {
+    if (!editingLog) return;
+    setSaving(true);
+    try {
+      await api.updateMealLog(editingLog.id, {
+        toddler_reaction: editReaction,
+        portion_eaten_percent: editPortion,
+        notes: editNotes || undefined,
+      });
+      cancelEditLog();
+      await loadPlan();
+      Alert.alert('Updated', 'Meal log saved.');
+    } catch (e: any) {
+      Alert.alert('Could not update', e?.message || 'Try again');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteLog = (log: any) => {
+    const name = log.food?.name || log.custom_food_name || 'this meal';
+    Alert.alert('Remove log?', `Delete ${name} from today's ${MEAL_LABELS[mealType] || mealType}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setSaving(true);
+          try {
+            await api.deleteMealLog(log.id);
+            if (editingLog?.id === log.id) cancelEditLog();
+            await loadPlan();
+          } catch (e: any) {
+            Alert.alert('Could not delete', e?.message || 'Try again');
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
   };
 
   const search = useCallback(async (q: string) => {
@@ -251,6 +309,7 @@ export default function LogMealScreen() {
                 setSelected(null);
                 setQuery('');
                 setFoods([]);
+                cancelEditLog();
               }}
               style={[styles.chip, mealType === m && styles.chipOn]}
             >
@@ -268,14 +327,84 @@ export default function LogMealScreen() {
             <Text style={styles.loggedTitle}>Already logged</Text>
             {logged.map((l: any) => (
               <View key={l.id} style={styles.loggedRow}>
-                <Text style={styles.loggedFood}>
-                  {l.food?.name || l.custom_food_name || 'Food'}
-                </Text>
-                <Text style={styles.loggedMeta}>
-                  {l.portion_eaten_percent || 100}% · {l.toddler_reaction || 'liked'}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.loggedFood}>
+                    {l.food?.name || l.custom_food_name || 'Food'}
+                  </Text>
+                  <Text style={styles.loggedMeta}>
+                    {l.portion_eaten_percent ?? 100}% · {l.toddler_reaction || 'liked'}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => startEditLog(l)}
+                  style={styles.editBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${l.food?.name || 'meal log'}`}
+                >
+                  <Text style={styles.editBtnText}>Edit</Text>
+                </Pressable>
               </View>
             ))}
+
+            {editingLog ? (
+              <View style={styles.editPanel}>
+                <Text style={styles.editPanelTitle}>
+                  Edit {editingLog.food?.name || editingLog.custom_food_name || 'meal'}
+                </Text>
+
+                <Text style={styles.fieldLabel}>Portion eaten</Text>
+                <PortionPicker
+                  value={editPortion}
+                  onChange={setEditPortion}
+                  servingGrams={
+                    activeToddler && editingLog.food
+                      ? getServingForAge(editingLog.food, activeToddler.age_months)
+                      : undefined
+                  }
+                  foodCategory={editingLog.food?.category}
+                />
+
+                <Text style={styles.fieldLabel}>Reaction</Text>
+                <View style={styles.reactionsRow}>
+                  {REACTIONS.map((r) => (
+                    <Pressable
+                      key={r.id}
+                      onPress={() => setEditReaction(r.id)}
+                      style={[styles.reactionBtn, editReaction === r.id && styles.reactionBtnOn]}
+                    >
+                      <Text style={styles.reactionEmoji}>{r.emoji}</Text>
+                      <Text
+                        style={[
+                          styles.reactionLabel,
+                          editReaction === r.id && styles.reactionLabelOn,
+                        ]}
+                      >
+                        {r.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Field
+                  label="Notes (optional)"
+                  value={editNotes}
+                  onChangeText={setEditNotes}
+                  placeholder="Any observations..."
+                  multiline
+                />
+
+                <Button label="Save changes" onPress={saveEditLog} loading={saving} />
+                <Button label="Cancel" variant="secondary" onPress={cancelEditLog} />
+                <Pressable
+                  onPress={() => deleteLog(editingLog)}
+                  style={styles.deleteLink}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete this meal log"
+                >
+                  <Text style={styles.deleteLinkText}>Delete this log</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </Card>
         )}
 
@@ -666,12 +795,38 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   loggedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 6,
     borderTopWidth: 1,
     borderTopColor: 'rgba(34,197,94,0.15)',
+    gap: 8,
   },
   loggedFood: { fontFamily: 'Nunito_700Bold', color: colors.text },
   loggedMeta: { fontFamily: 'Nunito_400Regular', color: colors.textSecondary, fontSize: 12 },
+  editBtn: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.white,
+  },
+  editBtnText: { fontFamily: 'Nunito_700Bold', fontSize: 13, color: colors.primary },
+  editPanel: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(34,197,94,0.2)',
+  },
+  editPanelTitle: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  deleteLink: { alignItems: 'center', paddingVertical: 12 },
+  deleteLinkText: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.danger },
 
   planHeader: {
     flexDirection: 'row',

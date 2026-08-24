@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
@@ -13,6 +13,7 @@ export default function WeaningScreen() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [trying, setTrying] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!activeToddler) {
@@ -28,6 +29,23 @@ export default function WeaningScreen() {
       setRefreshing(false);
     }
   }, [activeToddler]);
+
+  const onTryFood = async (item: any) => {
+    if (!activeToddler || item.tried) return;
+    setTrying(item.name);
+    try {
+      await api.tryWeaningFood(activeToddler.ref, {
+        food_name: item.name,
+        food_id: item.food_id,
+        reaction: 'liked',
+      });
+      await load();
+    } catch (e: any) {
+      Alert.alert('Could not save', e?.message || 'Try again');
+    } finally {
+      setTrying(null);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -96,7 +114,49 @@ export default function WeaningScreen() {
           </View>
 
           <Text style={styles.milkNote}>{stage.milk_note}</Text>
+
+          {data.video_url ? (
+            <Pressable
+              style={styles.videoLink}
+              onPress={() => Linking.openURL(data.video_url)}
+              accessibilityRole="link"
+            >
+              <Text style={styles.videoLinkText}>Watch how to prepare →</Text>
+              <Text style={styles.videoDisclaimer}>{data.video_disclaimer}</Text>
+            </Pressable>
+          ) : null}
         </Card>
+
+        {/* First foods checklist */}
+        {(data.checklist || []).length > 0 && (
+          <Card>
+            <Text style={styles.h}>First foods checklist</Text>
+            <Text style={styles.body}>Tap when your baby has tried a food.</Text>
+            {(data.checklist || []).map((item: any) => (
+              <View key={item.name} style={styles.checkRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.checkName}>
+                    {item.tried ? '✓ ' : ''}
+                    {item.name}
+                    {item.hindi ? `  ${item.hindi}` : ''}
+                  </Text>
+                  <Text style={styles.checkWhy}>{item.why}</Text>
+                </View>
+                {!item.tried ? (
+                  <Pressable
+                    style={styles.tryBtn}
+                    onPress={() => onTryFood(item)}
+                    disabled={trying === item.name}
+                  >
+                    <Text style={styles.tryBtnText}>
+                      {trying === item.name ? '…' : 'Tried it'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+          </Card>
+        )}
 
         {/* Progress through the food list */}
         <Card>
@@ -282,6 +342,48 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: 6,
     lineHeight: 22,
+  },
+  videoLink: { marginTop: 12, paddingTop: 8 },
+  videoLinkText: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 15,
+    color: colors.secondary,
+  },
+  videoDisclaimer: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  checkName: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 15,
+    color: colors.text,
+  },
+  checkWhy: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  tryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  tryBtnText: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 13,
+    color: colors.white,
   },
 
   barBg: {

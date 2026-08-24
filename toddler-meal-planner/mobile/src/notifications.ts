@@ -46,12 +46,13 @@ export function mealKeysFor(prefs: Pick<NotifyPrefs, 'mealKeys'>): string[] {
 
 function defaultPrefs(): NotifyPrefs {
   return {
-    enabled: true,
+    enabled: false,
     mealReminders: true,
     nutritionAlerts: true,
     times: { ...DEFAULT_REMINDER_TIMES },
     toddlerRef: null,
     toddlerName: null,
+    notificationsPrompted: false,
   };
 }
 
@@ -104,7 +105,7 @@ export async function rescheduleMealReminders(prefs?: NotifyPrefs) {
     return;
   }
 
-  if (!p.enabled || !p.mealReminders) return;
+  if (!p.notificationsPrompted || !p.enabled || !p.mealReminders) return;
 
   const ok = await ensureNotificationPermission();
   if (!ok) return;
@@ -148,6 +149,25 @@ export async function rescheduleMealReminders(prefs?: NotifyPrefs) {
   }
 }
 
+/** User tapped Enable on the Home prompt or saved reminders in Account. */
+export async function enableMealReminders(prefs?: NotifyPrefs): Promise<boolean> {
+  const p = prefs || (await loadNotifyPrefs());
+  p.notificationsPrompted = true;
+  p.enabled = true;
+  p.mealReminders = true;
+  await setNotifyPrefs(p);
+  await rescheduleMealReminders(p);
+  return p.enabled;
+}
+
+/** User dismissed the in-app prompt without enabling. */
+export async function dismissNotificationPrompt(): Promise<void> {
+  const p = await loadNotifyPrefs();
+  p.notificationsPrompted = true;
+  p.enabled = false;
+  await setNotifyPrefs(p);
+}
+
 export async function syncRemindersFromToddler(
   toddlerRef: string | null,
   toddlerName: string | null,
@@ -161,7 +181,10 @@ export async function syncRemindersFromToddler(
     // have to duplicate the age rules.
     const keys = [...(mealSchedule?.meals || []), ...(mealSchedule?.snacks || [])];
     prefs.mealKeys = keys.length ? keys : null;
-    await saveNotifyPrefs(prefs);
+    await setNotifyPrefs(prefs);
+    if (prefs.notificationsPrompted) {
+      await rescheduleMealReminders(prefs);
+    }
   } catch (err) {
     console.warn('syncRemindersFromToddler failed', err);
   }

@@ -40,9 +40,17 @@ from toddler_refs import (
 )
 
 from api_auth import issue_api_token, verify_api_token
-from weaning import build_journey as build_weaning_journey
+from weaning import build_journey as build_weaning_journey, match_food_id_for_name
+from mini_plans import list_mini_plans, get_mini_plan_template
+from who_growth import (
+    GROWTH_DISCLAIMER,
+    length_percentile,
+    percentile_bands,
+    weight_percentile,
+)
+from chat_assistant import sources_for_text
 from sqlalchemy.exc import IntegrityError
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe, ChatUsage
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe, ChatUsage, GrowthRecord, SavedRecipe
 from admin_stats import build_admin_stats
 from analytics import record_analytics_event
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
@@ -1155,13 +1163,21 @@ def create_toddler():
     data = request.json
     
     # Validate required fields
-    if not data.get('name') or not data.get('age_months'):
-        return jsonify({'error': 'Name and age are required'}), 400
+    if not data.get('name'):
+        return jsonify({'error': 'Name is required'}), 400
+    if not data.get('age_months') and not data.get('birth_date'):
+        return jsonify({'error': 'Birth date or age is required'}), 400
+    
+    birth_date = None
+    if data.get('birth_date'):
+        birth_date = datetime.strptime(data['birth_date'], '%Y-%m-%d').date()
+
+    age_months = int(data['age_months']) if data.get('age_months') is not None else None
     
     toddler = Toddler(
         name=data['name'],
-        age_months=int(data['age_months']),
-        birth_date=datetime.strptime(data['birth_date'], '%Y-%m-%d').date() if data.get('birth_date') else None,
+        age_months=age_months or 6,
+        birth_date=birth_date,
         gender=data.get('gender', 'unknown'),
         weight_kg=data.get('weight_kg'),
         height_cm=data.get('height_cm'),
@@ -1173,6 +1189,11 @@ def create_toddler():
         meal_schedule=data.get('meal_schedule'),
         feeding_preferences=_normalize_feeding_preferences(data.get('feeding_preferences')),
     )
+
+    if birth_date:
+        toddler.sync_age()
+    elif age_months is not None:
+        toddler.age_months = age_months
     
     # Assign ownership
     if current_user.is_authenticated:
@@ -1223,6 +1244,13 @@ def update_toddler(toddler_id):
         toddler.name = data['name']
     if 'age_months' in data:
         toddler.age_months = int(data['age_months'])
+    if 'birth_date' in data:
+        raw_bd = data.get('birth_date')
+        if raw_bd:
+            toddler.birth_date = datetime.strptime(raw_bd, '%Y-%m-%d').date()
+            toddler.sync_age()
+        else:
+            toddler.birth_date = None
     if 'gender' in data:
         toddler.gender = data['gender']
     if 'weight_kg' in data:
@@ -2895,7 +2923,9 @@ def get_dashboard_data(toddler_id):
 def api_recipes():
     q = request.args.get('q')
     category = request.args.get('category')
-    return jsonify({'recipes': list_recipes(category=category, q=q)})
+    age_raw = request.args.get('age_months')
+    age_months = int(age_raw) if age_raw not in (None, '') else None
+    return jsonify({'recipes': list_recipes(category=category, q=q, age_months=age_months)})
 
 
 @app.route('/api/recipes/<slug>', methods=['GET'])
@@ -2903,7 +2933,186 @@ def api_recipe_detail(slug):
     recipe = get_recipe(slug)
     if not recipe:
         return jsonify({'error': 'Recipe not found'}), 404
-    return jsonify({'recipe': recipe})
+    saved = False
+    if current_user.is_authenticated:
+        saved = SavedRecipe.query.filter_by(
+            user_id=current_user.id,
+            recipe_slug=slug.lower().strip(),
+        ).first() is not None
+    return jsonify({'recipe': recipe, 'saved': saved})
+
+
+@app.route('/api/recipes/saved', methods=['GET'])
+@login_required
+def api_saved_recipes():
+    rows = SavedRecipe.query.filter_by(user_id=current_user.id).order_by(SavedRecipe.saved_at.desc()).all()
+    slugs = [r.recipe_slug for r in rows]
+    recipes = []
+    for slug in slugs:
+        rec = get_recipe(slug)
+        if rec:
+            recipes.append(rec)
+    return jsonify({'recipes': recipes, 'saved': [r.to_dict() for r in rows]})
+
+
+@app.route('/api/recipes/<slug>/save', methods=['POST'])
+@login_required
+def api_save_recipe(slug):
+    key = slug.lower().strip()
+    if not get_recipe(key):
+        return jsonify({'error': 'Recipe not found'}), 404
+    existing = SavedRecipe.query.filter_by(user_id=current_user.id, recipe_slug=key).first()
+    if existing:
+        return jsonify({'saved': True, 'recipe_slug': key})
+    row = SavedRecipe(user_id=current_user.id, recipe_slug=key)
+    db.session.add(row)
+    db.session.commit()
+    return jsonify({'saved': True, 'recipe_slug': key}), 201
+
+
+@app.route('/api/recipes/<slug>/save', methods=['DELETE'])
+@login_required
+def api_unsave_recipe(slug):
+    key = slug.lower().strip()
+    row = SavedRecipe.query.filter_by(user_id=current_user.id, recipe_slug=key).first()
+    if row:
+        db.session.delete(row)
+        db.session.commit()
+    return jsonify({'saved': False, 'recipe_slug': key})
+
+
+@app.route('/api/meal-plan/mini', methods=['GET'])
+def api_list_mini_plans():
+    age_raw = request.args.get('age_months')
+    age = int(age_raw) if age_raw not in (None, '') else None
+    return jsonify({'templates': list_mini_plans(age)})
+
+
+@app.route('/api/meal-plan/mini/<template_key>/<toddler_ref:toddler_id>', methods=['GET'])
+def api_get_mini_plan(template_key, toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    tpl = get_mini_plan_template(template_key)
+    if not tpl:
+        return jsonify({'error': 'Template not found'}), 404
+    return jsonify({'template': tpl, 'toddler_name': toddler.name})
+
+
+@app.route('/api/meal-plan/mini/<template_key>/<toddler_ref:toddler_id>', methods=['POST'])
+def api_apply_mini_plan(template_key, toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    tpl = get_mini_plan_template(template_key)
+    if not tpl:
+        return jsonify({'error': 'Template not found'}), 404
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    planner = MealPlanner(db.session)
+
+    for day_idx, day_meals in enumerate(tpl.get('days') or []):
+        for meal_type, food_name in day_meals.items():
+            food = Food.query.filter(Food.name.ilike(food_name.strip())).first()
+            if not food:
+                continue
+            plan_date = week_start + timedelta(days=day_idx)
+            if plan_date < today:
+                continue
+            existing = WeeklyPlan.query.filter_by(
+                toddler_id=toddler.id,
+                week_start=week_start,
+                day_of_week=day_idx,
+                meal_type=meal_type,
+            ).first()
+            if existing:
+                existing.food_id = food.id
+                existing.is_generated = True
+            else:
+                db.session.add(WeeklyPlan(
+                    toddler_id=toddler.id,
+                    week_start=week_start,
+                    day_of_week=day_idx,
+                    meal_type=meal_type,
+                    food_id=food.id,
+                    is_generated=True,
+                ))
+    db.session.commit()
+    plan = planner.generate_weekly_plan(toddler, week_start, regenerate=False)
+    return jsonify({'ok': True, 'template': template_key, **plan})
+
+
+@app.route('/api/growth/<toddler_ref:toddler_id>', methods=['GET'])
+def api_get_growth(toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    refresh_toddler_age(toddler)
+    rows = GrowthRecord.query.filter_by(toddler_id=toddler.id).order_by(GrowthRecord.recorded_at.asc()).all()
+    records = []
+    for r in rows:
+        item = r.to_dict()
+        age_at = toddler.age_months
+        if toddler.birth_date and r.recorded_at:
+            months = (r.recorded_at.year - toddler.birth_date.year) * 12 + (
+                r.recorded_at.month - toddler.birth_date.month
+            )
+            if r.recorded_at.day < toddler.birth_date.day:
+                months -= 1
+            age_at = max(0, months)
+        if r.weight_kg is not None:
+            item['weight_percentile'] = weight_percentile(
+                age_months=age_at,
+                weight_kg=r.weight_kg,
+                gender=toddler.gender or 'unknown',
+            )
+        if r.height_cm is not None:
+            item['height_percentile'] = length_percentile(
+                age_months=age_at,
+                height_cm=r.height_cm,
+                gender=toddler.gender or 'unknown',
+            )
+        records.append(item)
+    gender = toddler.gender or 'unknown'
+    return jsonify({
+        'records': records,
+        'disclaimer': GROWTH_DISCLAIMER,
+        'bands': {
+            'weight': percentile_bands(metric='weight', gender=gender),
+            'length': percentile_bands(metric='length', gender=gender),
+        },
+        'toddler': {'name': toddler.name, 'age_months': toddler.age_months, 'gender': gender},
+    })
+
+
+@app.route('/api/growth/<toddler_ref:toddler_id>', methods=['POST'])
+def api_add_growth(toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    data = request.json or {}
+    recorded = data.get('recorded_at') or date.today().isoformat()
+    recorded_at = datetime.strptime(recorded, '%Y-%m-%d').date()
+    weight = data.get('weight_kg')
+    height = data.get('height_cm')
+    if weight is None and height is None:
+        return jsonify({'error': 'weight_kg or height_cm required'}), 400
+    row = GrowthRecord(
+        toddler_id=toddler.id,
+        recorded_at=recorded_at,
+        weight_kg=float(weight) if weight is not None else None,
+        height_cm=float(height) if height is not None else None,
+        notes=data.get('notes'),
+    )
+    db.session.add(row)
+    if weight is not None:
+        toddler.weight_kg = float(weight)
+        toddler.weight_updated_at = recorded_at
+    if height is not None:
+        toddler.height_cm = float(height)
+    db.session.commit()
+    return jsonify({'record': row.to_dict(), 'disclaimer': GROWTH_DISCLAIMER}), 201
 
 
 @app.route('/api/recipes/for-food', methods=['GET'])
@@ -3115,7 +3324,52 @@ def api_weaning(toddler_id):
         'age_months': toddler.age_months,
         'birth_date': toddler.birth_date.isoformat() if toddler.birth_date else None,
     }
+    for item in journey.get('checklist') or []:
+        item['food_id'] = match_food_id_for_name(db.session, item.get('name'))
     return jsonify(journey)
+
+
+@app.route('/api/weaning/<toddler_ref:toddler_id>/try-food', methods=['POST'])
+def api_weaning_try_food(toddler_id):
+    """Mark a first food as tried from the weaning checklist."""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+
+    data = request.json or {}
+    food_name = (data.get('food_name') or '').strip()
+    food_id = data.get('food_id')
+    reaction = (data.get('reaction') or 'liked').lower().strip()
+
+    if not food_id and food_name:
+        food_id = match_food_id_for_name(db.session, food_name)
+
+    food = Food.query.get(food_id) if food_id else None
+    if not food and food_name:
+        food = Food.query.filter(Food.name.ilike(food_name)).first()
+
+    if not food:
+        return jsonify({'error': 'Food not found in catalogue'}), 404
+
+    pref = FoodPreference.query.filter_by(toddler_id=toddler.id, food_id=food.id).first()
+    if not pref:
+        pref = FoodPreference(toddler_id=toddler.id, food_id=food.id)
+        db.session.add(pref)
+    pref.update_from_reaction(reaction)
+
+    log = MealLog(
+        toddler_id=toddler.id,
+        food_id=food.id,
+        date=date.today(),
+        meal_type='breakfast',
+        portion_eaten_percent=100 if reaction in ('loved', 'liked') else 50,
+        toddler_reaction=reaction,
+        notes='Quick log from weaning checklist',
+    )
+    db.session.add(log)
+    db.session.commit()
+
+    return jsonify({'ok': True, 'food_id': food.id, 'food_name': food.name, 'meal_log_id': log.id})
 
 
 @app.route('/api/chat/health', methods=['GET'])
@@ -3355,9 +3609,13 @@ def api_chat():
             assistant_msg = choice.get('message') or {}
 
         reply = assistant_msg.get('content') or 'Got it.'
+        combined = reply + ' ' + ' '.join(
+            (m.get('content') or '') for m in messages if m.get('role') == 'user'
+        )
         return jsonify({
             'reply': reply,
             'message': {'role': 'assistant', 'content': reply},
+            'sources': sources_for_text(combined),
             'tool_result': tool_results[0]['result'] if len(tool_results) == 1 else None,
             'tool_results': tool_results,
             'usage': usage,

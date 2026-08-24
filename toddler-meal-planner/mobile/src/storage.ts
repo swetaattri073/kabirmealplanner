@@ -58,6 +58,8 @@ export type NotifyPrefs = {
   // Meals this child actually has, from the server's per-age schedule.
   // Null means fall back to the full five.
   mealKeys?: string[] | null;
+  /** User has chosen Enable or Not now on the in-app prompt (or saved reminders). */
+  notificationsPrompted?: boolean;
 };
 
 export async function getNotifyPrefs(): Promise<NotifyPrefs | null> {
@@ -72,6 +74,17 @@ export async function getNotifyPrefs(): Promise<NotifyPrefs | null> {
 
 export async function setNotifyPrefs(prefs: NotifyPrefs) {
   await AsyncStorage.setItem(NOTIFY_KEY, JSON.stringify(prefs));
+}
+
+const WEANING_INTRO_KEY = 'littlebowl_seen_weaning_intro';
+
+export async function getSeenWeaningIntro(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(WEANING_INTRO_KEY);
+  return v === '1';
+}
+
+export async function setSeenWeaningIntro() {
+  await AsyncStorage.setItem(WEANING_INTRO_KEY, '1');
 }
 
 const CHAT_COUNT_KEY = 'littlebowl_chat_count';

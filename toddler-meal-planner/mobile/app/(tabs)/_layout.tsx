@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Tabs } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import { ChatFab } from '../../src/components/ChatFab';
 import { colors } from '../../src/theme';
 
 function HomeIcon({ focused }: { focused: boolean }) {
@@ -98,6 +98,7 @@ function TabIconWrap({ children, focused }: { children: React.ReactNode; focused
 
 export default function TabsLayout() {
   return (
+    <View style={layoutStyles.root}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -164,8 +165,14 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    <ChatFab />
+    </View>
   );
 }
+
+const layoutStyles = StyleSheet.create({
+  root: { flex: 1 },
+});
 
 const iconStyles = StyleSheet.create({
   wrap: {

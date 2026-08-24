@@ -898,6 +898,51 @@ class AuditLog(db.Model):
         }
 
 
+class GrowthRecord(db.Model):
+    """Historical weight and height measurements for growth charts."""
+    __tablename__ = 'growth_records'
+
+    id = db.Column(db.Integer, primary_key=True)
+    toddler_id = db.Column(db.Integer, db.ForeignKey('toddlers.id'), nullable=False, index=True)
+    recorded_at = db.Column(db.Date, nullable=False, default=date.today)
+    weight_kg = db.Column(db.Float, nullable=True)
+    height_cm = db.Column(db.Float, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    toddler = db.relationship('Toddler', backref=db.backref('growth_records', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'toddler_id': self.toddler_id,
+            'recorded_at': self.recorded_at.isoformat() if self.recorded_at else None,
+            'weight_kg': self.weight_kg,
+            'height_cm': self.height_cm,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SavedRecipe(db.Model):
+    """User-saved recipe bookmarks."""
+    __tablename__ = 'saved_recipes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    recipe_slug = db.Column(db.String(200), nullable=False, index=True)
+    saved_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'recipe_slug', name='uq_saved_recipe_user_slug'),)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'recipe_slug': self.recipe_slug,
+            'saved_at': self.saved_at.isoformat() if self.saved_at else None,
+        }
+
+
 class AnalyticsEvent(db.Model):
     """First-party page views, session heartbeats, and named product actions."""
     __tablename__ = 'analytics_events'

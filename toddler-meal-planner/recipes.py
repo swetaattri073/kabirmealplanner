@@ -345,8 +345,17 @@ _ALL_RECIPES = _build_all_recipes()
 _BY_SLUG = {r["slug"]: r for r in _ALL_RECIPES}
 
 
-def list_recipes(category: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_recipes(
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    age_months: Optional[int] = None,
+) -> List[Dict[str, Any]]:
     recipes = _merged_recipes(published_only=True)
+    if age_months is not None:
+        recipes = [
+            r for r in recipes
+            if r.get("suitable_from_months") is None or r.get("suitable_from_months") <= age_months
+        ]
     if category:
         recipes = [r for r in recipes if (r.get("category") or "") == category]
     if q:

@@ -20,9 +20,12 @@ export default function PlanScreen() {
   const { activeToddler } = useAuth();
   const router = useRouter();
   const [plan, setPlan] = useState<any>(null);
+  const [miniPlans, setMiniPlans] = useState<any[]>([]);
+  const [prepOpen, setPrepOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [applying, setApplying] = useState<string | null>(null);
 
   // ISO dates ("2026-08-17") are hard to read at a glance; spelled-out days are not.
   const formatWeek = (start: string, end: string) => {
@@ -45,6 +48,11 @@ export default function PlanScreen() {
       try {
         const data = await api.weeklyPlan(activeToddler.ref, undefined, regenerate);
         setPlan(data);
+        if (!regenerate) {
+          api.miniPlans(activeToddler.age_months).then((m) => {
+            setMiniPlans(m.templates || []);
+          }).catch(() => setMiniPlans([]));
+        }
       } catch (e: any) {
         Alert.alert(
           'Plan error',
@@ -73,6 +81,20 @@ export default function PlanScreen() {
       ],
     );
   }, [activeToddler, load]);
+
+  const applyMiniPlan = async (key: string) => {
+    if (!activeToddler) return;
+    setApplying(key);
+    try {
+      const data = await api.applyMiniPlan(key, activeToddler.ref);
+      setPlan(data);
+      Alert.alert('Plan updated', 'Your guided plan has been applied to this week.');
+    } catch (e: any) {
+      Alert.alert('Could not apply', e?.message || 'Try again');
+    } finally {
+      setApplying(null);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -126,6 +148,43 @@ export default function PlanScreen() {
             loading={regenerating}
             disabled={regenerating}
           />
+
+          {miniPlans.length > 0 && (activeToddler?.age_months ?? 99) < 12 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Guided plans</Text>
+              {miniPlans.map((tpl) => (
+                <Pressable
+                  key={tpl.key}
+                  style={styles.miniCard}
+                  onPress={() => applyMiniPlan(tpl.key)}
+                  disabled={applying === tpl.key}
+                >
+                  <Text style={styles.miniTitle}>{tpl.title}</Text>
+                  <Text style={styles.miniSub}>{tpl.subtitle}</Text>
+                  <Text style={styles.miniFor}>{tpl.for_age}</Text>
+                  <Text style={styles.miniCta}>
+                    {applying === tpl.key ? 'Applying…' : 'Apply to this week →'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {(plan?.prep_checklist || []).length > 0 && (
+            <Card>
+              <Pressable onPress={() => setPrepOpen(!prepOpen)}>
+                <Text style={styles.sectionTitle}>
+                  Prep for this week {prepOpen ? '▾' : '▸'}
+                </Text>
+              </Pressable>
+              {prepOpen &&
+                (plan.prep_checklist || []).map((item: any, i: number) => (
+                  <Text key={i} style={styles.prepItem}>
+                    • {item.task}
+                  </Text>
+                ))}
+            </Card>
+          )}
 
           {/* Under 12 months the same dish needs different preparation, so the
               plan leads with the stage rather than leaving it to be guessed. */}
@@ -350,5 +409,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.primary,
     marginTop: 4,
+  },
+  section: { marginTop: 16, marginBottom: 8 },
+  sectionTitle: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 17,
+    color: colors.text,
+    marginBottom: 10,
+  },
+  miniCard: {
+    backgroundColor: colors.bgTertiary,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    padding: 14,
+    marginBottom: 10,
+  },
+  miniTitle: { fontFamily: 'Nunito_800ExtraBold', fontSize: 16, color: colors.text },
+  miniSub: { fontFamily: 'Nunito_400Regular', fontSize: 14, color: colors.textSecondary, marginTop: 4 },
+  miniFor: { fontFamily: 'Nunito_600SemiBold', fontSize: 12, color: colors.primary, marginTop: 4 },
+  miniCta: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.secondary, marginTop: 8 },
+  prepItem: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginTop: 6,
   },
 });

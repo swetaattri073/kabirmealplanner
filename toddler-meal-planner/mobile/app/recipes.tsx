@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api } from '../src/api';
+import { useAuth } from '../src/AuthContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { EmptyState, Field, LoadingBlock, Screen } from '../src/components/ui';
 import { colors, radii } from '../src/theme';
@@ -12,6 +13,7 @@ const RECIPE_EMOJIS = ['🥣', '🍲', '🥗', '🍛', '🥘', '🍜', '🍝', '
 
 export default function RecipesScreen() {
   const router = useRouter();
+  const { activeToddler } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
@@ -19,7 +21,10 @@ export default function RecipesScreen() {
 
   const load = useCallback(async (query?: string) => {
     try {
-      const data = await api.recipes(query);
+      const data = await api.recipes({
+        q: query,
+        age_months: activeToddler?.age_months,
+      });
       setRecipes(data.recipes || data || []);
     } catch (e) {
       console.warn(e);
@@ -27,7 +32,7 @@ export default function RecipesScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeToddler?.age_months]);
 
   useFocusEffect(
     useCallback(() => {

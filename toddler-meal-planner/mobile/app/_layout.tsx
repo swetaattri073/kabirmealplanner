@@ -7,7 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../src/AuthContext';
 import { colors } from '../src/theme';
-import { rescheduleMealReminders } from '../src/notifications';
+import { loadNotifyPrefs, rescheduleMealReminders } from '../src/notifications';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -22,7 +22,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync().catch(() => undefined);
-      rescheduleMealReminders().catch(() => undefined);
+      loadNotifyPrefs()
+        .then((p) => {
+          if (p.notificationsPrompted) rescheduleMealReminders(p).catch(() => undefined);
+        })
+        .catch(() => undefined);
     }
   }, [fontsLoaded]);
 

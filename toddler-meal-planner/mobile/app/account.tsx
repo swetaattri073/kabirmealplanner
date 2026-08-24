@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../src/AuthContext';
@@ -11,12 +11,14 @@ import {
 } from '../src/notifications';
 import type { NotifyPrefs } from '../src/storage';
 import { AppHeader } from '../src/components/AppHeader';
+import { TimePickerRow } from '../src/components/TimePickerRow';
 import { Button, Card, Field, Screen } from '../src/components/ui';
 import { colors, DEFAULT_REMINDER_TIMES, MEAL_LABELS, radii } from '../src/theme';
 
 const DIET_LABELS: Record<string, string> = {
   vegetarian: '🥬 Vegetarian',
   eggetarian: '🥚 Eggetarian',
+  non_vegetarian: '🍗 Non-vegetarian',
   'non-vegetarian': '🍗 Non-vegetarian',
   vegan: '🌱 Vegan',
 };
@@ -59,6 +61,7 @@ export default function AccountScreen() {
     try {
       const next = {
         ...prefs,
+        notificationsPrompted: true,
         toddlerRef: activeToddler?.ref || prefs.toddlerRef,
         toddlerName: activeToddler?.name || prefs.toddlerName,
       };
@@ -268,9 +271,7 @@ export default function AccountScreen() {
         {/* Meal reminders */}
         <Card>
           <Text style={styles.h}>Meal reminders</Text>
-          <Text style={styles.meta}>
-            Edit reminder times (24h HH:MM format).
-          </Text>
+          <Text style={styles.meta}>Tap a meal to pick a reminder time.</Text>
           {prefs ? (
             <>
               <Button
@@ -279,17 +280,12 @@ export default function AccountScreen() {
                 onPress={() => setPrefs({ ...prefs, enabled: !prefs.enabled })}
               />
               {mealKeysFor(prefs).map((key) => (
-                <View key={key} style={styles.timeRow}>
-                  <Text style={styles.timeLabel}>{MEAL_LABELS[key]}</Text>
-                  <TextInput
-                    value={prefs.times[key] || DEFAULT_REMINDER_TIMES[key]}
-                    onChangeText={(t) => updateTime(key, t)}
-                    style={styles.timeInput}
-                    placeholder="08:00"
-                    placeholderTextColor={colors.textMuted}
-                    accessibilityLabel={`${MEAL_LABELS[key]} reminder time, 24 hour format`}
-                  />
-                </View>
+                <TimePickerRow
+                  key={key}
+                  label={MEAL_LABELS[key]}
+                  value={prefs.times[key] || DEFAULT_REMINDER_TIMES[key]}
+                  onChange={(t) => updateTime(key, t)}
+                />
               ))}
               <Button label="Save reminders" onPress={saveReminders} loading={saving} />
             </>

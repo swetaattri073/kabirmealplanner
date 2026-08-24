@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api } from '../../src/api';
+import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
 import { Card, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
 import { colors, radii } from '../../src/theme';
@@ -9,7 +10,10 @@ import type { Recipe } from '../../src/types';
 
 export default function RecipeDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { authenticated } = useAuth();
+  const router = useRouter();
   const [recipe, setRecipe] = useState<(Recipe & Record<string, any>) | null>(null);
+  const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,6 +21,7 @@ export default function RecipeDetailScreen() {
       try {
         const data = await api.recipe(String(slug));
         setRecipe(data.recipe || data);
+        setSaved(!!data.saved);
       } catch {
         setRecipe(null);
       } finally {
@@ -24,6 +29,27 @@ export default function RecipeDetailScreen() {
       }
     })();
   }, [slug]);
+
+  const toggleSave = async () => {
+    if (!authenticated) {
+      Alert.alert('Sign in to save', 'Create an account to build your cookbook.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Sign in', onPress: () => router.push('/login') },
+      ]);
+      return;
+    }
+    try {
+      if (saved) {
+        await api.unsaveRecipe(String(slug));
+        setSaved(false);
+      } else {
+        await api.saveRecipe(String(slug));
+        setSaved(true);
+      }
+    } catch (e: any) {
+      Alert.alert('Could not update', e?.message || 'Try again');
+    }
+  };
 
   const nutrients = recipe
     ? [
@@ -53,7 +79,12 @@ export default function RecipeDetailScreen() {
             />
           )}
           <Card>
-            <Text style={styles.name}>{recipe.name}</Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.name, { flex: 1 }]}>{recipe.name}</Text>
+              <Pressable onPress={toggleSave} accessibilityLabel={saved ? 'Unsave recipe' : 'Save recipe'}>
+                <Text style={styles.heart}>{saved ? '❤️' : '🤍'}</Text>
+              </Pressable>
+            </View>
             <Text style={styles.category}>{recipe.category}</Text>
 
             {nutrients.length > 0 && (
@@ -118,6 +149,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   name: { fontFamily: 'Nunito_800ExtraBold', fontSize: 22, color: colors.text },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  heart: { fontSize: 26, paddingTop: 2 },
   category: {
     fontFamily: 'Nunito_600SemiBold',
     color: colors.primary,

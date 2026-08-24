@@ -5,8 +5,11 @@ import { useAuth } from '../../src/AuthContext';
 import { AppHeader, childColorAt } from '../../src/components/AppHeader';
 import { Screen } from '../../src/components/ui';
 import { colors, radii } from '../../src/theme';
+import type { Toddler } from '../../src/types';
 
 const LINKS = [
+  { href: '/cookbook', label: 'Cookbook', hint: 'Your saved recipes' },
+  { href: '/growth', label: 'Growth', hint: 'Weight & height tracking' },
   { href: '/preferences', label: 'Food preferences', hint: 'Liked, exploring, avoid' },
   { href: '/recipes', label: 'Recipes', hint: 'Meal ideas for your child' },
   { href: '/chat', label: 'Ask LittleBowl', hint: 'Mealtime questions' },
@@ -33,6 +36,11 @@ export default function MoreScreen() {
         ]
       : LINKS;
 
+  const selectChild = async (t: Toddler) => {
+    await setActiveToddler(t);
+    router.push('/(tabs)/dashboard');
+  };
+
   return (
     <Screen>
       <AppHeader title="More" />
@@ -46,10 +54,9 @@ export default function MoreScreen() {
                 <Pressable
                   key={t.id}
                   style={[styles.childRow, on && styles.childRowOn]}
-                  onPress={() => setActiveToddler(t)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={`${t.name}, ${t.age_months} months old${on ? ', currently selected' : ''}`}
+                  onPress={() => selectChild(t)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Switch to ${t.name}, ${t.age_months} months old, and open Home`}
                 >
                   <View style={[styles.childDot, { backgroundColor: childColorAt(i) }]}>
                     <Text style={styles.childDotText}>

@@ -212,3 +212,73 @@ def find_matching_food(foods: List[Dict[str, Any]], raw_name: Optional[str]) -> 
             best_score = score
             best = f
     return best if best_score > 0 else None
+
+
+CANONICAL_SOURCES = [
+    {
+        'id': 'honey',
+        'keywords': ['honey', 'botulism'],
+        'title': 'AAP infant feeding — honey before 12 months',
+        'url': 'https://www.healthychildren.org/English/ages-stages/baby/feeding-nutrition/Pages/Starting-Solid-Foods.aspx',
+        'excerpt': 'Honey can contain spores that cause infant botulism before 12 months.',
+    },
+    {
+        'id': 'allergens',
+        'keywords': ['allergen', 'allergy', 'peanut', 'egg introduction', 'leap'],
+        'title': 'WHO complementary feeding — early allergen introduction',
+        'url': 'https://www.who.int/health-topics/complementary-feeding',
+        'excerpt': 'Common allergens can be introduced from around 6 months, one at a time.',
+    },
+    {
+        'id': 'choking',
+        'keywords': ['choke', 'choking', 'whole nut', 'grape', 'popcorn'],
+        'title': 'NHS choking hazards for babies',
+        'url': 'https://www.nhs.uk/conditions/baby/weaning-and-feeding/foods-to-avoid-giving-babies-and-young-children/',
+        'excerpt': 'Round, hard, or sticky foods are choking hazards — modify texture and size.',
+    },
+    {
+        'id': 'salt',
+        'keywords': ['salt', 'sodium'],
+        'title': 'IAP infant feeding — avoid added salt',
+        'excerpt': 'Babies under 12 months should not have added salt in their food.',
+    },
+    {
+        'id': 'cow_milk',
+        'keywords': ['cow milk', 'whole milk drink', 'milk as drink'],
+        'title': 'WHO — cow milk as main drink after 12 months',
+        'excerpt': 'Cow milk as a drink is not recommended before 12 months; curd in food is fine.',
+    },
+    {
+        'id': 'iron',
+        'keywords': ['iron', 'anaemia', 'anemia'],
+        'title': 'WHO complementary feeding — iron-rich foods',
+        'url': 'https://www.who.int/health-topics/complementary-feeding',
+        'excerpt': 'Iron-rich foods are important from 6 months when stores begin to deplete.',
+    },
+    {
+        'id': 'texture',
+        'keywords': ['puree', 'purée', 'lump', 'texture', 'finger food'],
+        'title': 'WHO texture progression for complementary feeding',
+        'excerpt': 'Move from smooth purées to mashed lumps and soft finger foods by 8–10 months.',
+    },
+]
+
+
+def sources_for_text(text: str) -> List[Dict[str, Any]]:
+    """Attach structured source chips when reply touches safety topics."""
+    if not text:
+        return []
+    lower = text.lower()
+    out = []
+    seen = set()
+    for src in CANONICAL_SOURCES:
+        if any(kw in lower for kw in src['keywords']):
+            if src['id'] in seen:
+                continue
+            seen.add(src['id'])
+            out.append({
+                'title': src['title'],
+                'url': src.get('url'),
+                'excerpt': src.get('excerpt', ''),
+            })
+    return out[:5]

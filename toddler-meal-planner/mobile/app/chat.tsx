@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -27,7 +28,8 @@ import { colors, radii } from '../src/theme';
 const GUEST_LIMIT = 5;
 const USER_DAILY_LIMIT = 20;
 
-type Msg = { role: 'user' | 'assistant'; text: string };
+type Source = { title: string; url?: string; excerpt?: string };
+type Msg = { role: 'user' | 'assistant'; text: string; sources?: Source[] };
 
 // The server may answer with a flat string or an OpenAI-style {role, content}
 // object; anything non-string reaching a <Text> child crashes the renderer.
@@ -193,7 +195,14 @@ export default function ChatScreen() {
         messages: newMsgs.slice(-8).map((m) => ({ role: m.role, content: m.text })),
       });
       applyUsage(data?.usage, local.count);
-      const updated = [...newMsgs, { role: 'assistant' as const, text: replyText(data) }];
+      const updated = [
+        ...newMsgs,
+        {
+          role: 'assistant' as const,
+          text: replyText(data),
+          sources: Array.isArray(data?.sources) ? data.sources : undefined,
+        },
+      ];
       setMsgs(updated);
       compactHistory(updated);
     } catch (e: any) {
@@ -315,6 +324,19 @@ export default function ChatScreen() {
               >
                 {item.text}
               </Text>
+              {item.role === 'assistant' && item.sources?.length ? (
+                <View style={styles.sources}>
+                  {item.sources.map((s: Source, i: number) => (
+                    <Pressable
+                      key={`${s.title}-${i}`}
+                      onPress={() => s.url && Linking.openURL(s.url)}
+                      style={styles.sourceChip}
+                    >
+                      <Text style={styles.sourceText}>{s.title}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
           )}
           ListFooterComponent={
@@ -550,5 +572,19 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Nunito_800ExtraBold',
     fontSize: 18,
+  },
+  sources: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  sourceChip: {
+    backgroundColor: colors.bgTertiary,
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sourceText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 11,
+    color: colors.primary,
   },
 });

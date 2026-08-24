@@ -31,6 +31,7 @@ STAGES = [
         'to_months': 8,
         'title': 'First tastes',
         'texture': 'Smooth purée, thin enough to drop off a spoon',
+        'video_url': 'https://www.youtube.com/watch?v=MnDUDu8zQ2w',
         'meals_per_day': '1 to 2 small tastes a day',
         'amount': 'Start with 1-2 teaspoons and follow your baby',
         'milk_note': 'Breast milk or formula is still the main food. Solids are practice.',
@@ -51,6 +52,7 @@ STAGES = [
         'to_months': 10,
         'title': 'Thicker food and lumps',
         'texture': 'Mashed with soft lumps, plus soft finger foods to hold',
+        'video_url': 'https://www.youtube.com/watch?v=8V1N7V7GZ7E',
         'meals_per_day': '2 to 3 meals a day',
         'amount': 'A few tablespoons, growing with appetite',
         'milk_note': 'Milk feeds continue alongside meals.',
@@ -71,6 +73,7 @@ STAGES = [
         'to_months': 12,
         'title': 'Towards family food',
         'texture': 'Soft chopped pieces and finger foods',
+        'video_url': 'https://www.youtube.com/watch?v=Jd8V3QJZQZQ',
         'meals_per_day': '3 meals plus 1 to 2 snacks',
         'amount': 'Roughly a quarter to a third of an adult portion',
         'milk_note': 'Food becomes the main source of nutrition; milk moves alongside it.',
@@ -287,10 +290,32 @@ def build_journey(
         None,
     )
 
+    checklist = []
+    for food in FIRST_FOODS:
+        if food['stage'] not in allowed_stages:
+            continue
+        record = tried_by_name.get(food['name'].strip().lower())
+        checklist.append({
+            'name': food['name'],
+            'hindi': food['hindi'],
+            'why': food['why'],
+            'stage': food['stage'],
+            'tried': bool(record),
+            'last_offered': (
+                record['last_offered'].isoformat()
+                if record and record.get('last_offered')
+                else None
+            ),
+            'reaction': record.get('reaction') if record else None,
+        })
+
     return {
         'is_weaning': is_weaning_age(age_months),
         'age_months': age_months,
         'stage': stage,
+        'video_url': stage.get('video_url'),
+        'video_disclaimer': 'External video — not affiliated with LittleBowl',
+        'checklist': checklist,
         'stage_number': [s['key'] for s in STAGES].index(stage['key']) + 1,
         'stage_count': len(STAGES),
         'next_food': todo[0] if todo else None,
@@ -311,3 +336,15 @@ def build_journey(
         'never_before_one': NEVER_BEFORE_ONE,
         'reaction_signs': REACTION_SIGNS,
     }
+
+
+def match_food_id_for_name(db_session, food_name: str):
+    """Resolve a weaning checklist food name to a Food row id, if any."""
+    from models import Food
+    name = (food_name or '').strip()
+    if not name:
+        return None
+    exact = Food.query.filter(Food.name.ilike(name)).first()
+    if exact:
+        return exact.id
+    return None

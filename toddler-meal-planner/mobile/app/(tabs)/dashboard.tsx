@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -13,7 +13,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
+import { WeaningHomeBanner } from '../../src/components/WeaningHomeBanner';
+import { NotificationPromptCard } from '../../src/components/NotificationPromptCard';
 import { Button, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
+import { getSeenWeaningIntro, setSeenWeaningIntro } from '../../src/storage';
 import { colors, MEAL_EMOJI, MEAL_LABELS, MEAL_ORDER, PRIORITY_NUTRIENTS, NUTRIENTS, radii } from '../../src/theme';
 import type { DashboardData, Recipe } from '../../src/types';
 
@@ -31,8 +34,11 @@ export default function DashboardScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [weeklyNutrition, setWeeklyNutrition] = useState<any>(null);
   const [weeklyAlerts, setWeeklyAlerts] = useState<any[]>([]);
+  const [weaning, setWeaning] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; logId?: number; meal?: string } | null>(null);
+  const [quickLogging, setQuickLogging] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!activeToddler) {
@@ -40,17 +46,22 @@ export default function DashboardScreen() {
       return;
     }
     try {
-      const [d, r, wn, wa] = await Promise.all([
+      const isWeaningAge = (activeToddler.age_months ?? 99) < 12;
+      const [d, r, wn, wa, w] = await Promise.all([
         api.dashboard(activeToddler.ref),
-        api.recipes().catch(() => ({ recipes: [] })),
+        api.recipes({ age_months: activeToddler.age_months }).catch(() => ({ recipes: [] })),
         api.nutritionWeekly(activeToddler.ref).catch(() => null),
         api.nutritionAlerts(activeToddler.ref).catch(() => ({ alerts: [] })),
+        isWeaningAge
+          ? api.weaning(activeToddler.ref).catch(() => null)
+          : Promise.resolve(null),
       ]);
       setData(d);
       const list = r.recipes || r || [];
       setRecipes(Array.isArray(list) ? list : []);
       setWeeklyNutrition(wn);
       setWeeklyAlerts(wa?.alerts || wa || []);
+      setWeaning(w);
     } catch (e) {
       console.warn(e);
     } finally {
@@ -58,6 +69,68 @@ export default function DashboardScreen() {
       setRefreshing(false);
     }
   }, [activeToddler]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!activeToddler || !data?.today_plan) return;
+    const age = activeToddler.age_months ?? 99;
+    if (age >= 12) return;
+    getSeenWeaningIntro().then((seen) => {
+      if (!seen) {
+        setSeenWeaningIntro().then(() => router.push('/weaning'));
+      }
+    });
+  }, [activeToddler, data?.today_plan, router]);
+
+  const quickLog = async (meal: string, planMeal: any) => {
+    if (!activeToddler) return;
+    const foodId = planMeal?.food?.id || planMeal?.main?.id;
+    if (!foodId) {
+      router.push({ pathname: '/(tabs)/log', params: { meal } });
+      return;
+    }
+    setQuickLogging(meal);
+    try {
+      const res = await api.createMealLog({
+        toddler_ref: activeToddler.ref,
+        meal_type: meal,
+        food_id: foodId,
+        toddler_reaction: 'liked',
+        portion_eaten_percent: 100,
+        replace_existing: true,
+      });
+      const logId = Array.isArray(res) ? res[0]?.id : res?.id;
+      setToast({
+        message: `${MEAL_LABELS[meal] || meal} logged`,
+        logId,
+        meal,
+      });
+      await load();
+    } catch (e: any) {
+      router.push({ pathname: '/(tabs)/log', params: { meal } });
+    } finally {
+      setQuickLogging(null);
+    }
+  };
+
+  const undoQuickLog = async () => {
+    if (!toast?.logId) {
+      setToast(null);
+      return;
+    }
+    try {
+      await api.deleteMealLog(toast.logId);
+      setToast(null);
+      await load();
+    } catch {
+      setToast(null);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -95,6 +168,7 @@ export default function DashboardScreen() {
   const firstName = (user?.name || activeToddler?.name || 'there').split(' ')[0];
   const weeklyPct = Math.round(weeklyNutrition?.overall_percent || weeklyNutrition?.average_percent || 0);
   const alertCount = weeklyAlerts.length;
+  const showWeaningBanner = (activeToddler?.age_months ?? 99) < 12;
 
   return (
     <Screen>
@@ -121,6 +195,19 @@ export default function DashboardScreen() {
               {activeToddler?.name} · {activeToddler?.age_months} months
             </Text>
           </View>
+
+          {showWeaningBanner && (
+            <WeaningHomeBanner
+              childName={activeToddler?.name || 'your baby'}
+              stageTitle={weaning?.stage?.title}
+              nextFood={weaning?.next_food?.name}
+              triedCount={weaning?.tried_count}
+              totalFoods={weaning?.total_foods}
+              onPress={() => router.push('/weaning')}
+            />
+          )}
+
+          <NotificationPromptCard />
 
           {/* Horizontal stat cards */}
           <ScrollView
@@ -231,38 +318,46 @@ export default function DashboardScreen() {
                   );
               const coverImg = matchedRecipe?.cover_image_path || matchedRecipe?.cover_url || planMeal?.cover_image_path;
               return (
-                <Pressable
-                  key={meal}
-                  style={[styles.mealSlot, eaten && styles.mealSlotDone]}
-                  onPress={() => router.push({ pathname: '/(tabs)/log', params: { meal } })}
-                >
-                  {coverImg ? (
-                    <Image source={{ uri: coverImg }} style={styles.mealImage} resizeMode="cover" />
-                  ) : (
+                <View key={meal} style={[styles.mealSlot, eaten && styles.mealSlotDone]}>
+                  <Pressable
+                    style={styles.mealTapArea}
+                    onPress={() => router.push({ pathname: '/(tabs)/log', params: { meal } })}
+                  >
+                    {coverImg ? (
+                      <Image source={{ uri: coverImg }} style={styles.mealImage} resizeMode="cover" />
+                    ) : (
+                      <LinearGradient
+                        colors={eaten ? (['#22c55e', '#4ade80'] as [string, string]) : (['#6366f1', '#8b5cf6'] as [string, string])}
+                        style={styles.mealIcon}
+                      >
+                        <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                      </LinearGradient>
+                    )}
+                    <View style={styles.mealInfo}>
+                      <Text style={styles.mealName}>{MEAL_LABELS[meal] || meal}</Text>
+                      <Text style={styles.mealFood} numberOfLines={1}>{planName}</Text>
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => !eaten && quickLog(meal, planMeal)}
+                    disabled={eaten || quickLogging === meal}
+                  >
                     <LinearGradient
                       colors={eaten ? (['#22c55e', '#4ade80'] as [string, string]) : (['#6366f1', '#8b5cf6'] as [string, string])}
-                      style={styles.mealIcon}
+                      style={styles.mealAction}
                     >
-                      <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                      <Text style={styles.mealActionText}>
+                        {eaten ? '✓ Logged' : quickLogging === meal ? '…' : 'Log'}
+                      </Text>
                     </LinearGradient>
-                  )}
-                  <View style={styles.mealInfo}>
-                    <Text style={styles.mealName}>{MEAL_LABELS[meal] || meal}</Text>
-                    <Text style={styles.mealFood} numberOfLines={1}>{planName}</Text>
-                  </View>
-                  <LinearGradient
-                    colors={eaten ? (['#22c55e', '#4ade80'] as [string, string]) : (['#6366f1', '#8b5cf6'] as [string, string])}
-                    style={styles.mealAction}
-                  >
-                    <Text style={styles.mealActionText}>{eaten ? '✓ Logged' : 'Log'}</Text>
-                  </LinearGradient>
-                </Pressable>
+                  </Pressable>
+                </View>
               );
             })}
           </View>
 
           {/* Recipes */}
-          {recipes.length > 0 && (
+          {recipes.length > 0 ? (
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.cardTitle}>Recipe Ideas</Text>
@@ -289,7 +384,15 @@ export default function DashboardScreen() {
                 })}
               </ScrollView>
             </View>
-          )}
+          ) : showWeaningBanner ? (
+            <View style={styles.section}>
+              <Text style={styles.cardTitle}>Recipe Ideas</Text>
+              <Text style={styles.weaningRecipeHint}>
+                Age-appropriate recipes will appear here as your baby grows. For now, follow the starting solids guide.
+              </Text>
+              <Button label="Open starting solids guide" onPress={() => router.push('/weaning')} />
+            </View>
+          ) : null}
 
           {/* Quick actions */}
           <View style={styles.section}>
@@ -309,9 +412,20 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          <View style={{ height: 40 }} />
+          <View style={{ height: 88 }} />
         </ScrollView>
       )}
+
+      {toast ? (
+        <View style={styles.toast}>
+          <Text style={styles.toastText}>{toast.message}</Text>
+          {toast.logId ? (
+            <Pressable onPress={undoQuickLog}>
+              <Text style={styles.toastUndo}>Undo</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -329,6 +443,13 @@ function StatCard({ icon, value, label, gradient }: { icon: string; value: strin
 }
 
 const styles = StyleSheet.create({
+  weaningRecipeHint: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
   scrollContent: { paddingBottom: 20 },
   greetingRow: {
     paddingHorizontal: 16,
@@ -444,6 +565,22 @@ const styles = StyleSheet.create({
     borderColor: colors.success,
     backgroundColor: 'rgba(34,197,94,0.06)',
   },
+  mealTapArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 16,
+    right: 16,
+    backgroundColor: colors.text,
+    borderRadius: radii.md,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 6,
+  },
+  toastText: { fontFamily: 'Nunito_600SemiBold', color: colors.white, fontSize: 15, flex: 1 },
+  toastUndo: { fontFamily: 'Nunito_800ExtraBold', color: '#fbbf24', fontSize: 15, marginLeft: 12 },
   mealImage: {
     width: 48,
     height: 48,

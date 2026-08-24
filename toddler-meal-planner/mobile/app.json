@@ -19,7 +19,9 @@
       "infoPlist": {
         "NSCameraUsageDescription": "LittleBowl uses the camera to photograph meals for logging.",
         "NSPhotoLibraryUsageDescription": "LittleBowl uses your photos to attach meal pictures.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -79,7 +81,8 @@
             "ndkVersion": "27.1.12297006"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
