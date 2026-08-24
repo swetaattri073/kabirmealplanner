@@ -158,6 +158,8 @@ export const api = {
   },
   recipe: (slug: string) => apiRequest(`/api/recipes/${encodeURIComponent(slug)}`),
 
+  weaning: (ref: string) => apiRequest(`/api/weaning/${encodeURIComponent(ref)}`),
+
   chat: (body: Record<string, unknown>) =>
     apiRequest('/api/chat', { method: 'POST', body }),
   chatHealth: () => apiRequest('/api/chat/health'),

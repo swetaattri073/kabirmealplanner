@@ -1,27 +1,56 @@
-/** Visual tokens aligned with the existing LittleBowl web app (style.css + brand). */
+/**
+ * Visual tokens aligned with the existing LittleBowl web app (style.css + brand).
+ *
+ * Anything used as text or as a fill behind white text meets WCAG AA (4.5:1)
+ * against all three app backgrounds. The vivid brand hues are kept for large
+ * fills, icons and progress bars, where the 3:1 non-text threshold applies —
+ * hence the separate *Text variants below.
+ */
 export const colors = {
-  primary: '#6366f1',
+  primary: '#4f46e5',
   primaryLight: '#818cf8',
-  primaryDark: '#4f46e5',
-  secondary: '#f97316',
+  primaryDark: '#4338ca',
+  secondary: '#c2410c',
   secondaryLight: '#fb923c',
   accent: '#ec4899',
   success: '#22c55e',
   warning: '#eab308',
-  danger: '#ef4444',
+  danger: '#c81e1e',
   info: '#3b82f6',
-  brandGreen: '#6b8f3c',
-  brandLittle: '#6b8f3c',
-  brandBowl: '#e07a3d',
+
+  // Legible equivalents of the status hues, for use as text.
+  successText: '#15803d',
+  warningText: '#8a5300',
+
+  // Vivid originals, for fills and charts only — never for text.
+  successFill: '#22c55e',
+  warningFill: '#eab308',
+  dangerFill: '#ef4444',
+  primaryFill: '#6366f1',
+  secondaryFill: '#f97316',
+
+  brandGreen: '#4d6b28',
+  brandLittle: '#4d6b28',
+  brandBowl: '#c2410c',
   bg: '#faf5ff',
   bgCard: '#ffffff',
   bgTertiary: '#f3e8ff',
   text: '#1e1b4b',
-  textSecondary: '#6b7280',
-  textMuted: '#9ca3af',
+  textSecondary: '#4b5563',
+  textMuted: '#5b6270',
   border: '#e9d5ff',
   white: '#ffffff',
   storyBg: '#0f1222',
+};
+
+/**
+ * Minimums for users with reduced fine-motor control or low vision.
+ * 48dp is the Material/Android touch target floor; WCAG 2.2 AA asks 24px and
+ * AAA 44px, so 48 clears all three.
+ */
+export const a11y = {
+  minTouchTarget: 48,
+  minFontSize: 14,
 };
 
 export const radii = {

@@ -594,8 +594,12 @@ class NutritionEngine:
                 'type': 'info',
                 'severity': 'info',
                 'nutrient': None,
-                'message': f'Track at least 3 days of meals to get nutrition insights. Currently tracking: {days_tracked} days.',
-                'recommendation': 'Log your toddler\'s meals daily for accurate nutrition analysis.',
+                'message': (
+                    f'You have logged meals on {days_tracked} '
+                    f'{"day" if days_tracked == 1 else "days"} so far. '
+                    'Log 3 days to see how your child is doing.'
+                ),
+                'recommendation': 'Log meals every day to see accurate nutrition.',
                 'recommended_foods': []
             }]
         

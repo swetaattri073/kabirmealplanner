@@ -76,7 +76,7 @@ class MealPlanner:
         
         # Fully complete existing plan → return as-is
         if existing_plans and not regenerate and len(existing_plans) >= expected_slots:
-            return self._format_weekly_plan(existing_plans, week_start)
+            return self._format_weekly_plan(existing_plans, week_start, toddler)
         
         existing_map = {(p.day_of_week, p.meal_type): p for p in existing_plans}
         
@@ -249,7 +249,7 @@ class MealPlanner:
             WeeklyPlan.toddler_id == toddler.id,
             WeeklyPlan.week_start == week_start
         ).all()
-        return self._format_weekly_plan(all_plans, week_start)
+        return self._format_weekly_plan(all_plans, week_start, toddler)
     
     def _get_suitable_foods(self, toddler):
         """
@@ -884,9 +884,15 @@ class MealPlanner:
         # Default
         return foods
     
-    def _format_weekly_plan(self, plan_entries, week_start):
+    def _format_weekly_plan(self, plan_entries, week_start, toddler=None):
         """Format weekly plan for API response"""
         from recipes import find_recipe_for_food_name, recipe_slug_for_food_name
+        from weaning import plan_context, prep_note
+
+        age_months = getattr(toddler, 'age_months', None)
+        # A baby needs the same planned dish prepared differently from a
+        # toddler's, so every meal carries the preparation for their stage.
+        meal_prep = prep_note(age_months)
         
         # Group by day
         days = defaultdict(lambda: defaultdict(dict))
@@ -940,6 +946,8 @@ class MealPlanner:
                 if meal_data['side'] and 'food' in meal_data['side']:
                     del meal_data['side']['food']
                 
+                if meal_prep:
+                    meal_data['prep_note'] = meal_prep
                 days[day_key]['meals'][entry.meal_type] = meal_data
             else:
                 # Single food format (breakfast, snacks)
@@ -959,7 +967,7 @@ class MealPlanner:
                     if addin_names:
                         display = f"{display} (add: {', '.join(addin_names)})"
                 
-                days[day_key]['meals'][entry.meal_type] = {
+                single = {
                     'id': entry.id,
                     'is_complete_meal': False,
                     'food': entry.food.to_dict() if entry.food else None,
@@ -972,6 +980,9 @@ class MealPlanner:
                     'recipe_name': recipe['name'] if recipe else None,
                     'recipes': [{'slug': recipe['slug'], 'name': recipe['name']}] if recipe else [],
                 }
+                if meal_prep:
+                    single['prep_note'] = meal_prep
+                days[day_key]['meals'][entry.meal_type] = single
         
         # Sort by day
         sorted_days = sorted(days.values(), key=lambda x: x['day_of_week'])
@@ -979,7 +990,8 @@ class MealPlanner:
         return {
             'week_start': week_start.isoformat(),
             'week_end': (week_start + timedelta(days=6)).isoformat(),
-            'days': sorted_days
+            'days': sorted_days,
+            'weaning': plan_context(age_months),
         }
 
     def _component_recipes(self, complete_meal):

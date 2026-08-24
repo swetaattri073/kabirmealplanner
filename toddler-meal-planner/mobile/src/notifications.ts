@@ -36,6 +36,14 @@ try {
 
 const MEAL_ORDER = Object.keys(DEFAULT_REMINDER_TIMES);
 
+/** Meals to remind about, in the app's canonical order. */
+export function mealKeysFor(prefs: Pick<NotifyPrefs, 'mealKeys'>): string[] {
+  const wanted = prefs.mealKeys;
+  if (!wanted || !wanted.length) return MEAL_ORDER;
+  const allowed = new Set(wanted);
+  return MEAL_ORDER.filter((k) => allowed.has(k));
+}
+
 function defaultPrefs(): NotifyPrefs {
   return {
     enabled: true,
@@ -86,13 +94,17 @@ function parseTime(hhmm: string): { hour: number; minute: number } {
 export async function rescheduleMealReminders(prefs?: NotifyPrefs) {
   const p = prefs || (await loadNotifyPrefs());
   if (!notificationsSupported()) return;
-  if (!p.enabled || !p.mealReminders) return;
 
+  // Clear before any early return. Bailing out first meant that switching
+  // reminders off left the previous schedule running, so "off" never actually
+  // stopped the daily notifications.
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
   } catch {
     return;
   }
+
+  if (!p.enabled || !p.mealReminders) return;
 
   const ok = await ensureNotificationPermission();
   if (!ok) return;
@@ -108,9 +120,10 @@ export async function rescheduleMealReminders(prefs?: NotifyPrefs) {
     return;
   }
 
-  const name = p.toddlerName || 'your toddler';
-  for (let i = 0; i < MEAL_ORDER.length; i++) {
-    const key = MEAL_ORDER[i];
+  const name = p.toddlerName || 'your child';
+  // Only remind for meals this child actually has. A 6-month-old is planned
+  // two meals a day, so reminding them about an evening snack is noise.
+  for (const key of mealKeysFor(p)) {
     const { hour, minute } = parseTime(p.times[key] || DEFAULT_REMINDER_TIMES[key]);
     const label = MEAL_LABELS[key] || key;
     try {
@@ -138,11 +151,16 @@ export async function rescheduleMealReminders(prefs?: NotifyPrefs) {
 export async function syncRemindersFromToddler(
   toddlerRef: string | null,
   toddlerName: string | null,
+  mealSchedule?: { meals?: string[]; snacks?: string[] } | null,
 ) {
   try {
     const prefs = await loadNotifyPrefs();
     prefs.toddlerRef = toddlerRef;
     prefs.toddlerName = toddlerName;
+    // The server already tailors this per child by age, so the client does not
+    // have to duplicate the age rules.
+    const keys = [...(mealSchedule?.meals || []), ...(mealSchedule?.snacks || [])];
+    prefs.mealKeys = keys.length ? keys : null;
     await saveNotifyPrefs(prefs);
   } catch (err) {
     console.warn('syncRemindersFromToddler failed', err);

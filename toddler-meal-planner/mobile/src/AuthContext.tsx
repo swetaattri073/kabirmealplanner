@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     if (active) {
       await setLastToddlerRef(active.ref);
-      await syncRemindersFromToddler(active.ref, active.name);
+      await syncRemindersFromToddler(active.ref, active.name, (active as any).meal_schedule);
     }
   }, []);
 
@@ -144,7 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setActiveToddlerState(t);
     if (t) {
       await setLastToddlerRef(t.ref);
-      await syncRemindersFromToddler(t.ref, t.name).catch(() => undefined);
+      await syncRemindersFromToddler(t.ref, t.name, (t as any).meal_schedule).catch(
+        () => undefined,
+      );
     }
   }, []);
 

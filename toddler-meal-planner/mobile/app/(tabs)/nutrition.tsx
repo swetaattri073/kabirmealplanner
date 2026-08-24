@@ -14,7 +14,21 @@ function statusGrad(pct: number): [string, string] {
   return ['#f43f5e', '#fda4af'];
 }
 
-function statusLabel(pct: number): string {
+/**
+ * The gradient hues above are fills, which only need 3:1. Reused as text they
+ * land between 2.3:1 and 3.9:1, so the label gets its own accessible colour.
+ */
+function statusTextColor(pct: number, hasData = true): string {
+  if (!hasData) return colors.textSecondary;
+  if (pct >= 80) return colors.successText;
+  if (pct >= 50) return colors.warningText;
+  return colors.danger;
+}
+
+function statusLabel(pct: number, hasData = true): string {
+  // "Low" in red before anything is logged reads as a verdict on the child
+  // rather than on missing data.
+  if (!hasData) return 'Not logged yet';
   if (pct > 150) return 'Excess';
   if (pct >= 80) return 'Good';
   if (pct >= 50) return 'Moderate';
@@ -110,7 +124,9 @@ export default function NutritionScreen() {
                 style={[styles.overallBar, { width: `${Math.min(overallPct, 100)}%` }]}
               />
             </View>
-            <Text style={styles.overallStatus}>{statusLabel(overallPct)}</Text>
+            <Text style={[styles.overallStatus, { color: statusTextColor(overallPct, overallPct > 0) }]}>
+              {statusLabel(overallPct, overallPct > 0)}
+            </Text>
           </Card>
 
           {/* Nutrient grid */}
@@ -157,8 +173,10 @@ export default function NutritionScreen() {
                       {Math.round(consumed * 10) / 10}{meta?.unit || n.unit || ''} / {Math.round(target * 10) / 10}
                     </Text>
                   </View>
-                  <Text style={[styles.nutriStatus, { color: grad[0] }]}>
-                    {statusLabel(pct)}
+                  <Text
+                    style={[styles.nutriStatus, { color: statusTextColor(pct, consumed > 0) }]}
+                  >
+                    {statusLabel(pct, consumed > 0)}
                   </Text>
                   {pct < 80 && suggestionNames.length > 0 && (
                     <Text style={styles.nutriSuggestion}>
@@ -618,27 +636,27 @@ const styles = StyleSheet.create({
   },
   nutriAmount: {
     fontFamily: 'Nunito_400Regular',
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 13,
+    color: colors.textSecondary,
   },
   nutriStatus: {
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 11,
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 14,
     marginTop: 2,
   },
   tapHint: {
     fontFamily: 'Nunito_400Regular',
-    fontSize: 9,
-    color: colors.textMuted,
+    fontSize: 12,
+    color: colors.textSecondary,
     marginTop: 4,
     textAlign: 'right',
   },
   nutriSuggestion: {
     fontFamily: 'Nunito_400Regular',
-    fontSize: 10,
+    fontSize: 13,
     color: colors.textSecondary,
     marginTop: 4,
-    fontStyle: 'italic',
+    // Italics slow reading for low-vision and dyslexic users (COGA guidance).
   },
   alertCard: {
     flexDirection: 'row',

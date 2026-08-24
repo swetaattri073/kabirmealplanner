@@ -24,6 +24,17 @@ export default function PlanScreen() {
   const [regenerating, setRegenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // ISO dates ("2026-08-17") are hard to read at a glance; spelled-out days are not.
+  const formatWeek = (start: string, end: string) => {
+    const fmt = (iso: string) => {
+      const d = new Date(iso);
+      return isNaN(d.getTime())
+        ? iso
+        : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    };
+    return `This week: ${fmt(start)} to ${fmt(end)}`;
+  };
+
   const load = useCallback(
     async (regenerate = false) => {
       if (!activeToddler) {
@@ -47,6 +58,21 @@ export default function PlanScreen() {
     },
     [activeToddler],
   );
+
+  // This replaces the whole week's meals and sat one stray tap away at the top
+  // of the screen, so it now asks first and names the child it affects.
+  const confirmRegenerate = useCallback(() => {
+    Alert.alert(
+      'Make a new plan?',
+      `This changes the meals planned for ${activeToddler?.name || 'your child'} this week. Meals you have already logged are kept.`,
+      // Android renders these bottom-up, so the destructive option is listed
+      // first in order to appear second on screen.
+      [
+        { text: 'Yes, make a new plan', onPress: () => load(true) },
+        { text: 'No, keep this plan', style: 'cancel' },
+      ],
+    );
+  }, [activeToddler, load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,18 +114,34 @@ export default function PlanScreen() {
           {plan?.week_start && (
             <View style={styles.weekHeader}>
               <Text style={styles.weekLabel}>
-                Week of {plan.week_start} to {plan.week_end}
+                {formatWeek(plan.week_start, plan.week_end)}
               </Text>
             </View>
           )}
 
           <Button
-            label={regenerating ? 'Regenerating...' : 'Regenerate plan'}
+            label={regenerating ? 'Making a new plan...' : 'Make a new plan'}
             variant="secondary"
-            onPress={() => load(true)}
+            onPress={confirmRegenerate}
             loading={regenerating}
             disabled={regenerating}
           />
+
+          {/* Under 12 months the same dish needs different preparation, so the
+              plan leads with the stage rather than leaving it to be guessed. */}
+          {plan?.weaning && (
+            <Pressable
+              style={styles.weaningCard}
+              onPress={() => router.push('/weaning')}
+              accessibilityRole="button"
+              accessibilityLabel={`${plan.weaning.stage_title}. Tap to open the starting solids guide.`}
+            >
+              <Text style={styles.weaningStage}>{plan.weaning.stage_title}</Text>
+              <Text style={styles.weaningPrep}>{plan.weaning.prep_note}</Text>
+              <Text style={styles.weaningMilk}>{plan.weaning.milk_note}</Text>
+              <Text style={styles.weaningLink}>Open the starting solids guide →</Text>
+            </Pressable>
+          )}
 
           {days.map((day: any) => {
             const isToday =
@@ -177,7 +219,7 @@ export default function PlanScreen() {
             );
           })}
           {!days.length && !loading ? (
-            <EmptyState text="No plan generated yet. Tap Regenerate to create one." />
+            <EmptyState text="No meals planned yet. Tap 'Make a new plan' above to get started." />
           ) : null}
 
           <View style={{ height: 40 }} />
@@ -195,8 +237,41 @@ const styles = StyleSheet.create({
   },
   weekLabel: {
     fontFamily: 'Nunito_600SemiBold',
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textSecondary,
+  },
+  weaningCard: {
+    backgroundColor: colors.bgTertiary,
+    borderRadius: radii.md,
+    borderWidth: 3,
+    borderColor: colors.primary,
+    padding: 16,
+    marginTop: 12,
+  },
+  weaningStage: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 20,
+    color: colors.text,
+    marginBottom: 6,
+  },
+  weaningPrep: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 23,
+    marginBottom: 6,
+  },
+  weaningMilk: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 15,
+    color: colors.textSecondary,
+    lineHeight: 21,
+    marginBottom: 8,
+  },
+  weaningLink: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 15,
+    color: colors.primary,
   },
   todayCard: {
     borderColor: colors.primary,

@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
   loggedCard: { backgroundColor: 'rgba(34,197,94,0.06)', borderColor: colors.success },
   loggedTitle: {
     fontFamily: 'Nunito_700Bold',
-    color: colors.success,
+    color: colors.successText,
     marginBottom: 8,
   },
   loggedRow: {

@@ -55,6 +55,9 @@ export type NotifyPrefs = {
   times: Record<string, string>;
   toddlerRef?: string | null;
   toddlerName?: string | null;
+  // Meals this child actually has, from the server's per-age schedule.
+  // Null means fall back to the full five.
+  mealKeys?: string[] | null;
 };
 
 export async function getNotifyPrefs(): Promise<NotifyPrefs | null> {

@@ -6,6 +6,7 @@ import { useAuth } from '../src/AuthContext';
 import { api } from '../src/api';
 import {
   loadNotifyPrefs,
+  mealKeysFor,
   saveNotifyPrefs,
 } from '../src/notifications';
 import type { NotifyPrefs } from '../src/storage';
@@ -277,7 +278,7 @@ export default function AccountScreen() {
                 variant={prefs.enabled ? 'primary' : 'secondary'}
                 onPress={() => setPrefs({ ...prefs, enabled: !prefs.enabled })}
               />
-              {Object.keys(DEFAULT_REMINDER_TIMES).map((key) => (
+              {mealKeysFor(prefs).map((key) => (
                 <View key={key} style={styles.timeRow}>
                   <Text style={styles.timeLabel}>{MEAL_LABELS[key]}</Text>
                   <TextInput
@@ -286,6 +287,7 @@ export default function AccountScreen() {
                     style={styles.timeInput}
                     placeholder="08:00"
                     placeholderTextColor={colors.textMuted}
+                    accessibilityLabel={`${MEAL_LABELS[key]} reminder time, 24 hour format`}
                   />
                 </View>
               ))}

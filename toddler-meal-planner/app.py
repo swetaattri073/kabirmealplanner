@@ -40,6 +40,7 @@ from toddler_refs import (
 )
 
 from api_auth import issue_api_token, verify_api_token
+from weaning import build_journey as build_weaning_journey
 from sqlalchemy.exc import IntegrityError
 from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe, ChatUsage
 from admin_stats import build_admin_stats
@@ -213,6 +214,45 @@ def owns_toddler(toddler):
     else:
         session_id = get_session_id()
         return toddler.session_id == session_id and toddler.user_id is None
+
+
+def refresh_toddler_age(toddler):
+    """Roll a child's age forward and rebuild their plan when a month passes.
+
+    Age drives RDA targets, serving sizes and which foods are safe, so a stale
+    age silently feeds a child the wrong thing. This runs on read instead of on
+    a nightly job: there is no scheduler in this deployment, and a derived age
+    is correct even after the app has gone unopened for months.
+    """
+    if toddler is None:
+        return False
+    try:
+        changed = False
+        if toddler.ensure_birth_date():
+            changed = True
+        previous = toddler.sync_age()
+        if previous is not None:
+            # Drop upcoming plans so they are rebuilt against the new age.
+            # Past weeks are history and stay untouched.
+            week_start = date.today() - timedelta(days=date.today().weekday())
+            WeeklyPlan.query.filter(
+                WeeklyPlan.toddler_id == toddler.id,
+                WeeklyPlan.week_start >= week_start,
+            ).delete(synchronize_session=False)
+            app_log(
+                'toddler age rolled forward',
+                toddler_id=toddler.id,
+                previous_months=previous,
+                age_months=toddler.age_months,
+            )
+            changed = True
+        if changed:
+            db.session.commit()
+        return changed
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.warning('Age refresh skipped for toddler %s: %s', getattr(toddler, 'id', '?'), exc)
+        return False
 
 
 def _transfer_anonymous_toddlers(user):
@@ -1103,6 +1143,9 @@ def recipes_page(toddler_id):
 def get_toddlers():
     """Get all toddlers belonging to current user/session"""
     toddlers = get_user_toddlers()
+    # The app loads this on every launch, so it is where ages catch up.
+    for t in toddlers:
+        refresh_toddler_age(t)
     return jsonify([t.to_dict() for t in toddlers])
 
 
@@ -2790,6 +2833,7 @@ def _logging_stats_for_toddler(toddler_id, today=None):
 def get_dashboard_data(toddler_id):
     """Get all dashboard data in one call"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    refresh_toddler_age(toddler)
     today = date.today()
     
     # Today's meals
@@ -3027,6 +3071,51 @@ def _chat_limit_response(usage):
             f'Sign in or create an account to get {CHAT_USER_DAILY_LIMIT} messages per day!'
         )
     return jsonify({'error': message, 'limit_reached': True, 'usage': usage}), 429
+
+
+@app.route('/api/weaning/<toddler_ref:toddler_id>', methods=['GET'])
+def api_weaning(toddler_id):
+    """Weaning journey for a baby starting solids.
+
+    Progress is derived from the meal logs the parent already keeps, so nothing
+    has to be recorded twice.
+    """
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    refresh_toddler_age(toddler)
+
+    tried = []
+    introduced_allergens = set()
+    rows = (
+        db.session.query(FoodPreference, Food)
+        .join(Food, FoodPreference.food_id == Food.id)
+        .filter(FoodPreference.toddler_id == toddler.id)
+        .all()
+    )
+    for pref, food in rows:
+        if (pref.times_offered or 0) <= 0:
+            continue
+        tried.append({
+            'name': food.name,
+            'last_offered': pref.last_offered,
+            'reaction': pref.last_reaction,
+        })
+        for allergen in (food.allergens or []):
+            introduced_allergens.add(str(allergen).strip().lower())
+
+    journey = build_weaning_journey(
+        age_months=toddler.age_months,
+        tried=tried,
+        allergies=toddler.allergies or [],
+        introduced_allergens=sorted(introduced_allergens),
+    )
+    journey['toddler'] = {
+        'name': toddler.name,
+        'age_months': toddler.age_months,
+        'birth_date': toddler.birth_date.isoformat() if toddler.birth_date else None,
+    }
+    return jsonify(journey)
 
 
 @app.route('/api/chat/health', methods=['GET'])

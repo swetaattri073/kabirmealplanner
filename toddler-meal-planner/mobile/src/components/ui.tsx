@@ -80,6 +80,9 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
       style={({ pressed }) => [
         styles.btn,
         { backgroundColor: bg, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },
@@ -125,6 +128,7 @@ export function Field({
         multiline={multiline}
         style={[styles.input, multiline && { minHeight: 88, textAlignVertical: 'top' }]}
         autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
+        accessibilityLabel={label}
       />
     </View>
   );
@@ -185,6 +189,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     paddingVertical: 14,
     paddingHorizontal: 18,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
@@ -202,7 +207,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_700Bold',
     color: colors.text,
     marginBottom: 6,
-    fontSize: 14,
+    fontSize: 16,
   },
   input: {
     borderWidth: 1,

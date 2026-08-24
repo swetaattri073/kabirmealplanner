@@ -166,6 +166,59 @@ class Toddler(db.Model):
     preferences = db.relationship('FoodPreference', backref='toddler', lazy='dynamic', cascade='all, delete-orphan')
     weekly_plans = db.relationship('WeeklyPlan', backref='toddler', lazy='dynamic', cascade='all, delete-orphan')
     
+    def computed_age_months(self):
+        """Whole months lived, from birth_date.
+
+        Falls back to the stored value for profiles created before we captured
+        a birth date.
+        """
+        if not self.birth_date:
+            return self.age_months
+        today = date.today()
+        months = (today.year - self.birth_date.year) * 12 + (today.month - self.birth_date.month)
+        if today.day < self.birth_date.day:
+            months -= 1
+        return max(0, months)
+
+    def sync_age(self):
+        """Bring the cached age_months in line with birth_date.
+
+        age_months stays a real column because RDA lookups, serving sizes and
+        food gating all read it, and some of those run in SQL. Deriving the
+        value on read rather than incrementing it on a schedule means the age is
+        right even if the app goes unopened for months, and it cannot drift or
+        double-count.
+
+        Returns the previous age when it changed, otherwise None.
+        """
+        if not self.birth_date:
+            return None
+        fresh = self.computed_age_months()
+        if fresh == self.age_months:
+            return None
+        previous = self.age_months
+        self.age_months = fresh
+        return previous
+
+    def ensure_birth_date(self):
+        """Approximate a birth date for profiles saved before we stored one.
+
+        Anchored on when the profile was created, which is when the parent told
+        us the age. Accurate to within a month, which is all the meal logic needs.
+        """
+        if self.birth_date:
+            return False
+        anchor = (self.created_at.date() if self.created_at else date.today())
+        months = int(self.age_months or 0)
+        year = anchor.year - (months // 12)
+        month = anchor.month - (months % 12)
+        if month <= 0:
+            month += 12
+            year -= 1
+        day = min(anchor.day, 28)
+        self.birth_date = date(year, month, day)
+        return True
+
     def get_age_group(self):
         """Returns age group for RDA calculations"""
         if self.age_months < 12:
@@ -298,7 +351,22 @@ class Toddler(db.Model):
         if self.meal_schedule:
             return self.meal_schedule
         
-        if self.age_months < 12:
+        # Weaning ramps up gradually. Giving a 6-month-old the same four slots
+        # as an 11-month-old overstates how much solid food they need and makes
+        # a normal day look like a failed one on the dashboard.
+        if self.age_months < 8:
+            return {
+                'meals': ['breakfast', 'lunch'],
+                'snacks': [],
+                'milk_feeds': 5,  # Milk is still the main source of nutrition
+            }
+        elif self.age_months < 10:
+            return {
+                'meals': ['breakfast', 'lunch', 'dinner'],
+                'snacks': [],
+                'milk_feeds': 4
+            }
+        elif self.age_months < 12:
             return {
                 'meals': ['breakfast', 'lunch', 'dinner'],
                 'snacks': ['mid_morning_snack'],
