@@ -7,7 +7,9 @@ food database (using toddler_friendly_version + preparation_tips).
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from food_database import INDIAN_FOODS
@@ -113,6 +115,22 @@ CURATED_RECIPES = [
         "cover_image_url": "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400&h=300&fit=crop",
     },
 ]
+
+
+def _load_extra_curated_recipes() -> List[Dict[str, Any]]:
+    """Load import-ready curated recipes from scripts/content/new_recipes.json."""
+    path = Path(__file__).resolve().parent / "scripts" / "content" / "new_recipes.json"
+    if not path.exists():
+        return []
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+EXTRA_CURATED_RECIPES = _load_extra_curated_recipes()
 
 
 def _slugify(name: str) -> str:
@@ -261,8 +279,8 @@ def _curated_to_recipe(item: Dict[str, Any]) -> Dict[str, Any]:
         "cheese": item.get("cheese") or "",
         "steps": item.get("steps") or "",
         "source": "curated",
-        "allergens": [],
-        "suitable_from_months": None,
+        "allergens": item.get("allergens") or [],
+        "suitable_from_months": item.get("suitable_from_months"),
         "cover_image_path": item.get("cover_image_url") or None,
         "video_url": None,
         "video_platform": None,
@@ -319,7 +337,7 @@ def _build_all_recipes() -> List[Dict[str, Any]]:
     recipes: List[Dict[str, Any]] = []
     seen = set()
 
-    for item in CURATED_RECIPES:
+    for item in CURATED_RECIPES + EXTRA_CURATED_RECIPES:
         recipe = _curated_to_recipe(item)
         if recipe["slug"] not in seen:
             recipes.append(recipe)
