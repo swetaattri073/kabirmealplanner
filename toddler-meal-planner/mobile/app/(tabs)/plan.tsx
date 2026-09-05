@@ -14,14 +14,22 @@ import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
 import { Button, Card, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  screenCacheKey,
+  setCached,
+  invalidateCacheKey,
+} from '../../src/screenCache';
 import { colors, MEAL_EMOJI, MEAL_LABELS, MEAL_ORDER, radii } from '../../src/theme';
+import { primaryRecipeSlug } from '../../src/recipeLinks';
 
 export default function PlanScreen() {
   const { activeToddler } = useAuth();
   const router = useRouter();
   const [plan, setPlan] = useState<any>(null);
   const [miniPlans, setMiniPlans] = useState<any[]>([]);
-  const [prepOpen, setPrepOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,10 +52,28 @@ export default function PlanScreen() {
         setLoading(false);
         return;
       }
+      const key = screenCacheKey('plan', activeToddler.ref);
+      if (!regenerate) {
+        const stale = getStale<any>(key);
+        if (stale) {
+          setPlan(stale);
+          setLoading(false);
+        }
+        if (getCached<any>(key, CACHE_TTL.plan)) {
+          setRefreshing(false);
+          setLoading(false);
+          api.miniPlans(activeToddler.age_months)
+            .then((m) => setMiniPlans(m.templates || []))
+            .catch(() => setMiniPlans([]));
+          return;
+        }
+      }
       if (regenerate) setRegenerating(true);
+      else if (!getStale<any>(key)) setLoading(true);
       try {
         const data = await api.weeklyPlan(activeToddler.ref, undefined, regenerate);
         setPlan(data);
+        setCached(key, data);
         if (!regenerate) {
           api.miniPlans(activeToddler.age_months).then((m) => {
             setMiniPlans(m.templates || []);
@@ -88,6 +114,8 @@ export default function PlanScreen() {
     try {
       const data = await api.applyMiniPlan(key, activeToddler.ref);
       setPlan(data);
+      invalidateCacheKey(screenCacheKey('plan', activeToddler.ref));
+      setCached(screenCacheKey('plan', activeToddler.ref), data);
       Alert.alert('Plan updated', 'Your guided plan has been applied to this week.');
     } catch (e: any) {
       Alert.alert('Could not apply', e?.message || 'Try again');
@@ -98,7 +126,6 @@ export default function PlanScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       load(false);
     }, [load]),
   );
@@ -127,6 +154,9 @@ export default function PlanScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
+                if (activeToddler) {
+                  invalidateCacheKey(screenCacheKey('plan', activeToddler.ref));
+                }
                 load(false);
               }}
             />
@@ -149,7 +179,7 @@ export default function PlanScreen() {
             disabled={regenerating}
           />
 
-          {miniPlans.length > 0 && (activeToddler?.age_months ?? 99) < 12 && (
+          {miniPlans.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Guided plans</Text>
               {miniPlans.map((tpl) => (
@@ -168,22 +198,6 @@ export default function PlanScreen() {
                 </Pressable>
               ))}
             </View>
-          )}
-
-          {(plan?.prep_checklist || []).length > 0 && (
-            <Card>
-              <Pressable onPress={() => setPrepOpen(!prepOpen)}>
-                <Text style={styles.sectionTitle}>
-                  Prep for this week {prepOpen ? '▾' : '▸'}
-                </Text>
-              </Pressable>
-              {prepOpen &&
-                (plan.prep_checklist || []).map((item: any, i: number) => (
-                  <Text key={i} style={styles.prepItem}>
-                    • {item.task}
-                  </Text>
-                ))}
-            </Card>
           )}
 
           {/* Under 12 months the same dish needs different preparation, so the
@@ -231,17 +245,11 @@ export default function PlanScreen() {
                     info?.name ||
                     '—';
                   const addIns = info?.add_ins || [];
-                  const recipeSlug = info?.recipe_slug;
+                  const recipeSlug = primaryRecipeSlug(info);
                   const emoji = MEAL_EMOJI[meal] || '🍽️';
 
                   return (
-                    <Pressable
-                      key={meal}
-                      style={styles.mealRow}
-                      onPress={() =>
-                        router.push({ pathname: '/(tabs)/log', params: { meal } })
-                      }
-                    >
+                    <View key={meal} style={styles.mealRow}>
                       <LinearGradient
                         colors={['#6366f1', '#8b5cf6'] as [string, string]}
                         style={styles.mealIcon}
@@ -249,29 +257,39 @@ export default function PlanScreen() {
                         <Text style={{ fontSize: 16 }}>{emoji}</Text>
                       </LinearGradient>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.mealLabel}>{MEAL_LABELS[meal] || meal}</Text>
-                        <Text style={styles.mealFood} numberOfLines={2}>
-                          {name}
-                        </Text>
-                        {addIns.length > 0 && (
-                          <View style={styles.addInsRow}>
-                            {addIns.map((a: any, i: number) => (
-                              <Text key={i} style={styles.addInChip}>
-                                🥬 {a.name || a.label || a}
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-                        {recipeSlug && (
+                        <Pressable
+                          onPress={() =>
+                            router.push({ pathname: '/(tabs)/log', params: { meal } })
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`Log ${MEAL_LABELS[meal] || meal}: ${name}`}
+                        >
+                          <Text style={styles.mealLabel}>{MEAL_LABELS[meal] || meal}</Text>
+                          <Text style={styles.mealFood} numberOfLines={2}>
+                            {name}
+                          </Text>
+                          {addIns.length > 0 && (
+                            <View style={styles.addInsRow}>
+                              {addIns.map((a: any, i: number) => (
+                                <Text key={i} style={styles.addInChip}>
+                                  🥬 {a.name || a.label || a}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                        </Pressable>
+                        {recipeSlug ? (
                           <Pressable
                             onPress={() => router.push(`/recipe/${recipeSlug}`)}
                             hitSlop={8}
+                            accessibilityRole="link"
+                            accessibilityLabel={`View recipe for ${name}`}
                           >
                             <Text style={styles.recipeLink}>📖 View recipe</Text>
                           </Pressable>
-                        )}
+                        ) : null}
                       </View>
-                    </Pressable>
+                    </View>
                   );
                 })}
               </Card>
@@ -429,11 +447,4 @@ const styles = StyleSheet.create({
   miniSub: { fontFamily: 'Nunito_400Regular', fontSize: 14, color: colors.textSecondary, marginTop: 4 },
   miniFor: { fontFamily: 'Nunito_600SemiBold', fontSize: 12, color: colors.primary, marginTop: 4 },
   miniCta: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.secondary, marginTop: 8 },
-  prepItem: {
-    fontFamily: 'Nunito_400Regular',
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginTop: 6,
-  },
 });

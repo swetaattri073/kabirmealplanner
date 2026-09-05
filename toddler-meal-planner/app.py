@@ -41,7 +41,7 @@ from toddler_refs import (
 
 from api_auth import issue_api_token, verify_api_token
 from weaning import build_journey as build_weaning_journey, match_food_id_for_name
-from mini_plans import list_mini_plans, get_mini_plan_template
+from mini_plans import list_mini_plans, get_mini_plan_template, mini_plan_available
 from who_growth import (
     GROWTH_DISCLAIMER,
     length_percentile,
@@ -55,7 +55,7 @@ from admin_stats import build_admin_stats
 from analytics import record_analytics_event
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
-from meal_planner import MealPlanner, update_preferences_from_log
+from meal_planner import MealPlanner, update_preferences_from_log, toddler_lunch_dinner_needs_complete_meal
 from food_enhancer import (
     get_enhancement_suggestions, get_flavor_exploration, 
     get_daily_enhancement_tip, get_all_boosters, NUTRITION_BOOSTERS
@@ -1770,14 +1770,26 @@ def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason='
     
     food = Food.query.get(food_id)
     food_name = food.name if food else str(food_id)
-    
+    planner = MealPlanner(db.session)
+
     if existing_plan:
         old_food_id = existing_plan.food_id
-        existing_plan.food_id = food_id
+        if toddler_lunch_dinner_needs_complete_meal(toddler.age_months, meal_type) and food:
+            if not planner.assign_food_to_plan_slot(
+                toddler,
+                existing_plan,
+                food,
+                meal_type,
+                reason=reason or f"Replaced with logged meal: {food_name}",
+                day_of_week=day_of_week,
+            ):
+                existing_plan.food_id = food_id
+                existing_plan.alternatives = {'backup': None, 'replaced': True, 'from_log': True}
+        else:
+            existing_plan.food_id = food_id
+            existing_plan.alternatives = {'backup': None, 'replaced': True, 'from_log': True}
         existing_plan.is_generated = False
         existing_plan.nutrition_reason = reason or f"Replaced with logged meal: {food_name}"
-        # Clear structured complete-meal alternatives when manually replaced
-        existing_plan.alternatives = {'backup': None, 'replaced': True, 'from_log': True}
         plan_id = existing_plan.id
     else:
         new_plan = WeeklyPlan(
@@ -1788,10 +1800,19 @@ def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason='
             food_id=food_id,
             is_generated=False,
             nutrition_reason=reason or f"Added from meal log: {food_name}",
-            alternatives={'from_log': True}
+            alternatives={'from_log': True},
         )
         db.session.add(new_plan)
         db.session.flush()
+        if toddler_lunch_dinner_needs_complete_meal(toddler.age_months, meal_type) and food:
+            planner.assign_food_to_plan_slot(
+                toddler,
+                new_plan,
+                food,
+                meal_type,
+                reason=reason or f"Added from meal log: {food_name}",
+                day_of_week=day_of_week,
+            )
         plan_id = new_plan.id
         old_food_id = None
     
@@ -3007,14 +3028,29 @@ def api_apply_mini_plan(template_key, toddler_id):
     tpl = get_mini_plan_template(template_key)
     if not tpl:
         return jsonify({'error': 'Template not found'}), 404
+    refresh_toddler_age(toddler)
+    if not mini_plan_available(template_key, toddler.age_months):
+        return jsonify({'error': 'This guided plan is not available for this age'}), 400
 
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
     planner = MealPlanner(db.session)
+    from chat_assistant import find_matching_food
+    food_catalog = [{'id': f.id, 'name': f.name} for f in Food.query.all()]
+    suitable_foods = planner._get_suitable_foods(toddler)
+    preferences = planner._get_preference_scores(toddler)
+    recent_foods = planner._get_recent_foods(toddler, days=7)
+    nutrition_gaps = planner._identify_nutrition_gaps(planner.nutrition_engine.get_weekly_nutrition(toddler))
+    plan_reason = f"Guided plan: {tpl.get('title', template_key)}"
 
+    applied = 0
     for day_idx, day_meals in enumerate(tpl.get('days') or []):
         for meal_type, food_name in day_meals.items():
             food = Food.query.filter(Food.name.ilike(food_name.strip())).first()
+            if not food:
+                match = find_matching_food(food_catalog, food_name)
+                if match:
+                    food = Food.query.get(match['id'])
             if not food:
                 continue
             plan_date = week_start + timedelta(days=day_idx)
@@ -3027,20 +3063,51 @@ def api_apply_mini_plan(template_key, toddler_id):
                 meal_type=meal_type,
             ).first()
             if existing:
-                existing.food_id = food.id
-                existing.is_generated = True
+                if not planner.assign_food_to_plan_slot(
+                    toddler,
+                    existing,
+                    food,
+                    meal_type,
+                    reason=plan_reason,
+                    suitable_foods=suitable_foods,
+                    preferences=preferences,
+                    recent_foods=recent_foods,
+                    nutrition_gaps=nutrition_gaps,
+                    day_of_week=day_idx,
+                ):
+                    continue
+                applied += 1
             else:
-                db.session.add(WeeklyPlan(
+                entry = WeeklyPlan(
                     toddler_id=toddler.id,
                     week_start=week_start,
                     day_of_week=day_idx,
                     meal_type=meal_type,
                     food_id=food.id,
                     is_generated=True,
-                ))
+                    alternatives=[],
+                    nutrition_reason=plan_reason,
+                )
+                db.session.add(entry)
+                db.session.flush()
+                if not planner.assign_food_to_plan_slot(
+                    toddler,
+                    entry,
+                    food,
+                    meal_type,
+                    reason=plan_reason,
+                    suitable_foods=suitable_foods,
+                    preferences=preferences,
+                    recent_foods=recent_foods,
+                    nutrition_gaps=nutrition_gaps,
+                    day_of_week=day_idx,
+                ):
+                    db.session.delete(entry)
+                    continue
+                applied += 1
     db.session.commit()
     plan = planner.generate_weekly_plan(toddler, week_start, regenerate=False)
-    return jsonify({'ok': True, 'template': template_key, **plan})
+    return jsonify({'ok': True, 'template': template_key, 'slots_updated': applied, **plan})
 
 
 @app.route('/api/growth/<toddler_ref:toddler_id>', methods=['GET'])
@@ -3345,8 +3412,6 @@ def api_weaning_try_food(toddler_id):
         food_id = match_food_id_for_name(db.session, food_name)
 
     food = Food.query.get(food_id) if food_id else None
-    if not food and food_name:
-        food = Food.query.filter(Food.name.ilike(food_name)).first()
 
     if not food:
         return jsonify({'error': 'Food not found in catalogue'}), 404

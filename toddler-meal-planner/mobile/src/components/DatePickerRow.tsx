@@ -25,12 +25,12 @@ export function DatePickerRow({
   const [textFallback, setTextFallback] = useState(formatBirthDateISO(value));
   const nativePicker = dateTimePickerSupported();
 
-  const onPickerChange = (_: unknown, date?: Date) => {
-    if (Platform.OS === 'android') setShow(false);
-    if (date) {
-      onChange(date);
-      setTextFallback(formatBirthDateISO(date));
-    }
+  const closePicker = () => setShow(false);
+
+  const onValueChange = (_: unknown, date: Date) => {
+    onChange(date);
+    setTextFallback(formatBirthDateISO(date));
+    if (Platform.OS === 'android') closePicker();
   };
 
   if (!nativePicker) {
@@ -79,7 +79,8 @@ export function DatePickerRow({
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           minimumDate={minimumDate}
           maximumDate={maximumDate}
-          onChange={onPickerChange}
+          onValueChange={onValueChange}
+          onDismiss={closePicker}
         />
       ) : null}
     </View>

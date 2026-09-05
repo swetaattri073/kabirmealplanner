@@ -1,34 +1,79 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
 import { Card, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  invalidateCacheKey,
+  recipeDetailKey,
+  setCached,
+} from '../../src/screenCache';
 import { colors, radii } from '../../src/theme';
 import type { Recipe } from '../../src/types';
+
+type RecipeBundle = {
+  recipe: Recipe & Record<string, any>;
+  saved: boolean;
+};
 
 export default function RecipeDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { authenticated } = useAuth();
   const router = useRouter();
+  const slugStr = String(slug || '');
+  const cacheKey = recipeDetailKey(slugStr);
+
   const [recipe, setRecipe] = useState<(Recipe & Record<string, any>) | null>(null);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
+  const applyBundle = useCallback((bundle: RecipeBundle) => {
+    setRecipe(bundle.recipe);
+    setSaved(bundle.saved);
+  }, []);
+
+  const load = useCallback(
+    async (force = false) => {
+      if (!slugStr) {
+        setLoading(false);
+        return;
+      }
+      const stale = getStale<RecipeBundle>(cacheKey);
+      if (stale) {
+        applyBundle(stale);
+        setLoading(false);
+      }
+      if (!force && getCached<RecipeBundle>(cacheKey, CACHE_TTL.recipeDetail)) {
+        return;
+      }
       try {
-        const data = await api.recipe(String(slug));
-        setRecipe(data.recipe || data);
-        setSaved(!!data.saved);
+        const data = await api.recipe(slugStr);
+        const bundle: RecipeBundle = {
+          recipe: data.recipe || data,
+          saved: !!data.saved,
+        };
+        setCached(cacheKey, bundle);
+        applyBundle(bundle);
       } catch {
-        setRecipe(null);
+        if (!stale) {
+          setRecipe(null);
+        }
       } finally {
         setLoading(false);
       }
-    })();
-  }, [slug]);
+    },
+    [applyBundle, cacheKey, slugStr],
+  );
+
+  useEffect(() => {
+    setLoading(true);
+    load(false);
+  }, [load]);
 
   const toggleSave = async () => {
     if (!authenticated) {
@@ -40,12 +85,17 @@ export default function RecipeDetailScreen() {
     }
     try {
       if (saved) {
-        await api.unsaveRecipe(String(slug));
+        await api.unsaveRecipe(slugStr);
         setSaved(false);
       } else {
-        await api.saveRecipe(String(slug));
+        await api.saveRecipe(slugStr);
         setSaved(true);
       }
+      const stale = getStale<RecipeBundle>(cacheKey);
+      if (stale) {
+        setCached(cacheKey, { ...stale, saved: !saved });
+      }
+      invalidateCacheKey('cookbook:user');
     } catch (e: any) {
       Alert.alert('Could not update', e?.message || 'Try again');
     }
@@ -65,7 +115,7 @@ export default function RecipeDetailScreen() {
   return (
     <Screen>
       <AppHeader title="Recipe" />
-      {loading ? (
+      {loading && !recipe ? (
         <LoadingBlock />
       ) : !recipe ? (
         <EmptyState text="Recipe not found." />

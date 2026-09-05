@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -14,12 +15,18 @@ import Animated, {
 import { colors } from '../theme';
 
 const FAB_SIZE = 58;
-const TAB_BAR_CLEARANCE = 78;
+/** Gap between FAB bottom edge and top of tab bar icons. */
+const FAB_TAB_GAP = 14;
+/** Tab bar content height — keep in sync with (tabs)/_layout.tsx */
+const TAB_BAR_CONTENT_HEIGHT = 56;
 
 /** Floating chat launcher — hidden on the chat screen itself. */
 export function ChatFab() {
   const router = useRouter();
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 8);
+  const fabBottom = TAB_BAR_CONTENT_HEIGHT + bottomPad + FAB_TAB_GAP;
   const scale = useSharedValue(1);
   const ringScale = useSharedValue(1);
   const ringOpacity = useSharedValue(0.45);
@@ -65,7 +72,7 @@ export function ChatFab() {
   }
 
   return (
-    <View style={styles.host} pointerEvents="box-none">
+    <View style={[styles.host, { bottom: fabBottom }]} pointerEvents="box-none">
       <Animated.View style={[styles.ring, ringStyle]} />
       <Animated.View style={fabStyle}>
         <Pressable
@@ -91,8 +98,7 @@ export function ChatFab() {
 const styles = StyleSheet.create({
   host: {
     position: 'absolute',
-    right: 18,
-    bottom: TAB_BAR_CLEARANCE,
+    left: 18,
     width: FAB_SIZE,
     height: FAB_SIZE,
     alignItems: 'center',

@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import {
@@ -67,6 +68,7 @@ function minBirthDate(): Date {
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { addToddlerLocal, refresh, toddlers } = useAuth();
   const isFirstChild = toddlers.length === 0;
 
@@ -185,7 +187,11 @@ export default function OnboardingScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.pad, styles.scrollContent]}
+          keyboardShouldPersistTaps="handled"
+        >
           {!isFirstChild && (
             <Pressable
               onPress={() => router.back()}
@@ -287,8 +293,15 @@ export default function OnboardingScreen() {
             ))}
           </View>
 
-          <Button label="Start planning" onPress={onSubmit} loading={loading} />
         </ScrollView>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
+          <Button
+            label="Start planning"
+            onPress={onSubmit}
+            loading={loading}
+            testID="onboarding-submit"
+          />
+        </View>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -296,6 +309,15 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   pad: { padding: 24, paddingTop: 56 },
+  scrollContent: { paddingBottom: 24 },
+  footer: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+    backgroundColor: colors.bg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   back: {
     minHeight: 48,
     justifyContent: 'center',

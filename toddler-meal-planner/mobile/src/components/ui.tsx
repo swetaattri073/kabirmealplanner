@@ -60,12 +60,14 @@ export function Button({
   variant = 'primary',
   disabled,
   loading,
+  testID,
 }: {
   label: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   disabled?: boolean;
   loading?: boolean;
+  testID?: string;
 }) {
   const bg =
     variant === 'primary'
@@ -78,6 +80,7 @@ export function Button({
   const color = variant === 'ghost' ? colors.primary : colors.white;
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       disabled={disabled || loading}
       accessibilityRole="button"

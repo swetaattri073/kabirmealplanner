@@ -5,12 +5,20 @@ import {
   dismissNotificationPrompt,
   enableMealReminders,
   loadNotifyPrefs,
+  sendTestMealReminder,
+  showMealReminderBlockedAlert,
+  type ReminderScheduleResult,
 } from '../notifications';
+import { MealReminderSetupModal } from './MealReminderSetupModal';
 import { colors, radii } from '../theme';
 
 export function NotificationPromptCard() {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [setupModal, setSetupModal] = useState<{
+    result: ReminderScheduleResult;
+    testScheduled: boolean;
+  } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -20,13 +28,19 @@ export function NotificationPromptCard() {
     }, []),
   );
 
-  if (!visible) return null;
+  if (!visible && !setupModal) return null;
 
   const onEnable = async () => {
     setBusy(true);
     try {
-      await enableMealReminders();
+      const result = await enableMealReminders();
+      if (!result.permissionGranted || result.scheduled === 0) {
+        showMealReminderBlockedAlert(result);
+        return;
+      }
+      const testOk = await sendTestMealReminder();
       setVisible(false);
+      setSetupModal({ result, testScheduled: testOk });
     } finally {
       setBusy(false);
     }
@@ -38,31 +52,41 @@ export function NotificationPromptCard() {
   };
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>Get meal reminders?</Text>
-      <Text style={styles.body}>
-        We can nudge you at breakfast and lunch time so logging stays easy.
-      </Text>
-      <View style={styles.actions}>
-        <Pressable
-          onPress={onEnable}
-          disabled={busy}
-          style={[styles.primary, busy && styles.disabled]}
-          accessibilityRole="button"
-          accessibilityLabel="Enable meal reminders"
-        >
-          <Text style={styles.primaryText}>{busy ? 'Setting up…' : 'Enable'}</Text>
-        </Pressable>
-        <Pressable
-          onPress={onDismiss}
-          style={styles.secondary}
-          accessibilityRole="button"
-          accessibilityLabel="Not now"
-        >
-          <Text style={styles.secondaryText}>Not now</Text>
-        </Pressable>
-      </View>
-    </View>
+    <>
+      {visible ? (
+        <View style={styles.wrap}>
+          <Text style={styles.title}>Get meal reminders?</Text>
+          <Text style={styles.body}>
+            We can nudge you at breakfast and lunch time so logging stays easy.
+          </Text>
+          <View style={styles.actions}>
+            <Pressable
+              onPress={onEnable}
+              disabled={busy}
+              style={[styles.primary, busy && styles.disabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Enable meal reminders"
+            >
+              <Text style={styles.primaryText}>{busy ? 'Setting up…' : 'Enable'}</Text>
+            </Pressable>
+            <Pressable
+              onPress={onDismiss}
+              style={styles.secondary}
+              accessibilityRole="button"
+              accessibilityLabel="Not now"
+            >
+              <Text style={styles.secondaryText}>Not now</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+      <MealReminderSetupModal
+        visible={!!setupModal}
+        result={setupModal?.result ?? { scheduled: 0, permissionGranted: false, verified: 0, nextReminderAt: null }}
+        testScheduled={setupModal?.testScheduled ?? false}
+        onClose={() => setSetupModal(null)}
+      />
+    </>
   );
 }
 

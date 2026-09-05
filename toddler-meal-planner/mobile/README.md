@@ -111,13 +111,54 @@ errors — that postpones breakage (see Reanimated’s Windows guide).
 
 ## Store builds
 
-### Android (Play Store)
+### Android (Google Play Store)
+
+This app updates the existing listing **`com.littlebowl.app`**. The legacy
+Capacitor build used `versionCode 2` / `versionName 1.1.0`. This native Expo
+build uses **`versionCode 3`** / **`versionName 2.0.0`** — bump `versionCode`
+in `app.json` before every Play upload.
+
+**Important:** Use the **same upload keystore** as your previous Play releases
+(if Play App Signing is enabled, that is your upload key). A new keystore cannot
+update an existing app.
+
+#### Option A — Local AAB (Windows, recommended if you already have the keystore)
+
+```powershell
+cd C:\lb\toddler-meal-planner\mobile
+
+# First time only — or copy your existing .jks + keystore.properties
+npm run keystore:create
+# Edit credentials\keystore.properties with real passwords
+
+npm run build:play-store
+# Output: release/littlebowl-2.0.0-3.aab
+```
+
+Clean rebuild:
+
+```powershell
+npm run build:play-store:clean
+```
+
+#### Option B — EAS Build (cloud)
 
 ```bash
-npx expo prebuild --platform android
-# open android/ in Android Studio, generate signed AAB
-# or: eas build -p android  (if using EAS)
+npm install -g eas-cli   # or use npx eas
+eas login
+eas init                 # sets real projectId in app.json
+eas build -p android --profile production
+# Download .aab from expo.dev when finished
 ```
+
+Optional submit to Play (needs service account JSON):
+
+```bash
+eas submit -p android --profile production
+```
+
+Place `google-play-service-account.json` in `mobile/` (gitignored if you add it).
+Configure track in `eas.json`.
 
 ### iOS (App Store)
 

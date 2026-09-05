@@ -32,6 +32,9 @@ yarn-error.*
 
 # local env files
 .env*.local
+google-play-service-account.json
+credentials/
+android/keystore.properties
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +42,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Play Store artifacts (kept outside android/ so prebuild --clean is safe)
+release/*.aab

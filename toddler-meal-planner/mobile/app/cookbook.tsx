@@ -5,6 +5,13 @@ import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { Button, EmptyState, LoadingBlock, Screen } from '../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  screenCacheKey,
+  setCached,
+} from '../src/screenCache';
 import { colors, radii } from '../src/theme';
 import type { Recipe } from '../src/types';
 
@@ -15,26 +22,40 @@ export default function CookbookScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!authenticated) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const data = await api.savedRecipes();
-      setRecipes(data.recipes || []);
-    } catch {
-      setRecipes([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [authenticated]);
+  const load = useCallback(
+    async (force = false) => {
+      if (!authenticated) {
+        setLoading(false);
+        return;
+      }
+      const key = screenCacheKey('cookbook', 'user');
+      const stale = getStale<Recipe[]>(key);
+      if (stale) {
+        setRecipes(stale);
+        setLoading(false);
+      }
+      if (!force && getCached<Recipe[]>(key, CACHE_TTL.cookbook)) {
+        setRefreshing(false);
+        return;
+      }
+      try {
+        const data = await api.savedRecipes();
+        const list = data.recipes || [];
+        setCached(key, list);
+        setRecipes(list);
+      } catch {
+        setRecipes([]);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [authenticated],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
+      load(false);
     }, [load]),
   );
 
@@ -56,10 +77,10 @@ export default function CookbookScreen() {
       <ScrollView
         contentContainerStyle={styles.pad}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />
         }
       >
-        {loading ? <LoadingBlock /> : null}
+        {loading && !recipes.length ? <LoadingBlock /> : null}
         {!loading && recipes.length === 0 ? (
           <EmptyState text="Tap the heart on any recipe to save it here." />
         ) : null}

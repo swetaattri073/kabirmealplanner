@@ -11,6 +11,9 @@ import {
   getGuestId,
   getLastToddlerRef,
   getToken,
+  getCachedSession,
+  setCachedSession,
+  clearCachedSession,
   setGuestId,
   setLastToddlerRef,
   setToken,
@@ -52,18 +55,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeToddler, setActiveToddlerState] = useState<Toddler | null>(null);
   const [guestId, setGuestIdState] = useState<string | null>(null);
 
-  const applySession = useCallback(async (data: any) => {
+  const applySession = useCallback(async (data: any, persist = true) => {
     const list: Toddler[] = data.toddlers || [];
     const preferred = await getLastToddlerRef();
     const active = pickActive(list, preferred);
-    setAuthenticated(!!data.authenticated || !!data.token || !!data.user);
+    const isAuth = !!data.authenticated || !!data.token || !!data.user;
+    setAuthenticated(isAuth);
     setUser(data.user || null);
     setToddlers(list);
     setActiveToddlerState(active);
     if (data.guest_id) {
       await setGuestId(data.guest_id);
       setGuestIdState(data.guest_id);
-    } else if (!data.authenticated) {
+    } else if (!isAuth) {
       const g = await getGuestId();
       setGuestIdState(g);
     } else {
@@ -71,11 +75,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     if (active) {
       await setLastToddlerRef(active.ref);
-      await syncRemindersFromToddler(active.ref, active.name, (active as any).meal_schedule);
+      // Defer reminder sync so cold start is not blocked on notification APIs.
+      setTimeout(() => {
+        syncRemindersFromToddler(active.ref, active.name, (active as any).meal_schedule).catch(
+          () => undefined,
+        );
+      }, 0);
+    }
+    if (persist) {
+      await setCachedSession({
+        authenticated: isAuth,
+        user: data.user || null,
+        toddlers: list,
+        guest_id: data.guest_id || null,
+      });
     }
   }, []);
 
   const refresh = useCallback(async () => {
+    let hydrated = false;
+    const cached = await getCachedSession();
+    if (cached) {
+      const preferred = await getLastToddlerRef();
+      const active = pickActive(cached.toddlers, preferred);
+      setAuthenticated(cached.authenticated);
+      setUser(cached.user);
+      setToddlers(cached.toddlers);
+      setActiveToddlerState(active);
+      if (cached.guest_id) setGuestIdState(cached.guest_id);
+      else if (!cached.authenticated) {
+        const g = await getGuestId();
+        setGuestIdState(g);
+      }
+      setReady(true);
+      hydrated = true;
+    }
+
     try {
       const token = await getToken();
       const guest = await getGuestId();
@@ -90,10 +125,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await applySession(status);
     } catch (err) {
       console.warn('auth refresh failed', err);
-      setAuthenticated(false);
-      setUser(null);
+      if (!hydrated) {
+        setAuthenticated(false);
+        setUser(null);
+        await clearCachedSession();
+      }
     } finally {
-      setReady(true);
+      if (!hydrated) setReady(true);
     }
   }, [applySession]);
 
@@ -159,6 +197,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (t && (t as any).guest_id) {
       await setGuestId((t as any).guest_id);
       setGuestIdState((t as any).guest_id);
+    }
+    const cached = await getCachedSession();
+    if (cached) {
+      const list = [...cached.toddlers.filter((x) => x.id !== t.id), t];
+      await setCachedSession({
+        authenticated: cached.authenticated,
+        user: cached.user,
+        toddlers: list,
+        guest_id: cached.guest_id,
+      });
     }
   }, [setActiveToddler]);
 

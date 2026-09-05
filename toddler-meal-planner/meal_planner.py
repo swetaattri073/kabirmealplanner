@@ -46,6 +46,65 @@ def _normalize_diet(preference) -> str:
     return "vegetarian"
 
 
+TODDLER_MIN_AGE_MONTHS = 12
+
+# One-dish meals that already combine grain + dal/protein (no separate carb needed).
+_SELF_COMPLETE_COMBO_KEYWORDS = (
+    "khichdi", "pulao", "biryani", "fried rice", "curd rice", "lemon rice",
+    "sambar rice", "dal rice", "rajma chawal", "chole rice", "thali",
+)
+
+# Combo keywords that count as a main dish (sabji/dal/protein-style).
+_MAIN_COMBO_KEYWORDS = (
+    "paneer", "sabzi", "curry", "aloo", "gobi", "khichdi", "rajma", "chole",
+    "sambar", "rasam", "pulao", "biryani", "keema", "egg", "fish", "chicken",
+)
+
+_PLAIN_DAIRY_KEYWORDS = ("curd", "dahi", "yogurt", "yoghurt", "lassi", "raita")
+
+
+def is_toddler_age(age_months) -> bool:
+    return age_months is not None and age_months >= TODDLER_MIN_AGE_MONTHS
+
+
+def is_fruit_or_plain_dairy(food) -> bool:
+    name = (food.name if hasattr(food, "name") else str(food or "")).lower()
+    category = getattr(food, "category", None) or ""
+    if category == "fruit":
+        return True
+    if category == "dairy" and any(k in name for k in _PLAIN_DAIRY_KEYWORDS):
+        return True
+    return False
+
+
+def is_self_complete_combo(food) -> bool:
+    name = (food.name if hasattr(food, "name") else str(food or "")).lower()
+    if getattr(food, "category", None) != "combo":
+        return False
+    if any(k in name for k in _SELF_COMPLETE_COMBO_KEYWORDS):
+        return True
+    return " with " in name and any(k in name for k in ("rice", "roti", "dal", "khichdi"))
+
+
+def is_incomplete_toddler_lunch_dinner(food) -> bool:
+    """True when a food must not be the only item in a toddler lunch/dinner slot."""
+    if food is None:
+        return True
+    if is_fruit_or_plain_dairy(food):
+        return True
+    if is_self_complete_combo(food):
+        return False
+    if getattr(food, "category", None) == "combo":
+        return False
+    return getattr(food, "category", None) in (
+        "grain", "dal", "vegetable", "protein", "fruit", "dairy", "snack",
+    )
+
+
+def toddler_lunch_dinner_needs_complete_meal(age_months, meal_type) -> bool:
+    return meal_type in ("lunch", "dinner") and is_toddler_age(age_months)
+
+
 class MealPlanner:
     """Generates and manages meal plans for toddlers"""
     
@@ -160,8 +219,14 @@ class MealPlanner:
                     day_plan.append(existing_map[(day, meal_type)])
                     continue
                 
-                # For lunch/dinner, generate complete meal (main + carb + side)
-                if meal_type in ['lunch', 'dinner']:
+                # Babies 6–8 months get one-food taste slots, not toddler combo plates.
+                from weaning import is_weaning_age
+                use_complete_meal = (
+                    meal_type in ['lunch', 'dinner']
+                    and not (is_weaning_age(toddler.age_months) and toddler.age_months < 8)
+                )
+
+                if use_complete_meal:
                     complete_meal = self._select_complete_meal(
                         toddler=toddler,
                         meal_type=meal_type,
@@ -354,7 +419,7 @@ class MealPlanner:
         """
         
         # Filter foods appropriate for meal type
-        meal_foods = self._filter_by_meal_type(suitable_foods, meal_type)
+        meal_foods = self._filter_by_meal_type(suitable_foods, meal_type, toddler.age_months)
         
         if not meal_foods:
             return None
@@ -548,19 +613,24 @@ class MealPlanner:
         for food in suitable_foods:
             name_lower = food.name.lower()
             
-            # Main dishes: dal, sabzi, curry, paneer dishes, protein
+            # Main dishes: dal, sabzi, curry, protein, and combo plates
             if food.category in ['dal', 'vegetable', 'protein']:
                 main_dishes.append(food)
-            elif food.category == 'combo' and any(kw in name_lower for kw in ['paneer', 'sabzi', 'curry', 'aloo', 'gobi']):
+            elif food.category == 'combo' and any(kw in name_lower for kw in _MAIN_COMBO_KEYWORDS):
                 main_dishes.append(food)
             
-            # Carbs: roti, rice, paratha (plain)
+            # Carbs: roti, rice, idli, dosa, poha (paired with a main for toddlers)
             elif food.category == 'grain':
-                if any(kw in name_lower for kw in ['rice', 'roti', 'chapati', 'paratha', 'phulka']):
+                if any(
+                    kw in name_lower
+                    for kw in ['rice', 'roti', 'chapati', 'paratha', 'phulka', 'idli', 'dosa', 'poha', 'upma']
+                ):
                     carbs.append(food)
+            elif food.category == 'combo' and any(kw in name_lower for kw in ['idli', 'dosa', 'poha']):
+                carbs.append(food)
             
             # Sides: curd, raita, salad
-            elif food.category == 'dairy' and any(kw in name_lower for kw in ['curd', 'yogurt', 'dahi', 'raita', 'lassi']):
+            elif food.category == 'dairy' and any(kw in name_lower for kw in _PLAIN_DAIRY_KEYWORDS):
                 sides.append(food)
         
         # Add cucumber/tomato as salad options if available
@@ -662,6 +732,16 @@ class MealPlanner:
         add_ins = self._get_nutritious_addins(
             toddler, nutrition_gaps, selected_main, selected_carb, selected_side, meal_type=meal_type
         )
+
+        if is_toddler_age(toddler.age_months):
+            if is_fruit_or_plain_dairy(selected_main):
+                return None
+            if not is_self_complete_combo(selected_main) and not selected_carb:
+                return None
+            if not is_self_complete_combo(selected_main) and selected_main.category not in (
+                'dal', 'vegetable', 'protein', 'combo',
+            ):
+                return None
         
         # Create complete meal structure
         complete_meal = {
@@ -694,6 +774,203 @@ class MealPlanner:
         }
         
         return complete_meal
+
+    def build_complete_meal_with_anchor(
+        self,
+        toddler,
+        anchor_food,
+        meal_type,
+        suitable_foods,
+        preferences,
+        recent_foods,
+        nutrition_gaps,
+        day_nutrition,
+        used_foods,
+        day_of_week,
+    ):
+        """Build grain + dal/protein (+ optional dahi side) around a guided-plan food."""
+        if is_fruit_or_plain_dairy(anchor_food):
+            return self._select_complete_meal(
+                toddler, meal_type, suitable_foods, preferences, recent_foods,
+                nutrition_gaps, day_nutrition, used_foods, day_of_week,
+            )
+
+        if is_self_complete_combo(anchor_food):
+            add_ins = self._get_nutritious_addins(
+                toddler, nutrition_gaps, anchor_food, None, None, meal_type=meal_type,
+            )
+            side = self._pick_side_for_complete_meal(suitable_foods)
+            return self._make_complete_meal_dict(
+                toddler, meal_type, anchor_food, None, side, add_ins, backup_main=None,
+            )
+
+        main_food = None
+        carb_food = None
+        if anchor_food.category in ('dal', 'vegetable', 'protein'):
+            main_food = anchor_food
+        elif anchor_food.category == 'combo':
+            main_food = anchor_food
+        elif anchor_food.category == 'grain':
+            carb_food = anchor_food
+
+        if main_food is None and carb_food is None:
+            return self._select_complete_meal(
+                toddler, meal_type, suitable_foods, preferences, recent_foods,
+                nutrition_gaps, day_nutrition, used_foods, day_of_week,
+            )
+
+        if main_food and carb_food is None:
+            carb_food = self._pick_carb_for_complete_meal(suitable_foods, day_of_week)
+        if carb_food and main_food is None:
+            main_food = self._pick_main_for_complete_meal(
+                toddler, suitable_foods, preferences, recent_foods, nutrition_gaps,
+                used_foods, day_of_week, exclude_ids={carb_food.id},
+            )
+
+        if main_food is None or (not is_self_complete_combo(main_food) and carb_food is None):
+            return self._select_complete_meal(
+                toddler, meal_type, suitable_foods, preferences, recent_foods,
+                nutrition_gaps, day_nutrition, used_foods, day_of_week,
+            )
+
+        side = self._pick_side_for_complete_meal(suitable_foods)
+        add_ins = self._get_nutritious_addins(
+            toddler, nutrition_gaps, main_food, carb_food, side, meal_type=meal_type,
+        )
+        return self._make_complete_meal_dict(
+            toddler, meal_type, main_food, carb_food, side, add_ins, backup_main=None,
+        )
+
+    def _pick_carb_for_complete_meal(self, suitable_foods, day_of_week):
+        carbs = []
+        for food in suitable_foods:
+            name_lower = food.name.lower()
+            if food.category == 'grain' and any(
+                kw in name_lower
+                for kw in ['rice', 'roti', 'chapati', 'paratha', 'phulka', 'idli', 'dosa', 'poha']
+            ):
+                carbs.append(food)
+        if not carbs:
+            return None
+        rice_options = [f for f in carbs if 'rice' in f.name.lower()]
+        roti_options = [
+            f for f in carbs
+            if any(kw in f.name.lower() for kw in ['roti', 'chapati', 'paratha', 'phulka'])
+        ]
+        if day_of_week % 2 == 0 and roti_options:
+            return random.choice(roti_options)
+        if rice_options:
+            return random.choice(rice_options)
+        return carbs[0]
+
+    def _pick_main_for_complete_meal(
+        self, toddler, suitable_foods, preferences, recent_foods, nutrition_gaps,
+        used_foods, day_of_week, exclude_ids=None,
+    ):
+        exclude_ids = exclude_ids or set()
+        mains = []
+        for food in suitable_foods:
+            if food.id in exclude_ids:
+                continue
+            name_lower = food.name.lower()
+            if food.category in ('dal', 'vegetable', 'protein'):
+                mains.append(food)
+            elif food.category == 'combo' and any(kw in name_lower for kw in _MAIN_COMBO_KEYWORDS):
+                mains.append(food)
+        if not mains:
+            return None
+        diet = _normalize_diet(toddler.dietary_preference)
+        pool = mains
+        if diet == "non-vegetarian":
+            animal = [f for f in mains if _is_animal_protein(f)]
+            if animal and (day_of_week in (0, 2, 4) or random.random() < 0.25):
+                pool = animal
+        scored = []
+        for food in pool:
+            score = preferences.get(food.id, 0) * 2
+            score -= (used_foods.get(food.id, 0) + recent_foods.get(food.id, 0)) * 2
+            scored.append((food, score + random.random()))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return scored[0][0]
+
+    def _pick_side_for_complete_meal(self, suitable_foods):
+        sides = []
+        for food in suitable_foods:
+            name_lower = food.name.lower()
+            if food.category == 'dairy' and any(k in name_lower for k in _PLAIN_DAIRY_KEYWORDS):
+                sides.append(food)
+            elif food.category == 'vegetable' and any(k in name_lower for k in ('cucumber', 'tomato', 'salad')):
+                sides.append(food)
+        return random.choice(sides) if sides else None
+
+    def _make_complete_meal_dict(self, toddler, meal_type, main_food, carb_food, side_food, add_ins, backup_main):
+        return {
+            'main': {
+                'food': main_food,
+                'food_id': main_food.id,
+                'food_name': main_food.name,
+                'category': main_food.category,
+            },
+            'carb': {
+                'food': carb_food,
+                'food_id': carb_food.id if carb_food else None,
+                'food_name': carb_food.name if carb_food else 'Roti/Rice',
+                'category': 'grain',
+            } if carb_food else None,
+            'side': {
+                'food': side_food,
+                'food_id': side_food.id if side_food else None,
+                'food_name': side_food.name if side_food else 'Dahi/Salad',
+                'category': side_food.category if side_food else 'dairy',
+            } if side_food else None,
+            'add_ins': add_ins or [],
+            'backup': {
+                'main': {
+                    'food_id': backup_main.id,
+                    'food_name': backup_main.name,
+                } if backup_main else None,
+            },
+            'reason': f"Balanced {meal_type} with {main_food.name}",
+        }
+
+    def assign_food_to_plan_slot(
+        self,
+        toddler,
+        plan_entry,
+        food,
+        meal_type,
+        reason='',
+        suitable_foods=None,
+        preferences=None,
+        recent_foods=None,
+        nutrition_gaps=None,
+        used_foods=None,
+        day_of_week=0,
+    ):
+        """Write a food into a plan slot — complete meals for toddler lunch/dinner."""
+        if toddler_lunch_dinner_needs_complete_meal(toddler.age_months, meal_type):
+            suitable_foods = suitable_foods or self._get_suitable_foods(toddler)
+            preferences = preferences or self._get_preference_scores(toddler)
+            recent_foods = recent_foods or self._get_recent_foods(toddler, days=7)
+            nutrition_gaps = nutrition_gaps or self._identify_nutrition_gaps(
+                self.nutrition_engine.get_weekly_nutrition(toddler)
+            )
+            used_foods = used_foods or {}
+            complete = self.build_complete_meal_with_anchor(
+                toddler, food, meal_type, suitable_foods, preferences, recent_foods,
+                nutrition_gaps, {}, used_foods, day_of_week,
+            )
+            if not complete:
+                return False
+            plan_entry.food_id = complete['main']['food'].id
+            plan_entry.alternatives = self._serialize_complete_meal(complete)
+        else:
+            plan_entry.food_id = food.id
+            plan_entry.alternatives = []
+
+        plan_entry.is_generated = True
+        plan_entry.nutrition_reason = reason or plan_entry.nutrition_reason
+        return True
     
     def _serialize_complete_meal(self, complete_meal):
         """Remove ORM Food objects so alternatives can be stored as JSON."""
@@ -817,7 +1094,7 @@ class MealPlanner:
         # When hiding veggies, keep up to 3 tips so a veggie tip isn't crowded out
         return add_ins[:3 if hide_veggies else 2]
     
-    def _filter_by_meal_type(self, foods, meal_type):
+    def _filter_by_meal_type(self, foods, meal_type, age_months=None):
         """Filter foods appropriate for the meal type with strict separation"""
         
         # Define breakfast-specific foods (should NOT include dal-based items)
@@ -869,6 +1146,10 @@ class MealPlanner:
                 
                 # Skip standalone accompaniments
                 if any(kw in name_lower for kw in accompaniment_foods):
+                    continue
+
+                # Fruit or plain dahi is never lunch/dinner except weaning taste slots (<8 mo).
+                if f.category in ('fruit', 'dairy') and not (age_months is not None and age_months < 8):
                     continue
                 
                 # Include main meal categories
@@ -1334,7 +1615,7 @@ class MealPlanner:
     
     def update_plan_item(self, plan_id, new_food_id, is_manual=True):
         """Update a specific meal in the plan"""
-        from models import WeeklyPlan, Food
+        from models import WeeklyPlan, Food, Toddler
         
         plan = WeeklyPlan.query.get(plan_id)
         if not plan:
@@ -1343,10 +1624,23 @@ class MealPlanner:
         food = Food.query.get(new_food_id)
         if not food:
             return None
-        
-        plan.food_id = new_food_id
-        plan.is_generated = not is_manual
-        plan.nutrition_reason = "Manually selected" if is_manual else plan.nutrition_reason
+
+        toddler = Toddler.query.get(plan.toddler_id)
+        if toddler and toddler_lunch_dinner_needs_complete_meal(toddler.age_months, plan.meal_type):
+            if not self.assign_food_to_plan_slot(
+                toddler,
+                plan,
+                food,
+                plan.meal_type,
+                reason="Manually selected",
+                day_of_week=plan.day_of_week,
+            ):
+                return None
+            plan.is_generated = not is_manual
+        else:
+            plan.food_id = new_food_id
+            plan.is_generated = not is_manual
+            plan.nutrition_reason = "Manually selected" if is_manual else plan.nutrition_reason
         
         self.db.commit()
         

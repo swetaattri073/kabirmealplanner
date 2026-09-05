@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import type { Toddler, User } from './types';
 
 const TOKEN_KEY = 'littlebowl_api_token';
 const GUEST_KEY = 'littlebowl_guest_id';
 const TODDLER_KEY = 'littlebowl_last_toddler_id';
 const NOTIFY_KEY = 'littlebowl_notify_prefs_v2';
+const SESSION_CACHE_KEY = 'littlebowl_session_v1';
 
 async function setSecure(key: string, value: string | null) {
   if (Platform.OS === 'web') {
@@ -46,6 +48,43 @@ export async function getLastToddlerRef() {
 export async function setLastToddlerRef(ref: string | null) {
   if (!ref) await AsyncStorage.removeItem(TODDLER_KEY);
   else await AsyncStorage.setItem(TODDLER_KEY, ref);
+}
+
+export type CachedSession = {
+  authenticated: boolean;
+  user: User | null;
+  toddlers: Toddler[];
+  guest_id?: string | null;
+  cachedAt: number;
+};
+
+export async function getCachedSession(): Promise<CachedSession | null> {
+  try {
+    const raw = await AsyncStorage.getItem(SESSION_CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as CachedSession;
+    if (!data || !Array.isArray(data.toddlers)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCachedSession(data: Omit<CachedSession, 'cachedAt'>) {
+  try {
+    const payload: CachedSession = { ...data, cachedAt: Date.now() };
+    await AsyncStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    /* disk full */
+  }
+}
+
+export async function clearCachedSession() {
+  try {
+    await AsyncStorage.removeItem(SESSION_CACHE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export type NotifyPrefs = {

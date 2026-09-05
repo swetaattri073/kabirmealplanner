@@ -1,9 +1,13 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { ChatFab } from '../../src/components/ChatFab';
 import { colors } from '../../src/theme';
+
+/** Tab bar content height (icons + labels) excluding bottom safe-area padding. */
+const TAB_BAR_CONTENT_HEIGHT = 56;
 
 function HomeIcon({ focused }: { focused: boolean }) {
   const color = focused ? colors.primary : colors.textMuted;
@@ -97,6 +101,10 @@ function TabIconWrap({ children, focused }: { children: React.ReactNode; focused
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 8);
+  const tabBarHeight = TAB_BAR_CONTENT_HEIGHT + bottomPad;
+
   return (
     <View style={layoutStyles.root}>
     <Tabs
@@ -105,11 +113,17 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontFamily: 'Nunito_700Bold', fontSize: 11 },
+        tabBarButton: (props) => (
+          <Pressable
+            {...(props as any)}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          />
+        ),
         tabBarStyle: {
           borderTopColor: colors.border,
           backgroundColor: colors.white,
-          height: 64,
-          paddingBottom: 8,
+          height: tabBarHeight,
+          paddingBottom: bottomPad,
           paddingTop: 4,
           elevation: 8,
           shadowColor: '#6366f1',

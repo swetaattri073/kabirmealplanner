@@ -6,6 +6,13 @@ import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { AppHeader } from '../../src/components/AppHeader';
 import { Card, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  screenCacheKey,
+  setCached,
+} from '../../src/screenCache';
 import { colors, NUTRIENTS, PRIORITY_NUTRIENTS, radii } from '../../src/theme';
 
 function statusGrad(pct: number): [string, string] {
@@ -46,32 +53,56 @@ export default function NutritionScreen() {
   const [selectedNutrient, setSelectedNutrient] = useState<string | null>(null);
   const [selectedBreakdownItem, setSelectedBreakdownItem] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
-    if (!activeToddler) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const [d, a, b] = await Promise.all([
-        api.nutritionDaily(activeToddler.ref),
-        api.nutritionAlerts(activeToddler.ref).catch(() => ({ alerts: [] })),
-        api.nutritionBreakdown(activeToddler.ref).catch(() => null),
-      ]);
-      setDaily(d);
-      setAlerts(a.alerts || a || []);
-      setBreakdown(b);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [activeToddler]);
+  type NutritionBundle = { daily: any; alerts: any[]; breakdown: any };
+
+  const applyBundle = useCallback((b: NutritionBundle) => {
+    setDaily(b.daily);
+    setAlerts(b.alerts);
+    setBreakdown(b.breakdown);
+  }, []);
+
+  const load = useCallback(
+    async (force = false) => {
+      if (!activeToddler) {
+        setLoading(false);
+        return;
+      }
+      const key = screenCacheKey('nutrition', activeToddler.ref);
+      const stale = getStale<NutritionBundle>(key);
+      if (stale) {
+        applyBundle(stale);
+        setLoading(false);
+      }
+      if (!force && getCached<NutritionBundle>(key, CACHE_TTL.nutrition)) {
+        setRefreshing(false);
+        return;
+      }
+      try {
+        const [d, a, b] = await Promise.all([
+          api.nutritionDaily(activeToddler.ref),
+          api.nutritionAlerts(activeToddler.ref).catch(() => ({ alerts: [] })),
+          api.nutritionBreakdown(activeToddler.ref).catch(() => null),
+        ]);
+        const bundle: NutritionBundle = {
+          daily: d,
+          alerts: a.alerts || a || [],
+          breakdown: b,
+        };
+        setCached(key, bundle);
+        applyBundle(bundle);
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [activeToddler, applyBundle],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
+      load(false);
     }, [load]),
   );
 
@@ -107,7 +138,7 @@ export default function NutritionScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                load(true);
               }}
             />
           }

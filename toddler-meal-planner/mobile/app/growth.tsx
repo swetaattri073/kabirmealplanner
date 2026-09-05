@@ -14,6 +14,14 @@ import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { Button, Card, EmptyState, Field, LoadingBlock, Screen } from '../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  invalidateCacheKey,
+  screenCacheKey,
+  setCached,
+} from '../src/screenCache';
 import { colors, radii } from '../src/theme';
 
 export default function GrowthScreen() {
@@ -25,25 +33,39 @@ export default function GrowthScreen() {
   const [height, setHeight] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!activeToddler) {
-      setLoading(false);
-      return;
-    }
-    try {
-      setData(await api.growth(activeToddler.ref));
-    } catch {
-      setData(null);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [activeToddler]);
+  const load = useCallback(
+    async (force = false) => {
+      if (!activeToddler) {
+        setLoading(false);
+        return;
+      }
+      const key = screenCacheKey('growth', activeToddler.ref);
+      const stale = getStale<any>(key);
+      if (stale) {
+        setData(stale);
+        setLoading(false);
+      }
+      if (!force && getCached<any>(key, CACHE_TTL.growth)) {
+        setRefreshing(false);
+        return;
+      }
+      try {
+        const g = await api.growth(activeToddler.ref);
+        setCached(key, g);
+        setData(g);
+      } catch {
+        if (!stale) setData(null);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [activeToddler],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
+      load(false);
     }, [load]),
   );
 
@@ -63,7 +85,8 @@ export default function GrowthScreen() {
       });
       setWeight('');
       setHeight('');
-      await load();
+      invalidateCacheKey(screenCacheKey('growth', activeToddler.ref));
+      await load(true);
     } catch (e: any) {
       Alert.alert('Could not save', e?.message || 'Try again');
     } finally {
@@ -80,10 +103,10 @@ export default function GrowthScreen() {
       <ScrollView
         contentContainerStyle={styles.pad}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />
         }
       >
-        {loading ? <LoadingBlock /> : null}
+        {loading && !data ? <LoadingBlock /> : null}
 
         <Card>
           <Text style={styles.h}>Log measurement</Text>

@@ -28,9 +28,12 @@ export function TimePickerRow({
   const [show, setShow] = useState(false);
   const nativePicker = dateTimePickerSupported();
 
-  const onPickerChange = (_: unknown, date?: Date) => {
-    if (Platform.OS === 'android') setShow(false);
-    if (date) onChange(formatHHMM(date));
+  const closePicker = () => setShow(false);
+
+  const onValueChange = (_: unknown, date: Date) => {
+    onChange(formatHHMM(date));
+    // Android modal must be hidden in JS too, or it reopens on the next render.
+    if (Platform.OS === 'android') closePicker();
   };
 
   if (!nativePicker) {
@@ -69,7 +72,8 @@ export function TimePickerRow({
           mode="time"
           is24Hour
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={onPickerChange}
+          onValueChange={onValueChange}
+          onDismiss={closePicker}
         />
       ) : null}
     </View>

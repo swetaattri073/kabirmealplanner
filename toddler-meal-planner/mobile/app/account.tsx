@@ -7,12 +7,24 @@ import { api } from '../src/api';
 import {
   loadNotifyPrefs,
   mealKeysFor,
+  reminderResultMessage,
   saveNotifyPrefs,
+  sendTestMealReminder,
+  showMealReminderBlockedAlert,
+  type ReminderScheduleResult,
 } from '../src/notifications';
 import type { NotifyPrefs } from '../src/storage';
 import { AppHeader } from '../src/components/AppHeader';
+import { MealReminderSetupModal } from '../src/components/MealReminderSetupModal';
 import { TimePickerRow } from '../src/components/TimePickerRow';
 import { Button, Card, Field, Screen } from '../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  screenCacheKey,
+  setCached,
+} from '../src/screenCache';
 import { colors, DEFAULT_REMINDER_TIMES, MEAL_LABELS, radii } from '../src/theme';
 
 const DIET_LABELS: Record<string, string> = {
@@ -37,6 +49,10 @@ export default function AccountScreen() {
   const [prefs, setPrefs] = useState<NotifyPrefs | null>(null);
   const [foodPrefs, setFoodPrefs] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [setupModal, setSetupModal] = useState<{
+    result: ReminderScheduleResult;
+    testScheduled: boolean;
+  } | null>(null);
 
   useEffect(() => {
     loadNotifyPrefs().then(setPrefs);
@@ -44,9 +60,17 @@ export default function AccountScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (activeToddler) {
-        api.preferences(activeToddler.ref).then(setFoodPrefs).catch(() => null);
-      }
+      if (!activeToddler) return;
+      const key = screenCacheKey('preferences', activeToddler.ref);
+      const stale = getStale<any>(key);
+      if (stale) setFoodPrefs(stale);
+      if (getCached<any>(key, CACHE_TTL.preferences)) return;
+      api.preferences(activeToddler.ref)
+        .then((d) => {
+          setCached(key, d);
+          setFoodPrefs(d);
+        })
+        .catch(() => null);
     }, [activeToddler]),
   );
 
@@ -62,12 +86,26 @@ export default function AccountScreen() {
       const next = {
         ...prefs,
         notificationsPrompted: true,
+        mealReminders: prefs.enabled ? true : prefs.mealReminders,
         toddlerRef: activeToddler?.ref || prefs.toddlerRef,
         toddlerName: activeToddler?.name || prefs.toddlerName,
       };
-      await saveNotifyPrefs(next);
+      const result = await saveNotifyPrefs(next);
       setPrefs(next);
-      Alert.alert('Saved', 'Meal reminders updated.');
+
+      if (!result.permissionGranted) {
+        showMealReminderBlockedAlert(result);
+        return;
+      }
+
+      if (next.enabled && result.scheduled > 0) {
+        const testOk = await sendTestMealReminder();
+        setSetupModal({ result, testScheduled: testOk });
+      } else if (next.enabled) {
+        Alert.alert('Could not schedule', reminderResultMessage(result));
+      } else {
+        Alert.alert('Saved', 'Meal reminders turned off.');
+      }
     } catch (e: any) {
       Alert.alert('Could not save', e?.message || 'Try again');
     } finally {
@@ -294,6 +332,12 @@ export default function AccountScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      <MealReminderSetupModal
+        visible={!!setupModal}
+        result={setupModal?.result ?? { scheduled: 0, permissionGranted: false, verified: 0, nextReminderAt: null }}
+        testScheduled={setupModal?.testScheduled ?? false}
+        onClose={() => setSetupModal(null)}
+      />
     </Screen>
   );
 }

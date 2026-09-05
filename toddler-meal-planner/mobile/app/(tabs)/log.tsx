@@ -13,7 +13,17 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
+import { compressMealPhoto } from '../../src/compressMealPhoto';
 import { AppHeader } from '../../src/components/AppHeader';
+import {
+  CACHE_TTL,
+  getCached,
+  getPersistedDashboard,
+  getStale,
+  invalidateToddlerMealData,
+  screenCacheKey,
+  setCached,
+} from '../../src/screenCache';
 import {
   Button,
   Card,
@@ -40,6 +50,9 @@ export default function LogMealScreen() {
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'search' | 'describe' | 'photo'>('search');
+  const [photoStage, setPhotoStage] = useState<'compressing' | 'uploading' | 'analyzing' | null>(
+    null,
+  );
   const [todayPlan, setTodayPlan] = useState<any>(null);
   const [todayLogs, setTodayLogs] = useState<any[]>([]);
   const [hiddenVeggies, setHiddenVeggies] = useState<Map<string, number>>(new Map());
@@ -48,25 +61,49 @@ export default function LogMealScreen() {
   const [editReaction, setEditReaction] = useState('liked');
   const [editNotes, setEditNotes] = useState('');
   const scrollRef = useRef<ScrollView>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (params.meal) setMealType(String(params.meal));
   }, [params.meal]);
 
-  const loadPlan = useCallback(async () => {
-    if (!activeToddler) return;
-    try {
-      const dash = await api.dashboard(activeToddler.ref);
-      setTodayPlan(dash?.today_plan?.meals || {});
-      setTodayLogs(dash?.today_logs || []);
-    } catch (e) {
-      console.warn('loadPlan failed:', e);
-    }
-  }, [activeToddler]);
+  const applyDashboard = useCallback((dash: any) => {
+    setTodayPlan(dash?.today_plan?.meals || {});
+    setTodayLogs(dash?.today_logs || []);
+  }, []);
+
+  const loadPlan = useCallback(
+    async (force = false) => {
+      if (!activeToddler) return;
+      const dashKey = screenCacheKey('dashboard', activeToddler.ref);
+      const stale = getStale<any>(dashKey);
+      if (stale) applyDashboard(stale);
+
+      if (!force && getCached<any>(dashKey, CACHE_TTL.dashboard)) return;
+
+      try {
+        const dash = await api.dashboard(activeToddler.ref);
+        setCached(dashKey, dash);
+        applyDashboard(dash);
+      } catch (e) {
+        if (!stale) {
+          const disk = await getPersistedDashboard<any>(activeToddler.ref);
+          if (disk) applyDashboard(disk);
+        }
+        console.warn('loadPlan failed:', e);
+      }
+    },
+    [activeToddler, applyDashboard],
+  );
+
+  const refreshAfterMealChange = useCallback(async () => {
+    if (activeToddler) invalidateToddlerMealData(activeToddler.ref);
+    await loadPlan(true);
+  }, [activeToddler, loadPlan]);
 
   useFocusEffect(
     useCallback(() => {
-      loadPlan();
+      loadPlan(false);
     }, [loadPlan]),
   );
 
@@ -101,7 +138,7 @@ export default function LogMealScreen() {
         notes: editNotes || undefined,
       });
       cancelEditLog();
-      await loadPlan();
+      await refreshAfterMealChange();
       Alert.alert('Updated', 'Meal log saved.');
     } catch (e: any) {
       Alert.alert('Could not update', e?.message || 'Try again');
@@ -122,7 +159,7 @@ export default function LogMealScreen() {
           try {
             await api.deleteMealLog(log.id);
             if (editingLog?.id === log.id) cancelEditLog();
-            await loadPlan();
+            await refreshAfterMealChange();
           } catch (e: any) {
             Alert.alert('Could not delete', e?.message || 'Try again');
           } finally {
@@ -133,10 +170,10 @@ export default function LogMealScreen() {
     ]);
   };
 
-  const search = useCallback(async (q: string) => {
-    setQuery(q);
+  const runSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
       setFoods([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
@@ -148,6 +185,27 @@ export default function LogMealScreen() {
     } finally {
       setSearching(false);
     }
+  }, []);
+
+  const onQueryChange = useCallback(
+    (text: string) => {
+      setQuery(text);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      if (text.trim().length < 2) {
+        setFoods([]);
+        setSearching(false);
+        return;
+      }
+      setSearching(true);
+      searchTimer.current = setTimeout(() => runSearch(text), 300);
+    },
+    [runSearch],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
   }, []);
 
   const save = async () => {
@@ -178,7 +236,7 @@ export default function LogMealScreen() {
       setReaction('liked');
       setNotes('');
       setHiddenVeggies(new Map());
-      await loadPlan();
+      await refreshAfterMealChange();
       Alert.alert('Logged', `${selected.name} saved for ${MEAL_LABELS[mealType] || mealType}${nutriMsg}`);
     } catch (e: any) {
       Alert.alert('Could not log', e?.message || 'Try again');
@@ -214,7 +272,7 @@ export default function LogMealScreen() {
       setReaction('liked');
       setNotes('');
       setHiddenVeggies(new Map());
-      await loadPlan();
+      await refreshAfterMealChange();
       Alert.alert('Logged', `Planned meal logged.${nutriMsg}`);
     } catch (e: any) {
       Alert.alert('Could not log', e?.message || 'Try again');
@@ -229,7 +287,7 @@ export default function LogMealScreen() {
     try {
       await api.smartLog({ toddler_id: activeToddler.ref, text: nlp.trim() });
       setNlp('');
-      await loadPlan();
+      await refreshAfterMealChange();
       Alert.alert('Logged', 'Meal parsed and saved.');
     } catch (e: any) {
       Alert.alert('Smart log failed', e?.message || 'Try again');
@@ -239,29 +297,33 @@ export default function LogMealScreen() {
   };
 
   const photoLog = async () => {
-    if (!activeToddler) return;
+    if (!activeToddler || photoStage) return;
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Camera permission needed');
       return;
     }
     const shot = await ImagePicker.launchCameraAsync({
-      quality: 0.7,
+      quality: 1,
+      exif: false,
       base64: false,
     });
     if (shot.canceled || !shot.assets?.[0]) return;
-    setLoading(true);
+    setPhotoStage('compressing');
     try {
       const asset = shot.assets[0];
+      const compressed = await compressMealPhoto(asset.uri);
+      setPhotoStage('uploading');
       const form = new FormData();
       form.append('image', {
-        uri: asset.uri,
-        name: 'meal.jpg',
-        type: asset.mimeType || 'image/jpeg',
+        uri: compressed.uri,
+        name: compressed.name,
+        type: compressed.mimeType,
       } as any);
       form.append('toddler_id', activeToddler.ref);
+      setPhotoStage('analyzing');
       const result = await api.recognizeFood(form);
-      await loadPlan();
+      await refreshAfterMealChange();
       Alert.alert(
         'Photo analyzed',
         result?.message ||
@@ -271,7 +333,7 @@ export default function LogMealScreen() {
     } catch (e: any) {
       Alert.alert('Photo log unavailable', e?.message || 'Try typing the meal instead.');
     } finally {
-      setLoading(false);
+      setPhotoStage(null);
     }
   };
 
@@ -527,7 +589,7 @@ export default function LogMealScreen() {
               <Field
                 label="Search food"
                 value={query}
-                onChangeText={search}
+                onChangeText={onQueryChange}
                 placeholder="e.g. idli, dal, banana"
               />
               {searching ? <LoadingBlock /> : null}
@@ -646,7 +708,16 @@ export default function LogMealScreen() {
               <Text style={styles.photoHint}>
                 Take a photo of the meal and we'll try to identify the foods.
               </Text>
-              <Button label="Open camera" onPress={photoLog} loading={loading} />
+              {photoStage ? (
+                <View style={styles.photoProgressBox}>
+                  <Text style={styles.photoProgressText}>
+                    {photoStage === 'compressing' && 'Preparing photo…'}
+                    {photoStage === 'uploading' && 'Uploading photo…'}
+                    {photoStage === 'analyzing' && 'Identifying foods…'}
+                  </Text>
+                </View>
+              ) : null}
+              <Button label="Open camera" onPress={photoLog} loading={!!photoStage} />
             </>
           )}
         </Card>
@@ -1004,5 +1075,16 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 12,
     lineHeight: 20,
+  },
+  photoProgressBox: {
+    backgroundColor: colors.bgTertiary,
+    borderRadius: radii.md,
+    padding: 12,
+    marginBottom: 12,
+  },
+  photoProgressText: {
+    fontFamily: 'Nunito_600SemiBold',
+    color: colors.primary,
+    textAlign: 'center',
   },
 });

@@ -17,8 +17,27 @@ import { WeaningHomeBanner } from '../../src/components/WeaningHomeBanner';
 import { NotificationPromptCard } from '../../src/components/NotificationPromptCard';
 import { Button, EmptyState, LoadingBlock, Screen } from '../../src/components/ui';
 import { getSeenWeaningIntro, setSeenWeaningIntro } from '../../src/storage';
+import {
+  CACHE_TTL,
+  getCached,
+  getPersistedDashboard,
+  getStale,
+  invalidateToddlerMealData,
+  persistDashboard,
+  screenCacheKey,
+  setCached,
+} from '../../src/screenCache';
 import { colors, MEAL_EMOJI, MEAL_LABELS, MEAL_ORDER, PRIORITY_NUTRIENTS, NUTRIENTS, radii } from '../../src/theme';
+import { primaryRecipeSlug } from '../../src/recipeLinks';
 import type { DashboardData, Recipe } from '../../src/types';
+
+type HomeBundle = {
+  data: DashboardData;
+  recipes: Recipe[];
+  weeklyNutrition: any;
+  weeklyAlerts: any[];
+  weaning: any;
+};
 
 const GREETING = (): string => {
   const h = new Date().getHours();
@@ -40,35 +59,76 @@ export default function DashboardScreen() {
   const [toast, setToast] = useState<{ message: string; logId?: number; meal?: string } | null>(null);
   const [quickLogging, setQuickLogging] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!activeToddler) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const isWeaningAge = (activeToddler.age_months ?? 99) < 12;
-      const [d, r, wn, wa, w] = await Promise.all([
-        api.dashboard(activeToddler.ref),
-        api.recipes({ age_months: activeToddler.age_months }).catch(() => ({ recipes: [] })),
-        api.nutritionWeekly(activeToddler.ref).catch(() => null),
-        api.nutritionAlerts(activeToddler.ref).catch(() => ({ alerts: [] })),
-        isWeaningAge
-          ? api.weaning(activeToddler.ref).catch(() => null)
-          : Promise.resolve(null),
-      ]);
-      setData(d);
-      const list = r.recipes || r || [];
-      setRecipes(Array.isArray(list) ? list : []);
-      setWeeklyNutrition(wn);
-      setWeeklyAlerts(wa?.alerts || wa || []);
-      setWeaning(w);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const applyBundle = useCallback((bundle: HomeBundle) => {
+    setData(bundle.data);
+    setRecipes(bundle.recipes);
+    setWeeklyNutrition(bundle.weeklyNutrition);
+    setWeeklyAlerts(bundle.weeklyAlerts);
+    setWeaning(bundle.weaning);
+  }, []);
+
+  const fetchBundle = useCallback(async (): Promise<HomeBundle> => {
+    if (!activeToddler) throw new Error('no toddler');
+    const isWeaningAge = (activeToddler.age_months ?? 99) < 12;
+    const [d, r, wn, wa, w] = await Promise.all([
+      api.dashboard(activeToddler.ref),
+      api.recipes({ age_months: activeToddler.age_months }).catch(() => ({ recipes: [] })),
+      api.nutritionWeekly(activeToddler.ref).catch(() => null),
+      api.nutritionAlerts(activeToddler.ref).catch(() => ({ alerts: [] })),
+      isWeaningAge ? api.weaning(activeToddler.ref).catch(() => null) : Promise.resolve(null),
+    ]);
+    const list = r.recipes || r || [];
+    const bundle: HomeBundle = {
+      data: d,
+      recipes: Array.isArray(list) ? list : [],
+      weeklyNutrition: wn,
+      weeklyAlerts: wa?.alerts || wa || [],
+      weaning: w,
+    };
+    const dashKey = screenCacheKey('dashboard', activeToddler.ref);
+    setCached(dashKey, d);
+    persistDashboard(activeToddler.ref, d);
+    return bundle;
   }, [activeToddler]);
+
+  const load = useCallback(
+    async (force = false) => {
+      if (!activeToddler) {
+        setLoading(false);
+        return;
+      }
+      const homeKey = screenCacheKey('home', activeToddler.ref);
+      try {
+        const stale = getStale<HomeBundle>(homeKey);
+        if (stale) {
+          applyBundle(stale);
+          setLoading(false);
+        } else {
+          const disk = await getPersistedDashboard<DashboardData>(activeToddler.ref);
+          if (disk) {
+            setData(disk);
+            setLoading(false);
+          }
+        }
+
+        if (!force && getCached<HomeBundle>(homeKey, CACHE_TTL.home)) {
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+
+        const bundle = await fetchBundle();
+        setCached(homeKey, bundle);
+        applyBundle(bundle);
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [activeToddler, applyBundle, fetchBundle],
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -110,7 +170,8 @@ export default function DashboardScreen() {
         logId,
         meal,
       });
-      await load();
+      invalidateToddlerMealData(activeToddler.ref);
+      await load(true);
     } catch (e: any) {
       router.push({ pathname: '/(tabs)/log', params: { meal } });
     } finally {
@@ -119,14 +180,15 @@ export default function DashboardScreen() {
   };
 
   const undoQuickLog = async () => {
-    if (!toast?.logId) {
+    if (!toast?.logId || !activeToddler) {
       setToast(null);
       return;
     }
     try {
       await api.deleteMealLog(toast.logId);
       setToast(null);
-      await load();
+      invalidateToddlerMealData(activeToddler.ref);
+      await load(true);
     } catch {
       setToast(null);
     }
@@ -134,8 +196,7 @@ export default function DashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
+      load(false);
     }, [load]),
   );
 
@@ -183,7 +244,7 @@ export default function DashboardScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                load(true);
               }}
             />
           }
@@ -310,7 +371,7 @@ export default function DashboardScreen() {
               const planMeal = data?.today_plan?.meals?.[meal];
               const planName = planMeal?.summary || planMeal?.food?.name || planMeal?.main?.name || 'Tap to log';
               const emoji = MEAL_EMOJI[meal] || '🍽️';
-              const recipeSlug = planMeal?.recipe_slug;
+              const recipeSlug = primaryRecipeSlug(planMeal);
               const matchedRecipe = recipeSlug
                 ? recipes.find((r) => r.slug === recipeSlug)
                 : recipes.find((r) =>

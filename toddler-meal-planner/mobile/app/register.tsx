@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
 import { Link, useRouter } from 'expo-router';
+import { formatNetworkError } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { LogoHero } from '../src/components/AppHeader';
 import { Button, Field, Screen } from '../src/components/ui';
@@ -25,7 +26,7 @@ export default function RegisterScreen() {
       await signup(email.trim(), password, name.trim() || undefined);
       router.replace('/');
     } catch (e: any) {
-      Alert.alert('Registration failed', e?.message || 'Please try again.');
+      Alert.alert('Registration failed', formatNetworkError(e));
     } finally {
       setLoading(false);
     }

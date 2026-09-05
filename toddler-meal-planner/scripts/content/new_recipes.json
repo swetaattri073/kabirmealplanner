@@ -89,7 +89,7 @@
   },
   {
     "name": "Broccoli Cheese Mash",
-    "food_names": ["Broccoli (Steamed Soft)", "Paneer", "Ghee"],
+    "food_names": ["Broccoli (Steamed Soft)"],
     "category": "vegetable",
     "why": "Hides broccoli in a creamy paneer mash toddlers often accept.",
     "cheese": "Use crumbled paneer instead of processed cheese for better nutrition.",

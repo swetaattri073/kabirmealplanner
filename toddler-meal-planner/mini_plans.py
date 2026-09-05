@@ -10,6 +10,8 @@ MINI_PLAN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         'title': 'Week 1 solids',
         'subtitle': 'Gentle first tastes — one new food every few days',
         'for_age': '6–8 months',
+        'min_age_months': 6,
+        'max_age_months': 8,
         'days': [
             {'breakfast': 'Rice Cereal', 'lunch': 'Banana'},
             {'breakfast': 'Ragi Porridge', 'lunch': 'Apple'},
@@ -22,8 +24,10 @@ MINI_PLAN_TEMPLATES: Dict[str, Dict[str, Any]] = {
     },
     'iron_boost': {
         'title': 'Iron boost week',
-        'subtitle': 'Iron-rich foods for growing babies',
-        'for_age': '8–12 months',
+        'subtitle': 'Iron-rich foods for growing babies and toddlers',
+        'for_age': 'All ages',
+        'min_age_months': 6,
+        'max_age_months': None,
         'days': [
             {'breakfast': 'Ragi Porridge', 'lunch': 'Khichdi', 'dinner': 'Spinach'},
             {'breakfast': 'Dalia', 'lunch': 'Moong Dal Water', 'dinner': 'Rajma'},
@@ -36,8 +40,10 @@ MINI_PLAN_TEMPLATES: Dict[str, Dict[str, Any]] = {
     },
     'travel_khichdi': {
         'title': 'Travel-friendly week',
-        'subtitle': 'Simple, packable meals for busy days',
-        'for_age': '10–12 months',
+        'subtitle': 'Simple, packable meals for busy days — any age',
+        'for_age': 'All ages',
+        'min_age_months': 6,
+        'max_age_months': None,
         'days': [
             {'breakfast': 'Khichdi', 'lunch': 'Idli', 'evening_snack': 'Banana'},
             {'breakfast': 'Poha', 'lunch': 'Khichdi', 'evening_snack': 'Curd'},
@@ -51,17 +57,32 @@ MINI_PLAN_TEMPLATES: Dict[str, Dict[str, Any]] = {
 }
 
 
+def mini_plan_available(key: str, age_months: Optional[int] = None) -> bool:
+    tpl = MINI_PLAN_TEMPLATES.get(key)
+    if not tpl:
+        return False
+    if age_months is None:
+        return True
+    min_age = tpl.get('min_age_months')
+    max_age = tpl.get('max_age_months')
+    if min_age is not None and age_months < min_age:
+        return False
+    if max_age is not None and age_months > max_age:
+        return False
+    return True
+
+
 def list_mini_plans(age_months: Optional[int] = None) -> List[Dict[str, Any]]:
-    out = []
+    out: List[Dict[str, Any]] = []
     for key, tpl in MINI_PLAN_TEMPLATES.items():
+        if not mini_plan_available(key, age_months):
+            continue
         out.append({
             'key': key,
             'title': tpl['title'],
             'subtitle': tpl['subtitle'],
             'for_age': tpl.get('for_age'),
         })
-    if age_months is not None and age_months >= 12:
-        return [p for p in out if p['key'] != 'week1_solids']
     return out
 
 

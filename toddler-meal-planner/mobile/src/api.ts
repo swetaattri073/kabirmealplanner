@@ -20,6 +20,34 @@ export class ApiError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 25_000;
+
+/** Turn fetch / Android network failures into a short, actionable message. */
+export function formatNetworkError(err: unknown, baseUrl = apiBaseUrl()): string {
+  const host = (() => {
+    try {
+      return new URL(baseUrl).host;
+    } catch {
+      return baseUrl;
+    }
+  })();
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  if (
+    err instanceof TypeError ||
+    lower.includes('network request failed') ||
+    lower.includes('connectexception') ||
+    lower.includes('failed to connect') ||
+    lower.includes('econnrefused') ||
+    lower.includes('enetunreach') ||
+    lower.includes('timeout') ||
+    lower.includes('aborted')
+  ) {
+    return `Cannot reach ${host}. The server may be offline or your phone has no internet. Try again on Wi‑Fi or mobile data, or check that ${host} is running.`;
+  }
+  return msg || 'Something went wrong. Please try again.';
+}
+
 type RequestOpts = {
   method?: string;
   body?: any;
@@ -45,15 +73,25 @@ export async function apiRequest<T = any>(path: string, opts: RequestOpts = {}):
   const deviceId = await getDeviceId();
   if (deviceId) headers['X-Device-Id'] = deviceId;
 
-  const res = await fetch(`${apiBaseUrl()}${path}`, {
-    method: opts.method || (opts.body || opts.formData ? 'POST' : 'GET'),
-    headers,
-    body: opts.formData
-      ? opts.formData
-      : opts.body != null
-        ? JSON.stringify(opts.body)
-        : undefined,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl()}${path}`, {
+      method: opts.method || (opts.body || opts.formData ? 'POST' : 'GET'),
+      headers,
+      body: opts.formData
+        ? opts.formData
+        : opts.body != null
+          ? JSON.stringify(opts.body)
+          : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    throw new ApiError(formatNetworkError(err), 0);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const text = await res.text();
   let data: any = null;

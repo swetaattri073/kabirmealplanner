@@ -2,7 +2,7 @@
   "expo": {
     "name": "LittleBowl",
     "slug": "littlebowl",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "littlebowl",
@@ -26,6 +26,7 @@
     },
     "android": {
       "package": "com.littlebowl.app",
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#6b8f3c"
@@ -36,7 +37,8 @@
         "POST_NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -46,6 +48,18 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-dev-client",
+        {
+          "launchMode": "most-recent",
+          "defaultLaunchURL": "http://127.0.0.1:8081",
+          "skipOnboarding": true,
+          "showMenuAtLaunch": false,
+          "android": {
+            "defaultLaunchURL": "http://127.0.0.1:8081"
+          }
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       [

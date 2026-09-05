@@ -1,10 +1,17 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { EmptyState, Field, LoadingBlock, Screen } from '../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  screenCacheKey,
+  setCached,
+} from '../src/screenCache';
 import { colors, radii } from '../src/theme';
 import type { Recipe } from '../src/types';
 
@@ -18,27 +25,65 @@ export default function RecipesScreen() {
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async (query?: string) => {
-    try {
-      const data = await api.recipes({
-        q: query,
-        age_months: activeToddler?.age_months,
-      });
-      setRecipes(data.recipes || data || []);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [activeToddler?.age_months]);
+  const load = useCallback(
+    async (query?: string, force = false) => {
+      const qKey = query || '';
+      const key = screenCacheKey('recipes', activeToddler?.ref || 'all', qKey || 'default');
+      const stale = getStale<Recipe[]>(key);
+      if (stale) {
+        setRecipes(stale);
+        setLoading(false);
+      }
+      if (!force && getCached<Recipe[]>(key, CACHE_TTL.recipes)) {
+        setRefreshing(false);
+        return;
+      }
+      try {
+        const data = await api.recipes({
+          q: query,
+          age_months: activeToddler?.age_months,
+        });
+        const list = data.recipes || data || [];
+        const next = Array.isArray(list) ? list : [];
+        setCached(key, next);
+        setRecipes(next);
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [activeToddler?.age_months, activeToddler?.ref],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
+      load('', false);
     }, [load]),
+  );
+
+  useEffect(() => {
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, []);
+
+  const onSearchChange = useCallback(
+    (t: string) => {
+      setQ(t);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      const trimmed = t.trim();
+      if (trimmed.length === 0) {
+        load('', false);
+        return;
+      }
+      if (trimmed.length < 2) return;
+      searchTimer.current = setTimeout(() => load(trimmed, false), 300);
+    },
+    [load],
   );
 
   return (
@@ -52,7 +97,7 @@ export default function RecipesScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              load(q);
+              load(q, true);
             }}
           />
         }
@@ -60,13 +105,10 @@ export default function RecipesScreen() {
         <Field
           label="Search"
           value={q}
-          onChangeText={(t) => {
-            setQ(t);
-            if (t.trim().length === 0 || t.trim().length > 2) load(t.trim());
-          }}
+          onChangeText={onSearchChange}
           placeholder="Search recipes..."
         />
-        {loading ? <LoadingBlock /> : null}
+        {loading && !recipes.length ? <LoadingBlock /> : null}
         <View style={styles.grid}>
           {recipes.map((r, i) => (
             <Pressable

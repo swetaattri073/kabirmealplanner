@@ -5,6 +5,14 @@ import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { Card, EmptyState, LoadingBlock, Screen } from '../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  invalidateCacheKey,
+  screenCacheKey,
+  setCached,
+} from '../src/screenCache';
 import { colors, radii } from '../src/theme';
 
 export default function WeaningScreen() {
@@ -15,20 +23,35 @@ export default function WeaningScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [trying, setTrying] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!activeToddler) {
-      setLoading(false);
-      return;
-    }
-    try {
-      setData(await api.weaning(activeToddler.ref));
-    } catch {
-      setData(null);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [activeToddler]);
+  const load = useCallback(
+    async (force = false) => {
+      if (!activeToddler) {
+        setLoading(false);
+        return;
+      }
+      const key = screenCacheKey('weaning', activeToddler.ref);
+      const stale = getStale<any>(key);
+      if (stale) {
+        setData(stale);
+        setLoading(false);
+      }
+      if (!force && getCached<any>(key, CACHE_TTL.growth)) {
+        setRefreshing(false);
+        return;
+      }
+      try {
+        const w = await api.weaning(activeToddler.ref);
+        setCached(key, w);
+        setData(w);
+      } catch {
+        if (!stale) setData(null);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [activeToddler],
+  );
 
   const onTryFood = async (item: any) => {
     if (!activeToddler || item.tried) return;
@@ -39,7 +62,8 @@ export default function WeaningScreen() {
         food_id: item.food_id,
         reaction: 'liked',
       });
-      await load();
+      invalidateCacheKey(screenCacheKey('weaning', activeToddler.ref));
+      await load(true);
     } catch (e: any) {
       Alert.alert('Could not save', e?.message || 'Try again');
     } finally {
@@ -49,12 +73,11 @@ export default function WeaningScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
+      load(false);
     }, [load]),
   );
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <Screen>
         <AppHeader title="Starting solids" />
@@ -85,7 +108,7 @@ export default function WeaningScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              load();
+              load(true);
             }}
           />
         }

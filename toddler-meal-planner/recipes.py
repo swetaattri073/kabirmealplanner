@@ -14,6 +14,11 @@ from typing import Any, Dict, List, Optional
 
 from food_database import INDIAN_FOODS
 
+# Recipes without an explicit age tag are treated as toddler-only (12+ months).
+DEFAULT_TODDLER_RECIPE_AGE = 12
+# Under this age, only curated weaning recipes — not auto-generated food-db cards.
+WEANING_CURATED_ONLY_MAX_AGE = 8
+
 CURATED_RECIPES = [
     {
         "name": "Paneer Pasta",
@@ -107,7 +112,7 @@ CURATED_RECIPES = [
     },
     {
         "name": "Soft Boiled Egg",
-        "food_names": ["Egg (Boiled)", "Egg Bhurji", "Omelette", "Egg Curry"],
+        "food_names": ["Egg (Boiled)"],
         "category": "protein",
         "why": "Simple protein for eggetarian and non-veg plans.",
         "cheese": "No cheese needed.",
@@ -280,7 +285,7 @@ def _curated_to_recipe(item: Dict[str, Any]) -> Dict[str, Any]:
         "steps": item.get("steps") or "",
         "source": "curated",
         "allergens": item.get("allergens") or [],
-        "suitable_from_months": item.get("suitable_from_months"),
+        "suitable_from_months": item.get("suitable_from_months", DEFAULT_TODDLER_RECIPE_AGE),
         "cover_image_path": item.get("cover_image_url") or None,
         "video_url": None,
         "video_platform": None,
@@ -363,6 +368,20 @@ _ALL_RECIPES = _build_all_recipes()
 _BY_SLUG = {r["slug"]: r for r in _ALL_RECIPES}
 
 
+def _recipe_suitable_for_age(recipe: Dict[str, Any], age_months: int) -> bool:
+    """Whether a recipe may be shown for a given child age."""
+    tagged = recipe.get("suitable_from_months")
+    if age_months < 12:
+        # Starting solids: require an explicit age tag — untagged toddler recipes stay hidden.
+        if tagged is None or tagged > age_months:
+            return False
+        if age_months < WEANING_CURATED_ONLY_MAX_AGE and recipe.get("source") != "curated":
+            return False
+        return True
+    # Toddlers 12+ months: untagged recipes are assumed suitable unless tagged higher.
+    return tagged is None or tagged <= age_months
+
+
 def list_recipes(
     category: Optional[str] = None,
     q: Optional[str] = None,
@@ -370,10 +389,7 @@ def list_recipes(
 ) -> List[Dict[str, Any]]:
     recipes = _merged_recipes(published_only=True)
     if age_months is not None:
-        recipes = [
-            r for r in recipes
-            if r.get("suitable_from_months") is None or r.get("suitable_from_months") <= age_months
-        ]
+        recipes = [r for r in recipes if _recipe_suitable_for_age(r, age_months)]
     if category:
         recipes = [r for r in recipes if (r.get("category") or "") == category]
     if q:
@@ -395,6 +411,25 @@ def get_recipe(slug: str) -> Optional[Dict[str, Any]]:
     return _enrich_video_fields(_BY_SLUG[key]) if key in _BY_SLUG else None
 
 
+def _recipe_name_match_score(recipe: Dict[str, Any], name: str, target_slug: str) -> int:
+    """Score how well a recipe matches a food name (higher = better)."""
+    rname = recipe["name"].lower()
+    if rname == name:
+        return 1000
+    if recipe.get("slug") == target_slug:
+        return 900
+    aliases = [n.lower() for n in (recipe.get("food_names") or [])]
+    if name not in aliases:
+        return 0
+    # Exact alias hit — prefer dedicated food-db cards over umbrella curated aliases.
+    if rname == name:
+        return 800
+    if recipe.get("source") == "food_db":
+        return 700
+    # Curated catch-all cards (many aliases) should lose to specific recipes.
+    return max(100, 400 - (len(aliases) - 1) * 25)
+
+
 def find_recipe_for_food_name(food_name: Optional[str]) -> Optional[Dict[str, Any]]:
     if not food_name:
         return None
@@ -403,19 +438,24 @@ def find_recipe_for_food_name(food_name: Optional[str]) -> Optional[Dict[str, An
         return None
 
     recipes = _merged_recipes(published_only=True)
+    target_slug = _slugify(name)
 
+    scored: List[tuple[int, str, Dict[str, Any]]] = []
     for recipe in recipes:
-        for n in recipe.get("food_names") or []:
-            if n.lower() == name:
-                return recipe
+        score = _recipe_name_match_score(recipe, name, target_slug)
+        if score > 0:
+            scored.append((score, recipe["name"].lower(), recipe))
 
-    for recipe in recipes:
-        if recipe["name"].lower() == name:
-            return recipe
+    if scored:
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return scored[0][2]
 
+    # Loose substring fallback — only when the shorter token is long enough to be meaningful.
     for recipe in recipes:
         for n in recipe.get("food_names") or [recipe["name"]]:
             nl = n.lower()
+            if len(nl) < 5 or len(name) < 5:
+                continue
             if name in nl or nl in name:
                 return recipe
 

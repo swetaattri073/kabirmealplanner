@@ -182,6 +182,7 @@ export default function ChatScreen() {
     setMsgs(newMsgs);
     setLoading(true);
     resetIdleTimer();
+    requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: true }));
 
     const local = await incrementChatCount();
     setDailyCount(local.count);

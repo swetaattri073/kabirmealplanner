@@ -115,6 +115,43 @@ FIRST_FOODS = [
 ]
 
 
+# Parent-facing checklist labels that differ from Food.name in the catalogue.
+WEANING_CATALOG_ALIASES = {
+    'rice cereal': 'Rice Cereal (Homemade)',
+    'moong dal water': 'Moong Dal Soup',
+    'dalia': 'Wheat Dalia with Milk',
+    'curd': 'Curd/Yogurt',
+    'spinach': 'Spinach/Palak',
+    'roti': 'Roti/Chapati',
+    'rajma': 'Rajma (Kidney Beans)',
+    'bottle gourd': 'Bottle Gourd/Lauki',
+}
+
+
+def weaning_names_match(checklist_name: str, catalog_name: str) -> bool:
+    """True when a catalogue row represents a weaning checklist food."""
+    checklist = (checklist_name or '').strip()
+    catalog = (catalog_name or '').strip()
+    if not checklist or not catalog:
+        return False
+    if checklist.lower() == catalog.lower():
+        return True
+    alias = WEANING_CATALOG_ALIASES.get(checklist.lower())
+    if alias and alias.lower() == catalog.lower():
+        return True
+    from chat_assistant import find_matching_food
+    if find_matching_food([{'name': catalog}], checklist):
+        return True
+    return bool(find_matching_food([{'name': checklist}], catalog))
+
+
+def _find_tried_entry(checklist_name: str, tried: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    for entry in tried:
+        if weaning_names_match(checklist_name, entry.get('name') or ''):
+            return entry
+    return None
+
+
 # Current guidance is to introduce these early and one at a time, not to delay
 # them. Peanut and egg first because that is where the trial evidence is
 # strongest.
@@ -235,18 +272,12 @@ def build_journey(
     stage = stage_for_age(age_months)
     allowed_stages = set(_stages_up_to(stage['key']))
 
-    tried_by_name = {}
-    for entry in tried:
-        name = (entry.get('name') or '').strip().lower()
-        if name:
-            tried_by_name[name] = entry
-
     # A food only counts as introduced once it has actually been offered.
     done, todo = [], []
     for food in FIRST_FOODS:
         if food['stage'] not in allowed_stages:
             continue
-        record = tried_by_name.get(food['name'].strip().lower())
+        record = _find_tried_entry(food['name'], tried)
         item = {
             'name': food['name'],
             'hindi': food['hindi'],
@@ -294,7 +325,7 @@ def build_journey(
     for food in FIRST_FOODS:
         if food['stage'] not in allowed_stages:
             continue
-        record = tried_by_name.get(food['name'].strip().lower())
+        record = _find_tried_entry(food['name'], tried)
         checklist.append({
             'name': food['name'],
             'hindi': food['hindi'],
@@ -340,11 +371,23 @@ def build_journey(
 
 def match_food_id_for_name(db_session, food_name: str):
     """Resolve a weaning checklist food name to a Food row id, if any."""
+    from chat_assistant import find_matching_food
     from models import Food
+
     name = (food_name or '').strip()
     if not name:
         return None
+
     exact = Food.query.filter(Food.name.ilike(name)).first()
     if exact:
         return exact.id
-    return None
+
+    alias = WEANING_CATALOG_ALIASES.get(name.lower())
+    if alias:
+        aliased = Food.query.filter(Food.name.ilike(alias)).first()
+        if aliased:
+            return aliased.id
+
+    catalog = [{'id': f.id, 'name': f.name} for f in Food.query.all()]
+    match = find_matching_food(catalog, name)
+    return match['id'] if match else None
