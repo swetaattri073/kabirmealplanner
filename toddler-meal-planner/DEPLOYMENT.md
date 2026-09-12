@@ -3,6 +3,21 @@
 > **Production app lives in this folder.** Deploy from `toddler-meal-planner/`.
 > The React app at the repo root is optional and is not required for production.
 
+## Automated deploy (recommended)
+
+Idempotent scripts (fresh install **or** update) live in
+[`scripts/deploy/`](scripts/deploy/README.md):
+
+```bash
+# From your Mac / CI / Cursor agent (SSH into the server and run deploy.sh)
+cd toddler-meal-planner/scripts/deploy
+DEPLOY_HOST=YOUR_EC2_IP DEPLOY_SSH_KEY=~/.ssh/key.pem ./remote-deploy.sh
+```
+
+- GitHub Action: **Actions → Deploy LittleBowl to EC2** (needs `DEPLOY_HOST` + `DEPLOY_SSH_KEY` secrets)
+- Data migrate when old/new servers cannot talk: `migrate-export.sh` → scp via your Mac → `migrate-import.sh`
+- See [`scripts/deploy/README.md`](scripts/deploy/README.md) for the full migrate cutover.
+
 ## Quick Comparison
 
 | Method | Difficulty | Cost | Setup Time |
