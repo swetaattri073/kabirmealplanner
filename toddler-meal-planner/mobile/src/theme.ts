@@ -71,6 +71,7 @@ export const spacing = {
 export const MEAL_ORDER = [
   'breakfast',
   'mid_morning_snack',
+  'school_lunch',
   'lunch',
   'evening_snack',
   'dinner',
@@ -79,6 +80,7 @@ export const MEAL_ORDER = [
 export const MEAL_LABELS: Record<string, string> = {
   breakfast: 'Breakfast',
   mid_morning_snack: 'Mid-morning snack',
+  school_lunch: 'School lunchbox',
   lunch: 'Lunch',
   evening_snack: 'Evening snack',
   dinner: 'Dinner',
@@ -87,6 +89,7 @@ export const MEAL_LABELS: Record<string, string> = {
 export const MEAL_EMOJI: Record<string, string> = {
   breakfast: '🥣',
   mid_morning_snack: '🍌',
+  school_lunch: '🍱',
   lunch: '🍲',
   evening_snack: '🍎',
   dinner: '🥗',
@@ -95,6 +98,7 @@ export const MEAL_EMOJI: Record<string, string> = {
 export const DEFAULT_REMINDER_TIMES: Record<string, string> = {
   breakfast: '08:00',
   mid_morning_snack: '10:30',
+  school_lunch: '11:00',
   lunch: '12:30',
   evening_snack: '16:00',
   dinner: '19:00',

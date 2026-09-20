@@ -491,7 +491,7 @@ class NutritionEngine:
             })
 
         # Stable meal order
-        order = ['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner']
+        order = ['breakfast', 'mid_morning_snack', 'school_lunch', 'lunch', 'evening_snack', 'dinner']
         meals.sort(key=lambda m: order.index(m['meal_type']) if m['meal_type'] in order else 99)
 
         return {

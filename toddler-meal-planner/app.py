@@ -50,7 +50,8 @@ from who_growth import (
 )
 from chat_assistant import sources_for_text
 from sqlalchemy.exc import IntegrityError
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe, ChatUsage, GrowthRecord, SavedRecipe
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe, ChatUsage, GrowthRecord, SavedRecipe, SchoolLunchboxOption
+from school_lunchbox import init_school_lunchbox_options
 from admin_stats import build_admin_stats
 from analytics import record_analytics_event
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
@@ -362,6 +363,7 @@ with app.app_context():
     except Exception as e:
         app.logger.warning('Schema patch skipped: %s', e)
     init_food_database(db.session, Food)
+    init_school_lunchbox_options(db.session, Food, SchoolLunchboxOption)
 
 
 # Context processors for templates
@@ -1028,10 +1030,11 @@ def log_meal_page(toddler_id):
         logged_by_meal=logged_by_meal,
         always_hidden_veggies=always_hidden,
         hidden_veggie_options=hidden_veggie_options,
-        meal_order=['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner'],
+        meal_order=['breakfast', 'mid_morning_snack', 'school_lunch', 'lunch', 'evening_snack', 'dinner'],
         meal_labels={
             'breakfast': '🌅 Breakfast',
             'mid_morning_snack': '🍎 Mid-Morning Snack',
+            'school_lunch': '🍱 School Lunchbox',
             'lunch': '🍱 Lunch',
             'evening_snack': '🥛 Evening Snack',
             'dinner': '🌙 Dinner',
@@ -1284,19 +1287,25 @@ def _normalize_feeding_preferences(raw, existing=None):
     """Merge parent cooking habits into a stable dict.
 
     Hidden veggies stay ON by default unless the parent explicitly turns them off.
+    goes_to_school defaults OFF; when on, mid-morning becomes a packed school lunch.
     """
     base = {
         'always_hidden_veggies': True,
+        'goes_to_school': False,
     }
     if isinstance(existing, dict):
         base.update(existing)
-    # Re-apply default if existing never set the key
+    # Re-apply defaults if existing never set the keys
     if 'always_hidden_veggies' not in base:
         base['always_hidden_veggies'] = True
+    if 'goes_to_school' not in base:
+        base['goes_to_school'] = False
     if not isinstance(raw, dict):
         return base
     if 'always_hidden_veggies' in raw:
         base['always_hidden_veggies'] = bool(raw.get('always_hidden_veggies'))
+    if 'goes_to_school' in raw:
+        base['goes_to_school'] = bool(raw.get('goes_to_school'))
     return base
 
 
@@ -1547,6 +1556,23 @@ def get_foods_status():
     })
 
 
+@app.route('/api/foods/school-lunchbox', methods=['GET'])
+def list_school_lunchbox_options():
+    """List packed school/daycare lunchbox options (separate DB catalog)."""
+    age = request.args.get('age_months', type=int)
+    q = SchoolLunchboxOption.query.order_by(
+        SchoolLunchboxOption.messy_level.asc(),
+        SchoolLunchboxOption.holds_hours.desc(),
+    )
+    if age is not None:
+        q = q.filter(SchoolLunchboxOption.suitable_from_months <= age)
+    rows = q.all()
+    return jsonify({
+        'count': len(rows),
+        'options': [row.to_dict() for row in rows],
+    })
+
+
 @app.route('/api/foods/reseed', methods=['POST'])
 def reseed_foods():
     """Force re-seed the food database"""
@@ -1558,13 +1584,16 @@ def reseed_foods():
     
     # Re-seed
     init_food_database(db.session, Food, force_reseed=True)
+    init_school_lunchbox_options(db.session, Food, SchoolLunchboxOption, force_reseed=True)
     
     new_count = Food.query.count()
+    lunchbox_count = SchoolLunchboxOption.query.count()
     
     return jsonify({
         'success': True,
-        'message': f'Food database re-seeded with {new_count} foods',
-        'count': new_count
+        'message': f'Food database re-seeded with {new_count} foods and {lunchbox_count} school lunchbox options',
+        'count': new_count,
+        'school_lunchbox_count': lunchbox_count,
     })
 
 
@@ -2768,6 +2797,7 @@ def recognize_food():
         category_prefs = {
             'breakfast': ['breakfast', 'grain', 'dairy', 'fruit'],
             'mid_morning_snack': ['fruit', 'dairy', 'snack'],
+            'school_lunch': ['grain', 'combo', 'protein', 'snack'],
             'lunch': ['dal', 'curry', 'vegetable', 'grain', 'complete'],
             'evening_snack': ['fruit', 'dairy', 'snack'],
             'dinner': ['dal', 'curry', 'vegetable', 'grain', 'complete'],

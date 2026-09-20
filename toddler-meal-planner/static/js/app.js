@@ -88,6 +88,7 @@ function getMealTypeIcon(mealType) {
     const icons = {
         'breakfast': '🌅',
         'mid_morning_snack': '🍎',
+        'school_lunch': '🍱',
         'lunch': '🍱',
         'evening_snack': '🥛',
         'dinner': '🌙'
@@ -96,6 +97,7 @@ function getMealTypeIcon(mealType) {
 }
 
 function formatMealType(mealType) {
+    if (mealType === 'school_lunch') return 'School Lunchbox';
     return mealType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
@@ -775,6 +777,7 @@ let weeklyPlanMediaBound = false;
 const MEAL_TYPE_ORDER = [
     'breakfast',
     'mid_morning_snack',
+    'school_lunch',
     'lunch',
     'evening_snack',
     'dinner',
@@ -1268,6 +1271,7 @@ async function loadPreferences(toddlerId) {
 
 async function loadFeedingPreferences(toddlerId) {
     const checkbox = document.getElementById('pref-hidden-veggies');
+    const schoolCheckbox = document.getElementById('pref-goes-to-school');
     const saveBtn = document.getElementById('save-feeding-prefs');
     if (!checkbox || !saveBtn) return;
 
@@ -1275,6 +1279,9 @@ async function loadFeedingPreferences(toddlerId) {
         const toddler = await apiCall(`/toddlers/${toddlerId}`);
         const prefs = toddler.feeding_preferences || {};
         checkbox.checked = prefs.always_hidden_veggies !== false;
+        if (schoolCheckbox) {
+            schoolCheckbox.checked = !!prefs.goes_to_school;
+        }
     } catch (e) {
         console.warn('Could not load feeding preferences', e);
     }
@@ -1289,16 +1296,27 @@ async function loadFeedingPreferences(toddlerId) {
             status.textContent = 'Saving…';
         }
         try {
+            const goesToSchool = !!(schoolCheckbox && schoolCheckbox.checked);
             await apiCall(`/toddlers/${toddlerId}`, 'PUT', {
                 feeding_preferences: {
                     always_hidden_veggies: !!checkbox.checked,
+                    goes_to_school: goesToSchool,
                 },
             });
             if (status) {
                 status.className = 'feeding-pref-status is-ok';
-                status.textContent = checkbox.checked
-                    ? 'Saved. Use Log Meal veggie chips so they count toward nutrition — regenerate the plan for add-in tips.'
-                    : 'Saved. Hidden-veggie tips are turned off.';
+                const parts = [];
+                parts.push(
+                    checkbox.checked
+                        ? 'Hidden veggies on.'
+                        : 'Hidden-veggie tips off.'
+                );
+                parts.push(
+                    goesToSchool
+                        ? 'School lunchbox replaces mid-morning — regenerate the weekly plan.'
+                        : 'Home mid-morning snack restored — regenerate the weekly plan if needed.'
+                );
+                status.textContent = 'Saved. ' + parts.join(' ');
             }
             if (typeof showToast === 'function') {
                 showToast('Cooking habits saved', 'success');
@@ -1484,6 +1502,7 @@ async function createToddler(event) {
         allergies: allergies,
         feeding_preferences: {
             always_hidden_veggies: !!form.querySelector('input[name="always_hidden_veggies"]:checked'),
+            goes_to_school: !!form.querySelector('input[name="goes_to_school"]:checked'),
         },
     };
     

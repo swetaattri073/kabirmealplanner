@@ -76,7 +76,7 @@ UPDATE_WEEKLY_PLAN_TOOL = {
                             },
                             "mealType": {
                                 "type": "string",
-                                "description": "breakfast, lunch, dinner, mid_morning_snack, or evening_snack. Optional.",
+                                "description": "breakfast, lunch, dinner, mid_morning_snack, school_lunch, or evening_snack. Optional.",
                             },
                             "day": {
                                 "type": "string",

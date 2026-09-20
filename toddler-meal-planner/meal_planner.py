@@ -200,6 +200,34 @@ class MealPlanner:
         # Get nutrition gaps
         weekly_nutrition = self.nutrition_engine.get_weekly_nutrition(toddler)
         nutrition_gaps = self._identify_nutrition_gaps(weekly_nutrition)
+
+        # When school lunch replaces mid-morning, drop orphan mid-morning slots
+        # (unless already logged today) so the week does not keep both.
+        if 'school_lunch' in all_meal_types:
+            today = date.today()
+            changed = False
+            for key in list(existing_map.keys()):
+                day_i, meal_t = key
+                if meal_t != 'mid_morning_snack':
+                    continue
+                plan = existing_map[key]
+                plan_date = week_start + timedelta(days=day_i)
+                if plan_date < today:
+                    continue
+                if plan_date == today:
+                    logged = MealLog.query.filter_by(
+                        toddler_id=toddler.id,
+                        date=today,
+                        meal_type='mid_morning_snack',
+                    ).first()
+                    if logged:
+                        continue
+                self.db.delete(plan)
+                existing_map.pop(key, None)
+                changed = True
+            if changed:
+                self.db.commit()
+                existing_plans = list(existing_map.values())
         
         # Generate plan for each day
         weekly_plan = list(existing_plans) if existing_map else []
@@ -263,7 +291,7 @@ class MealPlanner:
                                 for k, v in nutrients.items():
                                     day_nutrition[k] += v
                 else:
-                    # For breakfast and snacks, use single food selection
+                    # For breakfast, snacks, and school lunchbox — single food selection
                     food = self._select_food_for_meal(
                         toddler=toddler,
                         meal_type=meal_type,
@@ -277,8 +305,32 @@ class MealPlanner:
                     )
                     
                     if food:
-                        alternatives = {'backup': food.get('backup')}
-                        if getattr(toddler, 'always_hides_veggies', lambda: False)():
+                        backup_raw = food.get('backup')
+                        backup = None
+                        if isinstance(backup_raw, dict):
+                            backup = {
+                                k: v for k, v in backup_raw.items()
+                                if k != 'food' and not hasattr(v, 'to_dict')
+                            }
+                            if backup_raw.get('food') is not None and hasattr(backup_raw['food'], 'name'):
+                                backup['food_name'] = backup_raw['food'].name
+                                backup['food_id'] = backup_raw['food'].id
+                        alternatives = {'backup': backup}
+                        reason = food.get('reason', '') or ''
+                        if meal_type == 'school_lunch':
+                            from models import SchoolLunchboxOption
+                            opt = SchoolLunchboxOption.query.filter_by(
+                                food_id=food['food'].id
+                            ).first()
+                            if opt:
+                                alternatives['school_lunchbox'] = {
+                                    'holds_hours': opt.holds_hours,
+                                    'messy_level': opt.messy_level,
+                                    'packing_notes': opt.packing_notes,
+                                }
+                                if opt.packing_notes:
+                                    reason = (reason + ' — ' if reason else '') + opt.packing_notes
+                        elif getattr(toddler, 'always_hides_veggies', lambda: False)():
                             alternatives['add_ins'] = self._get_nutritious_addins(
                                 toddler,
                                 nutrition_gaps,
@@ -295,7 +347,7 @@ class MealPlanner:
                             food_id=food['food'].id,
                             alternatives=alternatives,
                             is_generated=True,
-                            nutrition_reason=food.get('reason', '')
+                            nutrition_reason=reason
                         )
                         self.db.add(plan_entry)
                         day_plan.append(plan_entry)
@@ -1158,6 +1210,28 @@ class MealPlanner:
             
             return filtered
         
+        elif meal_type == 'school_lunch':
+            # Packed tiffin: only foods from the school_lunchbox_options catalog.
+            from models import SchoolLunchboxOption
+            from school_lunchbox import school_lunchbox_food_ids
+            allowed_ids = set(
+                school_lunchbox_food_ids(
+                    self.db, SchoolLunchboxOption, age_months=age_months
+                )
+            )
+            if not allowed_ids:
+                # Fallback: dry-ish grains/combos that hold well if catalog empty
+                lunchbox_keywords = [
+                    'idli', 'paratha', 'poha', 'upma', 'sandwich', 'cheela',
+                    'chilla', 'dosa', 'uttapam', 'roti', 'pulao', 'lemon rice',
+                ]
+                return [
+                    f for f in foods
+                    if f.category in ('grain', 'combo', 'protein', 'snack')
+                    and any(kw in f.name.lower() for kw in lunchbox_keywords)
+                ]
+            return [f for f in foods if f.id in allowed_ids]
+
         elif 'snack' in meal_type:
             # Snacks can include fruits, dairy (including cheese), and snack items
             return [f for f in foods if f.category in ['fruit', 'dairy', 'snack']]
@@ -1261,6 +1335,12 @@ class MealPlanner:
                     'recipe_name': recipe['name'] if recipe else None,
                     'recipes': [{'slug': recipe['slug'], 'name': recipe['name']}] if recipe else [],
                 }
+                if isinstance(entry.alternatives, dict) and entry.alternatives.get('school_lunchbox'):
+                    single['school_lunchbox'] = entry.alternatives.get('school_lunchbox')
+                    single['alternatives'] = {
+                        'school_lunchbox': entry.alternatives.get('school_lunchbox'),
+                        'backup': backup,
+                    }
                 if meal_prep:
                     single['prep_note'] = meal_prep
                 days[day_key]['meals'][entry.meal_type] = single
@@ -1367,6 +1447,12 @@ class MealPlanner:
             'mid_morning': 'mid_morning_snack',
             'mid_morning_snack': 'mid_morning_snack',
             'mid-morning snack': 'mid_morning_snack',
+            'school lunch': 'school_lunch',
+            'school_lunch': 'school_lunch',
+            'school lunchbox': 'school_lunch',
+            'lunchbox': 'school_lunch',
+            'tiffin': 'school_lunch',
+            'packed lunch': 'school_lunch',
         }
 
         foods = [{'id': f.id, 'name': f.name} for f in Food.query.all()]

@@ -154,8 +154,11 @@ class Toddler(db.Model):
     allergies = db.Column(JSON, default=list)  # List of allergen strings
     dietary_preference = db.Column(db.String(50), default='vegetarian')  # vegetarian, non-vegetarian, eggetarian
     meal_schedule = db.Column(JSON, nullable=True)  # Custom schedule if provided
-    # Parent cooking / serving habits, e.g. {"always_hidden_veggies": true}
+    # Parent cooking / serving habits, e.g.
+    # {"always_hidden_veggies": true, "goes_to_school": false}
     # Missing always_hidden_veggies is treated as True (on by default).
+    # When goes_to_school is True, mid_morning_snack is replaced by school_lunch
+    # (packed lunchbox options that hold 2–3 hours and are not too messy).
     feeding_preferences = db.Column(JSON, default=dict)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -347,43 +350,57 @@ class Toddler(db.Model):
         return unique_priorities
     
     def get_recommended_schedule(self):
-        """Returns recommended meal schedule based on age"""
+        """Returns recommended meal schedule based on age (+ school lunchbox)."""
         if self.meal_schedule:
-            return self.meal_schedule
-        
-        # Weaning ramps up gradually. Giving a 6-month-old the same four slots
-        # as an 11-month-old overstates how much solid food they need and makes
-        # a normal day look like a failed one on the dashboard.
-        if self.age_months < 8:
-            return {
-                'meals': ['breakfast', 'lunch'],
-                'snacks': [],
-                'milk_feeds': 5,  # Milk is still the main source of nutrition
-            }
-        elif self.age_months < 10:
-            return {
-                'meals': ['breakfast', 'lunch', 'dinner'],
-                'snacks': [],
-                'milk_feeds': 4
-            }
-        elif self.age_months < 12:
-            return {
-                'meals': ['breakfast', 'lunch', 'dinner'],
-                'snacks': ['mid_morning_snack'],
-                'milk_feeds': 3  # Breast/formula feeds
-            }
-        elif self.age_months < 24:
-            return {
-                'meals': ['breakfast', 'lunch', 'dinner'],
-                'snacks': ['mid_morning_snack', 'evening_snack'],
-                'milk_feeds': 2
+            schedule = {
+                'meals': list((self.meal_schedule or {}).get('meals') or []),
+                'snacks': list((self.meal_schedule or {}).get('snacks') or []),
+                'milk_feeds': (self.meal_schedule or {}).get('milk_feeds', 0),
             }
         else:
-            return {
-                'meals': ['breakfast', 'lunch', 'dinner'],
-                'snacks': ['mid_morning_snack', 'evening_snack'],
-                'milk_feeds': 1
-            }
+            # Weaning ramps up gradually. Giving a 6-month-old the same four slots
+            # as an 11-month-old overstates how much solid food they need and makes
+            # a normal day look like a failed one on the dashboard.
+            if self.age_months < 8:
+                schedule = {
+                    'meals': ['breakfast', 'lunch'],
+                    'snacks': [],
+                    'milk_feeds': 5,  # Milk is still the main source of nutrition
+                }
+            elif self.age_months < 10:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': [],
+                    'milk_feeds': 4,
+                }
+            elif self.age_months < 12:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': ['mid_morning_snack'],
+                    'milk_feeds': 3,  # Breast/formula feeds
+                }
+            elif self.age_months < 24:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': ['mid_morning_snack', 'evening_snack'],
+                    'milk_feeds': 2,
+                }
+            else:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': ['mid_morning_snack', 'evening_snack'],
+                    'milk_feeds': 1,
+                }
+
+        # School / daycare: pack a lunchbox meal instead of the home mid-morning snack.
+        if self.goes_to_school():
+            snacks = list(schedule.get('snacks') or [])
+            snacks = ['school_lunch' if s == 'mid_morning_snack' else s for s in snacks]
+            if 'school_lunch' not in snacks and self.age_months >= 12:
+                snacks = ['school_lunch'] + snacks
+            schedule = dict(schedule)
+            schedule['snacks'] = snacks
+        return schedule
 
     def get_feeding_preferences(self):
         """Parent cooking/serving habits used by meal planning and tips."""
@@ -395,7 +412,12 @@ class Toddler(db.Model):
             always_hidden = bool(prefs.get('always_hidden_veggies'))
         return {
             'always_hidden_veggies': always_hidden,
+            'goes_to_school': bool(prefs.get('goes_to_school', False)),
         }
+
+    def goes_to_school(self):
+        """True when the toddler/child attends school or daycare (packed tiffin)."""
+        return bool(self.get_feeding_preferences().get('goes_to_school'))
 
     def always_hides_veggies(self):
         """True when the parent prefers to sneak vegetables into most meals (default on)."""
@@ -570,6 +592,39 @@ class Food(db.Model):
         }
 
 
+class SchoolLunchboxOption(db.Model):
+    """Packed school/daycare lunch options (hold 2–3 hours, low mess).
+
+    Separate catalog from everyday snacks. When a toddler has
+    feeding_preferences.goes_to_school, the mid-morning slot uses these
+    foods instead of a home mid_morning_snack.
+    """
+    __tablename__ = 'school_lunchbox_options'
+
+    id = db.Column(db.Integer, primary_key=True)
+    food_id = db.Column(db.Integer, db.ForeignKey('foods.id'), nullable=False, unique=True, index=True)
+    holds_hours = db.Column(db.Integer, default=3)
+    messy_level = db.Column(db.Integer, default=0)  # 0=clean finger food, 1=ok insulated, 2=avoid
+    packing_notes = db.Column(db.String(500), nullable=True)
+    suitable_from_months = db.Column(db.Integer, default=12)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    food = db.relationship('Food', backref=db.backref('school_lunchbox_option', uselist=False))
+
+    def to_dict(self):
+        food_dict = self.food.to_dict() if self.food else {}
+        return {
+            'id': self.id,
+            'food_id': self.food_id,
+            'food': food_dict,
+            'name': food_dict.get('name'),
+            'holds_hours': self.holds_hours,
+            'messy_level': self.messy_level,
+            'packing_notes': self.packing_notes,
+            'suitable_from_months': self.suitable_from_months,
+        }
+
+
 class MealLog(db.Model):
     """Daily meal log for tracking what toddler ate"""
     __tablename__ = 'meal_logs'
@@ -579,7 +634,7 @@ class MealLog(db.Model):
     food_id = db.Column(db.Integer, db.ForeignKey('foods.id'), nullable=True)
     
     date = db.Column(db.Date, nullable=False, default=date.today)
-    meal_type = db.Column(db.String(50), nullable=False)  # breakfast, lunch, dinner, mid_morning_snack, evening_snack
+    meal_type = db.Column(db.String(50), nullable=False)  # breakfast, lunch, dinner, mid_morning_snack, school_lunch, evening_snack
     
     # If custom food not in database
     custom_food_name = db.Column(db.String(200), nullable=True)
