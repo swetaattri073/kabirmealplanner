@@ -405,6 +405,7 @@ SCHOOL_LUNCHBOX_ITEMS: List[Dict[str, Any]] = [
         "messy_level": 0,
         "packing_notes": "Dry side. Off-cob kernels for under 2s.",
         "suitable_from_months": 12,
+        "role": "side",
     },
     {
         "food_name": "Makhana",
@@ -412,20 +413,112 @@ SCHOOL_LUNCHBOX_ITEMS: List[Dict[str, Any]] = [
         "messy_level": 0,
         "packing_notes": "Light roasted fox nuts — dry, no mess. Great crunchy side.",
         "suitable_from_months": 24,
+        "role": "side",
     },
+    # --- Fruit companions (always pack 1 with the main) ---
     {
         "food_name": "Apple",
         "holds_hours": 3,
         "messy_level": 0,
-        "packing_notes": "Sliced or cubed; lemon drop reduces browning. Side, not the only meal.",
+        "packing_notes": "Sliced or cubed; lemon drop reduces browning. Pack as the daily fruit with the main.",
         "suitable_from_months": 12,
+        "role": "fruit",
     },
     {
         "food_name": "Banana",
         "holds_hours": 2,
         "messy_level": 1,
-        "packing_notes": "Pack whole to avoid mush; peel at school. Best as a side.",
+        "packing_notes": "Pack whole to avoid mush; peel at school. Daily fruit with the main.",
         "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Grapes",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Halve lengthways for under 4s. Dry fruit side with the main.",
+        "suitable_from_months": 18,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Orange",
+        "holds_hours": 3,
+        "messy_level": 1,
+        "packing_notes": "Peeled segments; pat dry. Vitamin C fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Papaya",
+        "holds_hours": 2,
+        "messy_level": 1,
+        "packing_notes": "Ripe cubes in a dry pot. Soft fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Pear",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Soft ripe slices or cubes. Mild fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Guava",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Soft ripe, de-seeded cubes. High vitamin C fruit with the main.",
+        "suitable_from_months": 15,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Chikoo/Sapota",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Ripe soft cubes. Naturally sweet fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Sweet Lime",
+        "holds_hours": 3,
+        "messy_level": 1,
+        "packing_notes": "Peeled segments; pat dry. Hydrating fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Muskmelon",
+        "holds_hours": 2,
+        "messy_level": 1,
+        "packing_notes": "Seedless cubes; cool pack. Summer fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Pomegranate",
+        "holds_hours": 3,
+        "messy_level": 1,
+        "packing_notes": "Arils in a small dry pot. Antioxidant fruit with the main.",
+        "suitable_from_months": 18,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Mango",
+        "holds_hours": 2,
+        "messy_level": 1,
+        "packing_notes": "Ripe cubes only when in season. Fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
+    },
+    {
+        "food_name": "Watermelon",
+        "holds_hours": 2,
+        "messy_level": 1,
+        "packing_notes": "Seedless cubes; insulated box. Hydrating fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "fruit",
     },
     {
         "food_name": "Cucumber",
@@ -433,6 +526,7 @@ SCHOOL_LUNCHBOX_ITEMS: List[Dict[str, Any]] = [
         "messy_level": 0,
         "packing_notes": "Peeled sticks — dry side. Pat dry before packing.",
         "suitable_from_months": 12,
+        "role": "side",
     },
     {
         "food_name": "Carrot",
@@ -440,13 +534,15 @@ SCHOOL_LUNCHBOX_ITEMS: List[Dict[str, Any]] = [
         "messy_level": 0,
         "packing_notes": "Steamed soft sticks for toddlers; raw only for confident chewers 24m+.",
         "suitable_from_months": 12,
+        "role": "side",
     },
     {
         "food_name": "Tomato Cucumber Salad",
         "holds_hours": 2,
         "messy_level": 1,
-        "packing_notes": "Pack in a leakproof pot; drain excess liquid.",
+        "packing_notes": "Pack in a leakproof pot; drain excess liquid. Optional veggie side.",
         "suitable_from_months": 18,
+        "role": "side",
     },
     {
         "food_name": "Egg (Boiled)",
@@ -572,7 +668,7 @@ SCHOOL_LUNCHBOX_ITEMS: List[Dict[str, Any]] = [
         "food_name": "Cheese Paratha",
         "holds_hours": 2,
         "messy_level": 0,
-        "packing_notes": "Light cheese stuffing. Cool so cheese firms for tiffin.",
+        "packing_notes": "Light cheese stuffing (calcium & protein from cheese). Cool so cheese firms for tiffin.",
         "suitable_from_months": 18,
     },
     {
@@ -596,7 +692,74 @@ SCHOOL_LUNCHBOX_ITEMS: List[Dict[str, Any]] = [
         "packing_notes": "Same thepla method with spinach puree. Iron boost; stays soft for hours.",
         "suitable_from_months": 18,
     },
+    # --- Cheese mains (nutrition includes cheese calcium & protein) ---
+    {
+        "food_name": "Cheese Sandwich",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Mild grated cheese in soft bread. Cool so cheese firms; cut triangles.",
+        "suitable_from_months": 15,
+    },
+    {
+        "food_name": "Corn Cheese Sandwich",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Corn + grated cheese filling. Calcium from cheese; cool before packing.",
+        "suitable_from_months": 15,
+    },
+    {
+        "food_name": "Chapati Cheese Roll",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Soft roti + cheese (+ tiny grated carrot). Wrap in foil for tiffin.",
+        "suitable_from_months": 15,
+    },
+    {
+        "food_name": "Cheese Toast",
+        "holds_hours": 2,
+        "messy_level": 0,
+        "packing_notes": "Toast with melted mild cheese, cooled and cut. Dry pack.",
+        "suitable_from_months": 15,
+    },
+    {
+        "food_name": "Cheese Pasta",
+        "holds_hours": 2,
+        "messy_level": 1,
+        "packing_notes": "Soft pasta tossed with grated cheese (not watery). Insulated box.",
+        "suitable_from_months": 15,
+    },
+    {
+        "food_name": "Cheese Uttapam",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Same batter topped with grated cheese. Mini size; cool before packing.",
+        "suitable_from_months": 15,
+    },
+    {
+        "food_name": "Cheese Cubes",
+        "holds_hours": 3,
+        "messy_level": 0,
+        "packing_notes": "Mild cheese cubes as a calcium side — still pack a fruit with the main.",
+        "suitable_from_months": 12,
+        "role": "side",
+    },
 ]
+
+
+def lunchbox_item_role(item: Dict[str, Any]) -> str:
+    """main | fruit | side — fruits/sides are companions, not the sole lunchbox meal."""
+    role = (item.get("role") or "").strip().lower()
+    if role in ("main", "fruit", "side"):
+        return role
+    return "main"
+
+
+def lunchbox_names_for_role(role: str) -> List[str]:
+    return [
+        item["food_name"]
+        for item in SCHOOL_LUNCHBOX_ITEMS
+        if lunchbox_item_role(item) == role
+    ]
 
 
 def init_school_lunchbox_options(db_session, Food, SchoolLunchboxOption, force_reseed: bool = False) -> int:
@@ -657,11 +820,33 @@ def _add_missing_options(db_session, Food, SchoolLunchboxOption) -> int:
     return added
 
 
-def school_lunchbox_food_ids(db_session, SchoolLunchboxOption, age_months: Optional[int] = None):
-    """Return food_ids from the school lunchbox list, optionally age-filtered."""
+def school_lunchbox_food_ids(
+    db_session,
+    SchoolLunchboxOption,
+    age_months: Optional[int] = None,
+    roles: Optional[List[str]] = None,
+):
+    """Return food_ids from the school lunchbox list, optionally age- and role-filtered.
+
+    roles: e.g. ['main'] for the primary tiffin dish, ['fruit'] for the daily fruit.
+    Default (None) returns all catalog ids (legacy behaviour).
+    """
     q = SchoolLunchboxOption.query
     if age_months is not None:
         q = q.filter(SchoolLunchboxOption.suitable_from_months <= int(age_months))
     # Prefer less messy options
     q = q.filter(SchoolLunchboxOption.messy_level <= 1)
-    return [row.food_id for row in q.all()]
+    rows = q.all()
+    if not roles:
+        return [row.food_id for row in rows]
+
+    allowed_names = {
+        name
+        for role in roles
+        for name in lunchbox_names_for_role(role)
+    }
+    return [
+        row.food_id
+        for row in rows
+        if row.food and row.food.name in allowed_names
+    ]

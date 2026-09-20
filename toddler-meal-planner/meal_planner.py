@@ -330,6 +330,29 @@ class MealPlanner:
                                 }
                                 if opt.packing_notes:
                                     reason = (reason + ' — ' if reason else '') + opt.packing_notes
+                            # Complete lunchbox = 1 main + 1 fruit every day
+                            fruit = self._select_school_lunch_fruit(
+                                toddler=toddler,
+                                suitable_foods=suitable_foods,
+                                used_foods=used_foods,
+                                exclude_food_id=food['food'].id,
+                            )
+                            if fruit:
+                                fruit_payload = {
+                                    'food_id': fruit.id,
+                                    'food_name': fruit.name,
+                                    'category': getattr(fruit, 'category', 'fruit'),
+                                }
+                                alternatives['fruit'] = fruit_payload
+                                reason = (
+                                    (reason + ' — ' if reason else '')
+                                    + f'Pack with {fruit.name} for a complete lunchbox.'
+                                )
+                                used_foods[fruit.id] += 1
+                                serving = fruit.get_serving_for_age(toddler.age_months)
+                                nutrients = fruit.get_nutrients_for_serving(serving)
+                                for k, v in nutrients.items():
+                                    day_nutrition[k] += v
                         elif getattr(toddler, 'always_hides_veggies', lambda: False)():
                             alternatives['add_ins'] = self._get_nutritious_addins(
                                 toddler,
@@ -1024,6 +1047,36 @@ class MealPlanner:
         plan_entry.nutrition_reason = reason or plan_entry.nutrition_reason
         return True
     
+    def _select_school_lunch_fruit(self, toddler, suitable_foods, used_foods, exclude_food_id=None):
+        """Pick one age-safe fruit companion for the school lunchbox main."""
+        from models import SchoolLunchboxOption
+        from school_lunchbox import school_lunchbox_food_ids
+
+        age_months = getattr(toddler, 'age_months', None)
+        fruit_ids = set(
+            school_lunchbox_food_ids(
+                self.db,
+                SchoolLunchboxOption,
+                age_months=age_months,
+                roles=['fruit'],
+            )
+        )
+        candidates = [
+            f for f in suitable_foods
+            if f.id in fruit_ids and f.id != exclude_food_id
+        ]
+        if not candidates:
+            candidates = [
+                f for f in suitable_foods
+                if getattr(f, 'category', None) == 'fruit' and f.id != exclude_food_id
+            ]
+        if not candidates:
+            return None
+
+        # Prefer fruits used least this week for variety
+        candidates.sort(key=lambda f: (used_foods.get(f.id, 0), f.name.lower()))
+        return candidates[0]
+
     def _serialize_complete_meal(self, complete_meal):
         """Remove ORM Food objects so alternatives can be stored as JSON."""
         if not complete_meal:
@@ -1211,12 +1264,15 @@ class MealPlanner:
             return filtered
         
         elif meal_type == 'school_lunch':
-            # Packed tiffin: only foods from the school_lunchbox_options catalog.
+            # Packed tiffin: catalog mains only (fruit is paired separately every day).
             from models import SchoolLunchboxOption
             from school_lunchbox import school_lunchbox_food_ids
             allowed_ids = set(
                 school_lunchbox_food_ids(
-                    self.db, SchoolLunchboxOption, age_months=age_months
+                    self.db,
+                    SchoolLunchboxOption,
+                    age_months=age_months,
+                    roles=['main'],
                 )
             )
             if not allowed_ids:
@@ -1224,6 +1280,7 @@ class MealPlanner:
                 lunchbox_keywords = [
                     'idli', 'paratha', 'poha', 'upma', 'sandwich', 'cheela',
                     'chilla', 'dosa', 'uttapam', 'roti', 'pulao', 'lemon rice',
+                    'cheese', 'pasta', 'toast',
                 ]
                 return [
                     f for f in foods
@@ -1305,10 +1362,16 @@ class MealPlanner:
                     meal_data['prep_note'] = meal_prep
                 days[day_key]['meals'][entry.meal_type] = meal_data
             else:
-                # Single food format (breakfast, snacks)
+                # Single food format (breakfast, snacks) — school_lunch may include fruit
                 backup = None
                 add_ins = []
+                fruit = None
                 if isinstance(entry.alternatives, dict) and 'backup' in entry.alternatives:
+                    backup = entry.alternatives.get('backup')
+                    add_ins = entry.alternatives.get('add_ins') or []
+                    fruit = entry.alternatives.get('fruit')
+                elif isinstance(entry.alternatives, dict) and entry.alternatives.get('fruit'):
+                    fruit = entry.alternatives.get('fruit')
                     backup = entry.alternatives.get('backup')
                     add_ins = entry.alternatives.get('add_ins') or []
                 elif isinstance(entry.alternatives, list) and entry.alternatives:
@@ -1317,6 +1380,8 @@ class MealPlanner:
                 food_name = entry.food.name if entry.food else None
                 recipe = find_recipe_for_food_name(food_name)
                 display = food_name or ''
+                if fruit and isinstance(fruit, dict) and fruit.get('food_name'):
+                    display = f"{display} + {fruit['food_name']}" if display else fruit['food_name']
                 if add_ins:
                     addin_names = [a.get('name') for a in add_ins[:3] if a.get('name')]
                     if addin_names:
@@ -1335,11 +1400,25 @@ class MealPlanner:
                     'recipe_name': recipe['name'] if recipe else None,
                     'recipes': [{'slug': recipe['slug'], 'name': recipe['name']}] if recipe else [],
                 }
+                if fruit and isinstance(fruit, dict):
+                    single['fruit'] = {
+                        'food_id': fruit.get('food_id'),
+                        'food_name': fruit.get('food_name'),
+                        'category': fruit.get('category', 'fruit'),
+                    }
+                    single['main'] = {
+                        'food': entry.food.to_dict() if entry.food else None,
+                        'food_name': food_name or '',
+                        'food_id': entry.food_id,
+                    }
+                    single['summary'] = display
+                    single['lunchbox_complete'] = True
                 if isinstance(entry.alternatives, dict) and entry.alternatives.get('school_lunchbox'):
                     single['school_lunchbox'] = entry.alternatives.get('school_lunchbox')
                     single['alternatives'] = {
                         'school_lunchbox': entry.alternatives.get('school_lunchbox'),
                         'backup': backup,
+                        'fruit': fruit,
                     }
                 if meal_prep:
                     single['prep_note'] = meal_prep

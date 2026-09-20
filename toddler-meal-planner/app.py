@@ -982,9 +982,22 @@ def _meal_log_components(meal):
             name = comp.get('food_name') or (comp.get('food') or {}).get('name')
             if fid and name:
                 components.append({'food_id': fid, 'name': name, 'role': role})
+        fruit = meal.get('fruit') or {}
+        if fruit:
+            fid = fruit.get('food_id')
+            name = fruit.get('food_name')
+            if fid and name:
+                components.append({'food_id': fid, 'name': name, 'role': 'fruit'})
     elif meal.get('food'):
         f = meal['food']
         components.append({'food_id': f['id'], 'name': f['name'], 'role': 'main'})
+        fruit = meal.get('fruit') or {}
+        if fruit.get('food_id') and fruit.get('food_name'):
+            components.append({
+                'food_id': fruit['food_id'],
+                'name': fruit['food_name'],
+                'role': 'fruit',
+            })
     return components
 
 
