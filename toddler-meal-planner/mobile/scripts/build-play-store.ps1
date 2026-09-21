@@ -101,6 +101,7 @@ if (-not (Test-Path $sdk)) {
 Write-Host "==> Android SDK: $sdk"
 
 # --- Prebuild ---
+$env:PLAY_STORE_BUILD = "1"
 if ($Clean -or -not (Test-Path "android")) {
   Write-Host "==> Running expo prebuild --platform android$(if ($Clean) { ' --clean' })..."
   if ($Clean -and (Test-Path "android")) {

@@ -26,7 +26,7 @@
     },
     "android": {
       "package": "com.littlebowl.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#6b8f3c"
@@ -90,7 +90,7 @@
           "android": {
             "minSdkVersion": 24,
             "compileSdkVersion": 36,
-            "targetSdkVersion": 35,
+            "targetSdkVersion": 36,
             "buildToolsVersion": "36.0.0",
             "ndkVersion": "27.1.12297006"
           }
