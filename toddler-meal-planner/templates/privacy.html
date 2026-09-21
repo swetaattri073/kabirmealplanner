@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Privacy Policy for LittleBowl — how we collect, use, and protect your family's meal planning data.">
+    <meta name="theme-color" content="#6b8f3c">
+    <title>Privacy Policy — LittleBowl</title>
+    {% include 'includes/pwa_head.html' %}
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --green: #6b8f3c;
+            --green-dark: #55732f;
+            --cream: #fffaf0;
+            --ink: #1f2a14;
+            --muted: #5c6b4a;
+            --line: #e4ebd8;
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(ellipse 80% 50% at 10% -10%, #e8f5c8 0%, transparent 55%),
+                radial-gradient(ellipse 70% 40% at 100% 0%, #ffe8cc 0%, transparent 50%),
+                linear-gradient(180deg, #f7faf0 0%, #fffaf0 40%, #f3f7ea 100%);
+            min-height: 100dvh;
+            line-height: 1.65;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: calc(0.85rem + var(--safe-top)) 1.25rem 0.85rem;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255, 250, 240, 0.85);
+            backdrop-filter: blur(8px);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            text-decoration: none;
+            color: var(--ink);
+            font-weight: 800;
+            font-size: 1.15rem;
+        }
+
+        .brand img {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #fff;
+            object-fit: cover;
+        }
+
+        .brand .little { color: var(--green); }
+        .brand .bowl { color: #c47a3a; }
+
+        .topbar a.nav-link {
+            color: var(--green-dark);
+            font-weight: 700;
+            text-decoration: none;
+            font-size: 0.95rem;
+        }
+
+        .wrap {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 1.75rem 1.25rem calc(3rem + var(--safe-bottom));
+        }
+
+        h1 {
+            font-size: clamp(1.75rem, 4vw, 2.25rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.35rem;
+        }
+
+        .meta {
+            color: var(--muted);
+            font-size: 0.95rem;
+            margin-bottom: 1.75rem;
+        }
+
+        h2 {
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin: 1.75rem 0 0.65rem;
+            color: var(--green-dark);
+        }
+
+        p, li { font-size: 1rem; color: var(--ink); }
+        p { margin-bottom: 0.85rem; }
+
+        ul {
+            margin: 0 0 1rem 1.15rem;
+        }
+
+        li { margin-bottom: 0.4rem; }
+
+        a { color: var(--green-dark); font-weight: 700; }
+
+        .note {
+            margin-top: 2rem;
+            padding: 1rem 1.15rem;
+            border-left: 4px solid var(--green);
+            background: rgba(107, 143, 60, 0.08);
+            border-radius: 0 12px 12px 0;
+            font-size: 0.95rem;
+        }
+
+        footer {
+            margin-top: 2.5rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="{{ url_for('index') }}" aria-label="LittleBowl home">
+            <img src="{{ url_for('static', filename='images/littlebowl-mark.png') }}" alt="" width="36" height="36">
+            <span><span class="little">Little</span><span class="bowl">Bowl</span></span>
+        </a>
+        <a class="nav-link" href="{{ url_for('index') }}">Home</a>
+    </header>
+
+    <main class="wrap">
+        <h1>Privacy Policy</h1>
+        <p class="meta">Effective date: 21 September 2026 · Applies to littlebowl.in and the LittleBowl Android / iOS apps</p>
+
+        <p>
+            LittleBowl (“we”, “us”, “our”) helps parents plan and log meals for toddlers.
+            This Privacy Policy explains what information we collect, why we collect it,
+            how we use it, and the choices you have. By using LittleBowl you agree to this policy.
+        </p>
+
+        <h2>1. Who we are</h2>
+        <p>
+            LittleBowl is operated at <strong>https://littlebowl.in</strong>.
+            For privacy questions or data requests, contact us at
+            <a href="mailto:privacy@littlebowl.in">privacy@littlebowl.in</a>.
+        </p>
+
+        <h2>2. Information we collect</h2>
+        <p>Depending on how you use LittleBowl, we may collect:</p>
+        <ul>
+            <li><strong>Account information</strong> — name (optional), email address, and a hashed password when you register.</li>
+            <li><strong>Child / toddler profiles</strong> — name, age or birth date, gender, weight/height if you enter them, allergies, diet preference, health notes, feeding preferences (for example school lunchbox or hidden-veggie preferences), and meal schedule.</li>
+            <li><strong>Meal &amp; nutrition data</strong> — foods logged, portions, reactions, notes, weekly meal plans, growth records you add, and saved recipes.</li>
+            <li><strong>Photos</strong> — meal photos you choose to attach when logging a meal. Photos are stored on our servers only when you save a log that includes them.</li>
+            <li><strong>Guest / device identifiers</strong> — an anonymous guest ID (cookie and/or on-device storage) so you can use LittleBowl without an account; on mobile, a device ID may be used for chat usage limits.</li>
+            <li><strong>Chat messages</strong> — if you use the in-app assistant, messages you send and related meal-plan context may be processed to generate a reply. We store usage counts; full chat transcripts are not retained as a permanent server archive.</li>
+            <li><strong>Usage &amp; technical data</strong> — pages viewed, approximate session activity, referrer, and IP address for security, debugging, and first-party product analytics. We do not use third-party advertising trackers.</li>
+            <li><strong>Device permissions (mobile)</strong> — camera and photo library (only when you take or pick a meal photo); notifications (only if you enable local meal reminders).</li>
+        </ul>
+
+        <h2>3. How we use information</h2>
+        <ul>
+            <li>Provide meal plans, nutrition insights, recipes, and meal logging.</li>
+            <li>Remember your session (signed-in or guest) across visits.</li>
+            <li>Send or show meal reminders you configure on your device (local notifications).</li>
+            <li>Improve reliability and understand product usage (first-party analytics).</li>
+            <li>Secure the service, prevent abuse, and comply with law.</li>
+            <li>Power the optional AI chat assistant when that feature is enabled for your account.</li>
+        </ul>
+        <p>We do <strong>not</strong> sell your personal information.</p>
+
+        <h2>4. Legal bases (where applicable)</h2>
+        <p>
+            Where GDPR or similar laws apply, we process data to perform our contract with you
+            (providing the service), with your consent (for example camera access or optional chat),
+            and for legitimate interests such as security and improving LittleBowl.
+        </p>
+
+        <h2>5. How we share information</h2>
+        <p>We share data only as needed to run LittleBowl:</p>
+        <ul>
+            <li><strong>Hosting / infrastructure</strong> — data is stored on our application servers and database (for example cloud VMs we operate).</li>
+            <li><strong>OpenAI</strong> — if the chat assistant is enabled, message content and limited toddler context (such as name, age, and today’s plan) are sent to OpenAI to generate replies.</li>
+            <li><strong>Food databases</strong> — when you add or enrich a custom food, we may query public food databases (for example Open Food Facts or USDA) using the food name or ID you provide — not your child’s personal profile.</li>
+            <li><strong>Legal</strong> — if required by law or to protect rights and safety.</li>
+        </ul>
+        <p>We do not share your data with advertisers or data brokers.</p>
+
+        <h2>6. Cookies and on-device storage</h2>
+        <ul>
+            <li><strong>Website:</strong> session and remember-me cookies, plus a guest ID cookie so anonymous profiles persist. Browser local/session storage may keep guest ID, last toddler, notify preferences, and short-lived chat UI state.</li>
+            <li><strong>Mobile apps:</strong> a secure store may hold your login token; other preferences and guest ID may be stored in app storage on your device.</li>
+        </ul>
+        <p>You can clear cookies or uninstall the app to remove most on-device data. Server-side profile data remains until you delete it or request deletion.</p>
+
+        <h2>7. Children’s privacy</h2>
+        <p>
+            LittleBowl is designed for <strong>parents and caregivers</strong>, not for children to use on their own.
+            Toddler information is entered by an adult account or guest session you control.
+            We do not knowingly allow children under 13 (or the applicable age in your country) to create their own accounts.
+            If you believe a child provided us data directly, contact
+            <a href="mailto:privacy@littlebowl.in">privacy@littlebowl.in</a> and we will delete it.
+        </p>
+
+        <h2>8. Data retention</h2>
+        <ul>
+            <li>Account, toddler profiles, meal logs, plans, and photos are kept while your account or guest profile exists, or until you delete them.</li>
+            <li>Guest identifiers and related cookies are typically kept for up to about 400 days of inactivity on the client side; server data remains until deleted.</li>
+            <li>Analytics and audit records may be kept for operational periods (commonly weeks to months) for security and product insight.</li>
+            <li>Chat usage counters may be kept to enforce fair-use limits.</li>
+        </ul>
+
+        <h2>9. Your choices and rights</h2>
+        <p>Subject to applicable law, you may:</p>
+        <ul>
+            <li>Access or update profile information in the app or website.</li>
+            <li>Delete a toddler profile (which removes associated meal data cascaded with that profile).</li>
+            <li>Request access, correction, or deletion of your personal data by emailing
+                <a href="mailto:privacy@littlebowl.in">privacy@littlebowl.in</a>.</li>
+            <li>Refuse camera, photos, or notifications; core meal planning still works without them.</li>
+            <li>Stop using guest mode by clearing site data / reinstalling, or by creating an account and continuing there.</li>
+        </ul>
+
+        <h2>10. Security</h2>
+        <p>
+            We use industry-standard measures such as HTTPS, hashed passwords, and access controls.
+            No method of transmission or storage is 100% secure; please use a strong unique password.
+        </p>
+
+        <h2>11. International users</h2>
+        <p>
+            LittleBowl may be hosted in India or other regions where our servers operate.
+            If you use the service from another country, your information may be processed in the country where our servers are located.
+        </p>
+
+        <h2>12. Changes to this policy</h2>
+        <p>
+            We may update this Privacy Policy from time to time. The “Effective date” at the top will change when we do.
+            Continued use of LittleBowl after an update means you accept the revised policy.
+        </p>
+
+        <h2>13. Contact</h2>
+        <p>
+            Privacy requests: <a href="mailto:privacy@littlebowl.in">privacy@littlebowl.in</a><br>
+            Website: <a href="https://littlebowl.in">https://littlebowl.in</a>
+        </p>
+
+        <div class="note">
+            This page is the public privacy policy URL for the LittleBowl website and mobile apps
+            (package / bundle ID <code>com.littlebowl.app</code>), including Google Play and App Store listings.
+        </div>
+
+        <footer>
+            © {{ current_year }} LittleBowl · Little meals, big growth.
+        </footer>
+    </main>
+</body>
+</html>

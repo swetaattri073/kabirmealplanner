@@ -915,6 +915,13 @@ def index():
     )
 
 
+@app.route('/privacy')
+def privacy():
+    """Public Privacy Policy (Play Store / App Store listing URL)."""
+    from datetime import datetime as _dt
+    return render_template('privacy.html', current_year=_dt.utcnow().year)
+
+
 @app.route('/apple-touch-icon.png')
 @app.route('/apple-touch-icon-precomposed.png')
 def apple_touch_icon():
