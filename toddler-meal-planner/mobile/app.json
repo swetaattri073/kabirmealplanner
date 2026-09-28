@@ -16,14 +16,17 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.littlebowl.app",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "LittleBowl uses the camera to photograph meals for logging.",
         "NSPhotoLibraryUsageDescription": "LittleBowl uses your photos to attach meal pictures.",
-        "UIBackgroundModes": ["remote-notification"]
+        "NSPhotoLibraryAddUsageDescription": "LittleBowl may save meal photos you choose to your library.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.littlebowl.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#6b8f3c"
