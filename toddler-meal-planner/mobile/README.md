@@ -36,6 +36,23 @@ That generates `android/`, compiles, and installs **LittleBowl** (not Expo Go).
 
 Store / cloud builds: `eas build -p android` (see below).
 
+### Meal reminder icons (Android)
+
+Collapsed tray icons and the large brand mark are **native build** settings
+(`expo-notifications` icon + `plugins/withAndroidNotificationLargeIcon`).
+JS-only reloads will **not** update them.
+
+After changing notification assets or that plugin, rebuild:
+
+```bash
+npx expo prebuild --platform android --clean
+npx expo run:android
+# or on Windows: npm run build:play-store
+```
+
+Then open the app once so reminders reschedule onto channel `meal-reminders-v2`
+(HIGH importance + cheeky copy).
+
 ## Store builds
 
 ### Android (Play Store)

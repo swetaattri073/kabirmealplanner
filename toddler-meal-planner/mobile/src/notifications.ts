@@ -2,11 +2,15 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { DEFAULT_REMINDER_TIMES, MEAL_LABELS } from './theme';
+import { pickReminderCopy } from './reminderCopy';
 import {
   getNotifyPrefs,
   setNotifyPrefs,
   type NotifyPrefs,
 } from './storage';
+
+/** Bumped channel id so HIGH importance applies on existing installs. */
+const ANDROID_CHANNEL_ID = 'meal-reminders-v2';
 
 /**
  * Expo Go (SDK 53+) removed Android remote-notification support and can throw
@@ -101,34 +105,39 @@ export async function rescheduleMealReminders(prefs?: NotifyPrefs) {
 
   try {
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('meal-reminders', {
+      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
         name: 'Meal reminders',
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 180, 100, 180],
+        lightColor: '#6b8f3c',
       });
     }
   } catch {
     return;
   }
 
-  const name = p.toddlerName || 'your toddler';
+  const name = p.toddlerName || 'your little one';
   for (let i = 0; i < MEAL_ORDER.length; i++) {
     const key = MEAL_ORDER[i];
     const { hour, minute } = parseTime(p.times[key] || DEFAULT_REMINDER_TIMES[key]);
     const label = MEAL_LABELS[key] || key;
+    const { title, body } = pickReminderCopy(key, label, name);
     try {
       await Notifications.scheduleNotificationAsync({
         identifier: `meal-${key}`,
         content: {
-          title: `Time for ${label}`,
-          body: `Log ${name}'s ${label.toLowerCase()} in LittleBowl.`,
+          title,
+          body,
           sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          color: '#6b8f3c',
           data: { meal_type: key, toddlerRef: p.toddlerRef },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour,
           minute,
-          channelId: Platform.OS === 'android' ? 'meal-reminders' : undefined,
+          channelId: Platform.OS === 'android' ? ANDROID_CHANNEL_ID : undefined,
         },
       });
     } catch (err) {
