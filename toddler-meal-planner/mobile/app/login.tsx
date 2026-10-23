@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
 import { Link, useRouter } from 'expo-router';
+import { formatNetworkError } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { LogoHero } from '../src/components/AppHeader';
 import { Button, Field, Screen } from '../src/components/ui';
@@ -19,7 +20,7 @@ export default function LoginScreen() {
       await login(email.trim(), password);
       router.replace('/');
     } catch (e: any) {
-      Alert.alert('Sign in failed', e?.message || 'Please try again.');
+      Alert.alert('Sign in failed', formatNetworkError(e));
     } finally {
       setLoading(false);
     }

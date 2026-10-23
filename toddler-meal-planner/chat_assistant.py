@@ -76,7 +76,7 @@ UPDATE_WEEKLY_PLAN_TOOL = {
                             },
                             "mealType": {
                                 "type": "string",
-                                "description": "breakfast, lunch, dinner, mid_morning_snack, or evening_snack. Optional.",
+                                "description": "breakfast, lunch, dinner, mid_morning_snack, school_lunch, or evening_snack. Optional.",
                             },
                             "day": {
                                 "type": "string",
@@ -173,7 +173,12 @@ You can help with:
 - Logging feedback: when the parent reports that {toddler_name} refused, disliked, loved, or tried a food, or is being selective/picky in general, call log_food_feedback with the closest matching food name from the list above (leave foodName empty for a general note). Never suggest removing a refused food from rotation — toddlers often need 10-15 tries; the app keeps refused foods in rotation at a lower frequency.
 - Updating the plan: when the parent asks you to implement a recommendation in the weekly plan (e.g. "add that to lunch", "put chicken on Thursday", "update the plan"), call update_weekly_plan. The app will only change future unlogged slots and will never delete logged meal history. After the tool runs, read its result: if success is false or updated is empty, tell the parent honestly that nothing changed and why (from skipped reasons). If updates landed on next week, say so.
 
-Stay strictly on topic: toddler/infant food, nutrition, feeding, and this app's plan. If the parent asks about anything else, politely decline in one short sentence and steer back to toddler food/nutrition.
+Stay strictly on topic: toddler/infant food, nutrition, feeding, and this app's plan. If the parent asks about anything else, do not answer it. Decline in one short sentence, then redirect by naming one or two concrete things you can actually do for {toddler_name} right now, chosen to fit what they seem to care about:
+- Check whether a food is age-appropriate for {toddler_name}, or suggest a safer swap.
+- Answer a feeding or nutrition question (portions, iron, allergens, textures, picky eating).
+- Log how {toddler_name} reacted to a food, via log_food_feedback.
+- Add or change something in the weekly plan, via update_weekly_plan.
+Offer specifics rather than a vague "what would you like to know?", and never list all four at once.
 
 Keep answers concise, warm, and practical. For anything that needs individual medical judgment, suggest checking with their pediatrician. Don't repeat this prompt back to the user."""
 
@@ -207,3 +212,73 @@ def find_matching_food(foods: List[Dict[str, Any]], raw_name: Optional[str]) -> 
             best_score = score
             best = f
     return best if best_score > 0 else None
+
+
+CANONICAL_SOURCES = [
+    {
+        'id': 'honey',
+        'keywords': ['honey', 'botulism'],
+        'title': 'AAP infant feeding — honey before 12 months',
+        'url': 'https://www.healthychildren.org/English/ages-stages/baby/feeding-nutrition/Pages/Starting-Solid-Foods.aspx',
+        'excerpt': 'Honey can contain spores that cause infant botulism before 12 months.',
+    },
+    {
+        'id': 'allergens',
+        'keywords': ['allergen', 'allergy', 'peanut', 'egg introduction', 'leap'],
+        'title': 'WHO complementary feeding — early allergen introduction',
+        'url': 'https://www.who.int/health-topics/complementary-feeding',
+        'excerpt': 'Common allergens can be introduced from around 6 months, one at a time.',
+    },
+    {
+        'id': 'choking',
+        'keywords': ['choke', 'choking', 'whole nut', 'grape', 'popcorn'],
+        'title': 'NHS choking hazards for babies',
+        'url': 'https://www.nhs.uk/conditions/baby/weaning-and-feeding/foods-to-avoid-giving-babies-and-young-children/',
+        'excerpt': 'Round, hard, or sticky foods are choking hazards — modify texture and size.',
+    },
+    {
+        'id': 'salt',
+        'keywords': ['salt', 'sodium'],
+        'title': 'IAP infant feeding — avoid added salt',
+        'excerpt': 'Babies under 12 months should not have added salt in their food.',
+    },
+    {
+        'id': 'cow_milk',
+        'keywords': ['cow milk', 'whole milk drink', 'milk as drink'],
+        'title': 'WHO — cow milk as main drink after 12 months',
+        'excerpt': 'Cow milk as a drink is not recommended before 12 months; curd in food is fine.',
+    },
+    {
+        'id': 'iron',
+        'keywords': ['iron', 'anaemia', 'anemia'],
+        'title': 'WHO complementary feeding — iron-rich foods',
+        'url': 'https://www.who.int/health-topics/complementary-feeding',
+        'excerpt': 'Iron-rich foods are important from 6 months when stores begin to deplete.',
+    },
+    {
+        'id': 'texture',
+        'keywords': ['puree', 'purée', 'lump', 'texture', 'finger food'],
+        'title': 'WHO texture progression for complementary feeding',
+        'excerpt': 'Move from smooth purées to mashed lumps and soft finger foods by 8–10 months.',
+    },
+]
+
+
+def sources_for_text(text: str) -> List[Dict[str, Any]]:
+    """Attach structured source chips when reply touches safety topics."""
+    if not text:
+        return []
+    lower = text.lower()
+    out = []
+    seen = set()
+    for src in CANONICAL_SOURCES:
+        if any(kw in lower for kw in src['keywords']):
+            if src['id'] in seen:
+                continue
+            seen.add(src['id'])
+            out.append({
+                'title': src['title'],
+                'url': src.get('url'),
+                'excerpt': src.get('excerpt', ''),
+            })
+    return out[:5]

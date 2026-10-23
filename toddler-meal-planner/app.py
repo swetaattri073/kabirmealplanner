@@ -40,12 +40,23 @@ from toddler_refs import (
 )
 
 from api_auth import issue_api_token, verify_api_token
-from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe
+from weaning import build_journey as build_weaning_journey, match_food_id_for_name
+from mini_plans import list_mini_plans, get_mini_plan_template, mini_plan_available
+from who_growth import (
+    GROWTH_DISCLAIMER,
+    length_percentile,
+    percentile_bands,
+    weight_percentile,
+)
+from chat_assistant import sources_for_text
+from sqlalchemy.exc import IntegrityError
+from models import db, User, Toddler, Food, MealLog, FoodPreference, WeeklyPlan, NutritionAlert, AuditLog, AnalyticsEvent, Recipe, ChatUsage, GrowthRecord, SavedRecipe, SchoolLunchboxOption
+from school_lunchbox import init_school_lunchbox_options
 from admin_stats import build_admin_stats
 from analytics import record_analytics_event
 from food_database import init_food_database, COMMON_ALLERGENS, FOOD_CATEGORIES
 from nutrition_engine import NutritionEngine, adapt_adult_meal_for_toddler, NUTRIENT_INFO, RDA_BY_AGE
-from meal_planner import MealPlanner, update_preferences_from_log
+from meal_planner import MealPlanner, update_preferences_from_log, toddler_lunch_dinner_needs_complete_meal
 from food_enhancer import (
     get_enhancement_suggestions, get_flavor_exploration, 
     get_daily_enhancement_tip, get_all_boosters, NUTRITION_BOOSTERS
@@ -214,6 +225,45 @@ def owns_toddler(toddler):
         return toddler.session_id == session_id and toddler.user_id is None
 
 
+def refresh_toddler_age(toddler):
+    """Roll a child's age forward and rebuild their plan when a month passes.
+
+    Age drives RDA targets, serving sizes and which foods are safe, so a stale
+    age silently feeds a child the wrong thing. This runs on read instead of on
+    a nightly job: there is no scheduler in this deployment, and a derived age
+    is correct even after the app has gone unopened for months.
+    """
+    if toddler is None:
+        return False
+    try:
+        changed = False
+        if toddler.ensure_birth_date():
+            changed = True
+        previous = toddler.sync_age()
+        if previous is not None:
+            # Drop upcoming plans so they are rebuilt against the new age.
+            # Past weeks are history and stay untouched.
+            week_start = date.today() - timedelta(days=date.today().weekday())
+            WeeklyPlan.query.filter(
+                WeeklyPlan.toddler_id == toddler.id,
+                WeeklyPlan.week_start >= week_start,
+            ).delete(synchronize_session=False)
+            app_log(
+                'toddler age rolled forward',
+                toddler_id=toddler.id,
+                previous_months=previous,
+                age_months=toddler.age_months,
+            )
+            changed = True
+        if changed:
+            db.session.commit()
+        return changed
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.warning('Age refresh skipped for toddler %s: %s', getattr(toddler, 'id', '?'), exc)
+        return False
+
+
 def _transfer_anonymous_toddlers(user):
     """Move guest session toddlers to a newly logged-in/signed-up user"""
     session_id = (
@@ -313,6 +363,7 @@ with app.app_context():
     except Exception as e:
         app.logger.warning('Schema patch skipped: %s', e)
     init_food_database(db.session, Food)
+    init_school_lunchbox_options(db.session, Food, SchoolLunchboxOption)
 
 
 # Context processors for templates
@@ -385,9 +436,11 @@ def admin_required(f):
 
 
 def can_use_chat_assistant():
-    """Chat UI/API: feature flag on AND logged-in premium subscriber."""
+    """Chat UI/API: feature flag on AND (premium OR free-access period)."""
     if not is_chat_feature_enabled():
         return False
+    if _env_flag('CHAT_FREE_ACCESS', default=True):
+        return True
     try:
         return bool(
             current_user
@@ -862,6 +915,13 @@ def index():
     )
 
 
+@app.route('/privacy')
+def privacy():
+    """Public Privacy Policy (Play Store / App Store listing URL)."""
+    from datetime import datetime as _dt
+    return render_template('privacy.html', current_year=_dt.utcnow().year)
+
+
 @app.route('/apple-touch-icon.png')
 @app.route('/apple-touch-icon-precomposed.png')
 def apple_touch_icon():
@@ -929,9 +989,22 @@ def _meal_log_components(meal):
             name = comp.get('food_name') or (comp.get('food') or {}).get('name')
             if fid and name:
                 components.append({'food_id': fid, 'name': name, 'role': role})
+        fruit = meal.get('fruit') or {}
+        if fruit:
+            fid = fruit.get('food_id')
+            name = fruit.get('food_name')
+            if fid and name:
+                components.append({'food_id': fid, 'name': name, 'role': 'fruit'})
     elif meal.get('food'):
         f = meal['food']
         components.append({'food_id': f['id'], 'name': f['name'], 'role': 'main'})
+        fruit = meal.get('fruit') or {}
+        if fruit.get('food_id') and fruit.get('food_name'):
+            components.append({
+                'food_id': fruit['food_id'],
+                'name': fruit['food_name'],
+                'role': 'fruit',
+            })
     return components
 
 
@@ -977,10 +1050,11 @@ def log_meal_page(toddler_id):
         logged_by_meal=logged_by_meal,
         always_hidden_veggies=always_hidden,
         hidden_veggie_options=hidden_veggie_options,
-        meal_order=['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner'],
+        meal_order=['breakfast', 'mid_morning_snack', 'school_lunch', 'lunch', 'evening_snack', 'dinner'],
         meal_labels={
             'breakfast': '🌅 Breakfast',
             'mid_morning_snack': '🍎 Mid-Morning Snack',
+            'school_lunch': '🍱 School Lunchbox',
             'lunch': '🍱 Lunch',
             'evening_snack': '🥛 Evening Snack',
             'dinner': '🌙 Dinner',
@@ -1100,6 +1174,9 @@ def recipes_page(toddler_id):
 def get_toddlers():
     """Get all toddlers belonging to current user/session"""
     toddlers = get_user_toddlers()
+    # The app loads this on every launch, so it is where ages catch up.
+    for t in toddlers:
+        refresh_toddler_age(t)
     return jsonify([t.to_dict() for t in toddlers])
 
 
@@ -1109,13 +1186,21 @@ def create_toddler():
     data = request.json
     
     # Validate required fields
-    if not data.get('name') or not data.get('age_months'):
-        return jsonify({'error': 'Name and age are required'}), 400
+    if not data.get('name'):
+        return jsonify({'error': 'Name is required'}), 400
+    if not data.get('age_months') and not data.get('birth_date'):
+        return jsonify({'error': 'Birth date or age is required'}), 400
+    
+    birth_date = None
+    if data.get('birth_date'):
+        birth_date = datetime.strptime(data['birth_date'], '%Y-%m-%d').date()
+
+    age_months = int(data['age_months']) if data.get('age_months') is not None else None
     
     toddler = Toddler(
         name=data['name'],
-        age_months=int(data['age_months']),
-        birth_date=datetime.strptime(data['birth_date'], '%Y-%m-%d').date() if data.get('birth_date') else None,
+        age_months=age_months or 6,
+        birth_date=birth_date,
         gender=data.get('gender', 'unknown'),
         weight_kg=data.get('weight_kg'),
         height_cm=data.get('height_cm'),
@@ -1127,6 +1212,11 @@ def create_toddler():
         meal_schedule=data.get('meal_schedule'),
         feeding_preferences=_normalize_feeding_preferences(data.get('feeding_preferences')),
     )
+
+    if birth_date:
+        toddler.sync_age()
+    elif age_months is not None:
+        toddler.age_months = age_months
     
     # Assign ownership
     if current_user.is_authenticated:
@@ -1177,6 +1267,13 @@ def update_toddler(toddler_id):
         toddler.name = data['name']
     if 'age_months' in data:
         toddler.age_months = int(data['age_months'])
+    if 'birth_date' in data:
+        raw_bd = data.get('birth_date')
+        if raw_bd:
+            toddler.birth_date = datetime.strptime(raw_bd, '%Y-%m-%d').date()
+            toddler.sync_age()
+        else:
+            toddler.birth_date = None
     if 'gender' in data:
         toddler.gender = data['gender']
     if 'weight_kg' in data:
@@ -1210,19 +1307,25 @@ def _normalize_feeding_preferences(raw, existing=None):
     """Merge parent cooking habits into a stable dict.
 
     Hidden veggies stay ON by default unless the parent explicitly turns them off.
+    goes_to_school defaults OFF; when on, mid-morning becomes a packed school lunch.
     """
     base = {
         'always_hidden_veggies': True,
+        'goes_to_school': False,
     }
     if isinstance(existing, dict):
         base.update(existing)
-    # Re-apply default if existing never set the key
+    # Re-apply defaults if existing never set the keys
     if 'always_hidden_veggies' not in base:
         base['always_hidden_veggies'] = True
+    if 'goes_to_school' not in base:
+        base['goes_to_school'] = False
     if not isinstance(raw, dict):
         return base
     if 'always_hidden_veggies' in raw:
         base['always_hidden_veggies'] = bool(raw.get('always_hidden_veggies'))
+    if 'goes_to_school' in raw:
+        base['goes_to_school'] = bool(raw.get('goes_to_school'))
     return base
 
 
@@ -1473,6 +1576,23 @@ def get_foods_status():
     })
 
 
+@app.route('/api/foods/school-lunchbox', methods=['GET'])
+def list_school_lunchbox_options():
+    """List packed school/daycare lunchbox options (separate DB catalog)."""
+    age = request.args.get('age_months', type=int)
+    q = SchoolLunchboxOption.query.order_by(
+        SchoolLunchboxOption.messy_level.asc(),
+        SchoolLunchboxOption.holds_hours.desc(),
+    )
+    if age is not None:
+        q = q.filter(SchoolLunchboxOption.suitable_from_months <= age)
+    rows = q.all()
+    return jsonify({
+        'count': len(rows),
+        'options': [row.to_dict() for row in rows],
+    })
+
+
 @app.route('/api/foods/reseed', methods=['POST'])
 def reseed_foods():
     """Force re-seed the food database"""
@@ -1484,13 +1604,16 @@ def reseed_foods():
     
     # Re-seed
     init_food_database(db.session, Food, force_reseed=True)
+    init_school_lunchbox_options(db.session, Food, SchoolLunchboxOption, force_reseed=True)
     
     new_count = Food.query.count()
+    lunchbox_count = SchoolLunchboxOption.query.count()
     
     return jsonify({
         'success': True,
-        'message': f'Food database re-seeded with {new_count} foods',
-        'count': new_count
+        'message': f'Food database re-seeded with {new_count} foods and {lunchbox_count} school lunchbox options',
+        'count': new_count,
+        'school_lunchbox_count': lunchbox_count,
     })
 
 
@@ -1696,14 +1819,26 @@ def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason='
     
     food = Food.query.get(food_id)
     food_name = food.name if food else str(food_id)
-    
+    planner = MealPlanner(db.session)
+
     if existing_plan:
         old_food_id = existing_plan.food_id
-        existing_plan.food_id = food_id
+        if toddler_lunch_dinner_needs_complete_meal(toddler.age_months, meal_type) and food:
+            if not planner.assign_food_to_plan_slot(
+                toddler,
+                existing_plan,
+                food,
+                meal_type,
+                reason=reason or f"Replaced with logged meal: {food_name}",
+                day_of_week=day_of_week,
+            ):
+                existing_plan.food_id = food_id
+                existing_plan.alternatives = {'backup': None, 'replaced': True, 'from_log': True}
+        else:
+            existing_plan.food_id = food_id
+            existing_plan.alternatives = {'backup': None, 'replaced': True, 'from_log': True}
         existing_plan.is_generated = False
         existing_plan.nutrition_reason = reason or f"Replaced with logged meal: {food_name}"
-        # Clear structured complete-meal alternatives when manually replaced
-        existing_plan.alternatives = {'backup': None, 'replaced': True, 'from_log': True}
         plan_id = existing_plan.id
     else:
         new_plan = WeeklyPlan(
@@ -1714,10 +1849,19 @@ def _update_today_plan_with_food(toddler, meal_type, food_id, log_date, reason='
             food_id=food_id,
             is_generated=False,
             nutrition_reason=reason or f"Added from meal log: {food_name}",
-            alternatives={'from_log': True}
+            alternatives={'from_log': True},
         )
         db.session.add(new_plan)
         db.session.flush()
+        if toddler_lunch_dinner_needs_complete_meal(toddler.age_months, meal_type) and food:
+            planner.assign_food_to_plan_slot(
+                toddler,
+                new_plan,
+                food,
+                meal_type,
+                reason=reason or f"Added from meal log: {food_name}",
+                day_of_week=day_of_week,
+            )
         plan_id = new_plan.id
         old_food_id = None
     
@@ -2673,6 +2817,7 @@ def recognize_food():
         category_prefs = {
             'breakfast': ['breakfast', 'grain', 'dairy', 'fruit'],
             'mid_morning_snack': ['fruit', 'dairy', 'snack'],
+            'school_lunch': ['grain', 'combo', 'protein', 'snack'],
             'lunch': ['dal', 'curry', 'vegetable', 'grain', 'complete'],
             'evening_snack': ['fruit', 'dairy', 'snack'],
             'dinner': ['dal', 'curry', 'vegetable', 'grain', 'complete'],
@@ -2787,6 +2932,7 @@ def _logging_stats_for_toddler(toddler_id, today=None):
 def get_dashboard_data(toddler_id):
     """Get all dashboard data in one call"""
     toddler = Toddler.query.get_or_404(toddler_id)
+    refresh_toddler_age(toddler)
     today = date.today()
     
     # Today's meals
@@ -2848,7 +2994,9 @@ def get_dashboard_data(toddler_id):
 def api_recipes():
     q = request.args.get('q')
     category = request.args.get('category')
-    return jsonify({'recipes': list_recipes(category=category, q=q)})
+    age_raw = request.args.get('age_months')
+    age_months = int(age_raw) if age_raw not in (None, '') else None
+    return jsonify({'recipes': list_recipes(category=category, q=q, age_months=age_months)})
 
 
 @app.route('/api/recipes/<slug>', methods=['GET'])
@@ -2856,7 +3004,232 @@ def api_recipe_detail(slug):
     recipe = get_recipe(slug)
     if not recipe:
         return jsonify({'error': 'Recipe not found'}), 404
-    return jsonify({'recipe': recipe})
+    saved = False
+    if current_user.is_authenticated:
+        saved = SavedRecipe.query.filter_by(
+            user_id=current_user.id,
+            recipe_slug=slug.lower().strip(),
+        ).first() is not None
+    return jsonify({'recipe': recipe, 'saved': saved})
+
+
+@app.route('/api/recipes/saved', methods=['GET'])
+@login_required
+def api_saved_recipes():
+    rows = SavedRecipe.query.filter_by(user_id=current_user.id).order_by(SavedRecipe.saved_at.desc()).all()
+    slugs = [r.recipe_slug for r in rows]
+    recipes = []
+    for slug in slugs:
+        rec = get_recipe(slug)
+        if rec:
+            recipes.append(rec)
+    return jsonify({'recipes': recipes, 'saved': [r.to_dict() for r in rows]})
+
+
+@app.route('/api/recipes/<slug>/save', methods=['POST'])
+@login_required
+def api_save_recipe(slug):
+    key = slug.lower().strip()
+    if not get_recipe(key):
+        return jsonify({'error': 'Recipe not found'}), 404
+    existing = SavedRecipe.query.filter_by(user_id=current_user.id, recipe_slug=key).first()
+    if existing:
+        return jsonify({'saved': True, 'recipe_slug': key})
+    row = SavedRecipe(user_id=current_user.id, recipe_slug=key)
+    db.session.add(row)
+    db.session.commit()
+    return jsonify({'saved': True, 'recipe_slug': key}), 201
+
+
+@app.route('/api/recipes/<slug>/save', methods=['DELETE'])
+@login_required
+def api_unsave_recipe(slug):
+    key = slug.lower().strip()
+    row = SavedRecipe.query.filter_by(user_id=current_user.id, recipe_slug=key).first()
+    if row:
+        db.session.delete(row)
+        db.session.commit()
+    return jsonify({'saved': False, 'recipe_slug': key})
+
+
+@app.route('/api/meal-plan/mini', methods=['GET'])
+def api_list_mini_plans():
+    age_raw = request.args.get('age_months')
+    age = int(age_raw) if age_raw not in (None, '') else None
+    return jsonify({'templates': list_mini_plans(age)})
+
+
+@app.route('/api/meal-plan/mini/<template_key>/<toddler_ref:toddler_id>', methods=['GET'])
+def api_get_mini_plan(template_key, toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    tpl = get_mini_plan_template(template_key)
+    if not tpl:
+        return jsonify({'error': 'Template not found'}), 404
+    return jsonify({'template': tpl, 'toddler_name': toddler.name})
+
+
+@app.route('/api/meal-plan/mini/<template_key>/<toddler_ref:toddler_id>', methods=['POST'])
+def api_apply_mini_plan(template_key, toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    tpl = get_mini_plan_template(template_key)
+    if not tpl:
+        return jsonify({'error': 'Template not found'}), 404
+    refresh_toddler_age(toddler)
+    if not mini_plan_available(template_key, toddler.age_months):
+        return jsonify({'error': 'This guided plan is not available for this age'}), 400
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    planner = MealPlanner(db.session)
+    from chat_assistant import find_matching_food
+    food_catalog = [{'id': f.id, 'name': f.name} for f in Food.query.all()]
+    suitable_foods = planner._get_suitable_foods(toddler)
+    preferences = planner._get_preference_scores(toddler)
+    recent_foods = planner._get_recent_foods(toddler, days=7)
+    nutrition_gaps = planner._identify_nutrition_gaps(planner.nutrition_engine.get_weekly_nutrition(toddler))
+    plan_reason = f"Guided plan: {tpl.get('title', template_key)}"
+
+    applied = 0
+    for day_idx, day_meals in enumerate(tpl.get('days') or []):
+        for meal_type, food_name in day_meals.items():
+            food = Food.query.filter(Food.name.ilike(food_name.strip())).first()
+            if not food:
+                match = find_matching_food(food_catalog, food_name)
+                if match:
+                    food = Food.query.get(match['id'])
+            if not food:
+                continue
+            plan_date = week_start + timedelta(days=day_idx)
+            if plan_date < today:
+                continue
+            existing = WeeklyPlan.query.filter_by(
+                toddler_id=toddler.id,
+                week_start=week_start,
+                day_of_week=day_idx,
+                meal_type=meal_type,
+            ).first()
+            if existing:
+                if not planner.assign_food_to_plan_slot(
+                    toddler,
+                    existing,
+                    food,
+                    meal_type,
+                    reason=plan_reason,
+                    suitable_foods=suitable_foods,
+                    preferences=preferences,
+                    recent_foods=recent_foods,
+                    nutrition_gaps=nutrition_gaps,
+                    day_of_week=day_idx,
+                ):
+                    continue
+                applied += 1
+            else:
+                entry = WeeklyPlan(
+                    toddler_id=toddler.id,
+                    week_start=week_start,
+                    day_of_week=day_idx,
+                    meal_type=meal_type,
+                    food_id=food.id,
+                    is_generated=True,
+                    alternatives=[],
+                    nutrition_reason=plan_reason,
+                )
+                db.session.add(entry)
+                db.session.flush()
+                if not planner.assign_food_to_plan_slot(
+                    toddler,
+                    entry,
+                    food,
+                    meal_type,
+                    reason=plan_reason,
+                    suitable_foods=suitable_foods,
+                    preferences=preferences,
+                    recent_foods=recent_foods,
+                    nutrition_gaps=nutrition_gaps,
+                    day_of_week=day_idx,
+                ):
+                    db.session.delete(entry)
+                    continue
+                applied += 1
+    db.session.commit()
+    plan = planner.generate_weekly_plan(toddler, week_start, regenerate=False)
+    return jsonify({'ok': True, 'template': template_key, 'slots_updated': applied, **plan})
+
+
+@app.route('/api/growth/<toddler_ref:toddler_id>', methods=['GET'])
+def api_get_growth(toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    refresh_toddler_age(toddler)
+    rows = GrowthRecord.query.filter_by(toddler_id=toddler.id).order_by(GrowthRecord.recorded_at.asc()).all()
+    records = []
+    for r in rows:
+        item = r.to_dict()
+        age_at = toddler.age_months
+        if toddler.birth_date and r.recorded_at:
+            months = (r.recorded_at.year - toddler.birth_date.year) * 12 + (
+                r.recorded_at.month - toddler.birth_date.month
+            )
+            if r.recorded_at.day < toddler.birth_date.day:
+                months -= 1
+            age_at = max(0, months)
+        if r.weight_kg is not None:
+            item['weight_percentile'] = weight_percentile(
+                age_months=age_at,
+                weight_kg=r.weight_kg,
+                gender=toddler.gender or 'unknown',
+            )
+        if r.height_cm is not None:
+            item['height_percentile'] = length_percentile(
+                age_months=age_at,
+                height_cm=r.height_cm,
+                gender=toddler.gender or 'unknown',
+            )
+        records.append(item)
+    gender = toddler.gender or 'unknown'
+    return jsonify({
+        'records': records,
+        'disclaimer': GROWTH_DISCLAIMER,
+        'bands': {
+            'weight': percentile_bands(metric='weight', gender=gender),
+            'length': percentile_bands(metric='length', gender=gender),
+        },
+        'toddler': {'name': toddler.name, 'age_months': toddler.age_months, 'gender': gender},
+    })
+
+
+@app.route('/api/growth/<toddler_ref:toddler_id>', methods=['POST'])
+def api_add_growth(toddler_id):
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    data = request.json or {}
+    recorded = data.get('recorded_at') or date.today().isoformat()
+    recorded_at = datetime.strptime(recorded, '%Y-%m-%d').date()
+    weight = data.get('weight_kg')
+    height = data.get('height_cm')
+    if weight is None and height is None:
+        return jsonify({'error': 'weight_kg or height_cm required'}), 400
+    row = GrowthRecord(
+        toddler_id=toddler.id,
+        recorded_at=recorded_at,
+        weight_kg=float(weight) if weight is not None else None,
+        height_cm=float(height) if height is not None else None,
+        notes=data.get('notes'),
+    )
+    db.session.add(row)
+    if weight is not None:
+        toddler.weight_kg = float(weight)
+        toddler.weight_updated_at = recorded_at
+    if height is not None:
+        toddler.height_cm = float(height)
+    db.session.commit()
+    return jsonify({'record': row.to_dict(), 'disclaimer': GROWTH_DISCLAIMER}), 201
 
 
 @app.route('/api/recipes/for-food', methods=['GET'])
@@ -2913,8 +3286,220 @@ def api_usda_food(fdc_id):
         return jsonify({'error': str(exc)}), 502
 
 
+CHAT_GUEST_DAILY_LIMIT = 5
+CHAT_USER_DAILY_LIMIT = 20
+
+
+def _chat_device_id():
+    """The client's reinstall-surviving device id, if it sent a usable one."""
+    raw = (request.headers.get('X-Device-Id') or '').strip()
+    if raw and len(raw) <= 191 and _re.fullmatch(r'[A-Za-z0-9_.:-]+', raw):
+        return raw
+    return None
+
+
+def _chat_quota_key():
+    """What the daily allowance is counted against.
+
+    Signed-in users are metered per account, so the allowance follows them
+    across devices instead of multiplying with each one. Guests are metered per
+    device, which is the part a reinstall used to reset. The guest/session id is
+    the last resort so a client that omits the header is still metered rather
+    than handed an unlimited allowance.
+    """
+    if current_user.is_authenticated:
+        return f'user:{current_user.id}'
+    device_id = _chat_device_id()
+    if device_id:
+        return f'dev:{device_id}'
+    try:
+        return f'guest:{get_session_id()}'
+    except Exception:
+        return None
+
+
+def _chat_daily_limit():
+    return CHAT_USER_DAILY_LIMIT if current_user.is_authenticated else CHAT_GUEST_DAILY_LIMIT
+
+
+def _chat_usage_snapshot(count):
+    limit = _chat_daily_limit()
+    used = max(0, int(count or 0))
+    return {'count': used, 'limit': limit, 'remaining': max(0, limit - used)}
+
+
+def _chat_usage_row(quota_key):
+    today = date.today()
+    row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=today).first()
+    if row is not None:
+        return row
+    row = ChatUsage(quota_key=quota_key, usage_date=today, count=0)
+    db.session.add(row)
+    try:
+        db.session.flush()
+    except IntegrityError:
+        # Another request created the row first; take theirs.
+        db.session.rollback()
+        row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=today).first()
+    return row
+
+
+def _chat_reserve_quota(quota_key):
+    """Claim one message up front. Returns (allowed, usage snapshot)."""
+    limit = _chat_daily_limit()
+    if not quota_key:
+        return True, _chat_usage_snapshot(0)
+    try:
+        row = _chat_usage_row(quota_key)
+        if row is None:
+            return True, _chat_usage_snapshot(0)
+        used = int(row.count or 0)
+        if used >= limit:
+            return False, _chat_usage_snapshot(used)
+        row.count = used + 1
+        row.device_id = _chat_device_id() or row.device_id
+        if current_user.is_authenticated:
+            row.user_id = current_user.id
+        db.session.commit()
+        return True, _chat_usage_snapshot(row.count)
+    except Exception as exc:
+        db.session.rollback()
+        # Never let quota bookkeeping take the chat down.
+        app.logger.warning('Chat quota check skipped: %s', exc)
+        return True, _chat_usage_snapshot(0)
+
+
+def _chat_refund_quota(quota_key):
+    """Hand back a reserved message when the request failed on our side."""
+    if not quota_key:
+        return
+    try:
+        # Drop whatever the failed turn left pending (a half-applied tool call,
+        # say) so the refund commits on its own.
+        db.session.rollback()
+        row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=date.today()).first()
+        if row and (row.count or 0) > 0:
+            row.count = int(row.count) - 1
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def _chat_limit_response(usage):
+    if current_user.is_authenticated:
+        message = (
+            f"You've reached your daily limit of {usage['limit']} messages. "
+            'Premium users will have unlimited access — stay tuned!'
+        )
+    else:
+        message = (
+            f"You've reached the {usage['limit']}-message limit for guest users today. "
+            f'Sign in or create an account to get {CHAT_USER_DAILY_LIMIT} messages per day!'
+        )
+    return jsonify({'error': message, 'limit_reached': True, 'usage': usage}), 429
+
+
+@app.route('/api/weaning/<toddler_ref:toddler_id>', methods=['GET'])
+def api_weaning(toddler_id):
+    """Weaning journey for a baby starting solids.
+
+    Progress is derived from the meal logs the parent already keeps, so nothing
+    has to be recorded twice.
+    """
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+    refresh_toddler_age(toddler)
+
+    tried = []
+    introduced_allergens = set()
+    rows = (
+        db.session.query(FoodPreference, Food)
+        .join(Food, FoodPreference.food_id == Food.id)
+        .filter(FoodPreference.toddler_id == toddler.id)
+        .all()
+    )
+    for pref, food in rows:
+        if (pref.times_offered or 0) <= 0:
+            continue
+        tried.append({
+            'name': food.name,
+            'last_offered': pref.last_offered,
+            'reaction': pref.last_reaction,
+        })
+        for allergen in (food.allergens or []):
+            introduced_allergens.add(str(allergen).strip().lower())
+
+    journey = build_weaning_journey(
+        age_months=toddler.age_months,
+        tried=tried,
+        allergies=toddler.allergies or [],
+        introduced_allergens=sorted(introduced_allergens),
+    )
+    journey['toddler'] = {
+        'name': toddler.name,
+        'age_months': toddler.age_months,
+        'birth_date': toddler.birth_date.isoformat() if toddler.birth_date else None,
+    }
+    for item in journey.get('checklist') or []:
+        item['food_id'] = match_food_id_for_name(db.session, item.get('name'))
+    return jsonify(journey)
+
+
+@app.route('/api/weaning/<toddler_ref:toddler_id>/try-food', methods=['POST'])
+def api_weaning_try_food(toddler_id):
+    """Mark a first food as tried from the weaning checklist."""
+    toddler = Toddler.query.get_or_404(toddler_id)
+    if not owns_toddler(toddler):
+        return jsonify({'error': 'Not authorized'}), 403
+
+    data = request.json or {}
+    food_name = (data.get('food_name') or '').strip()
+    food_id = data.get('food_id')
+    reaction = (data.get('reaction') or 'liked').lower().strip()
+
+    if not food_id and food_name:
+        food_id = match_food_id_for_name(db.session, food_name)
+
+    food = Food.query.get(food_id) if food_id else None
+
+    if not food:
+        return jsonify({'error': 'Food not found in catalogue'}), 404
+
+    pref = FoodPreference.query.filter_by(toddler_id=toddler.id, food_id=food.id).first()
+    if not pref:
+        pref = FoodPreference(toddler_id=toddler.id, food_id=food.id)
+        db.session.add(pref)
+    pref.update_from_reaction(reaction)
+
+    log = MealLog(
+        toddler_id=toddler.id,
+        food_id=food.id,
+        date=date.today(),
+        meal_type='breakfast',
+        portion_eaten_percent=100 if reaction in ('loved', 'liked') else 50,
+        toddler_reaction=reaction,
+        notes='Quick log from weaning checklist',
+    )
+    db.session.add(log)
+    db.session.commit()
+
+    return jsonify({'ok': True, 'food_id': food.id, 'food_name': food.name, 'meal_log_id': log.id})
+
+
 @app.route('/api/chat/health', methods=['GET'])
 def api_chat_health():
+    used = 0
+    try:
+        quota_key = _chat_quota_key()
+        if quota_key:
+            row = ChatUsage.query.filter_by(quota_key=quota_key, usage_date=date.today()).first()
+            used = int(row.count or 0) if row else 0
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.warning('Chat usage lookup failed: %s', exc)
+    usage = _chat_usage_snapshot(used)
+
     if not can_use_chat_assistant():
         return jsonify({
             'ok': False,
@@ -2922,12 +3507,14 @@ def api_chat_health():
             'feature_enabled': is_chat_feature_enabled(),
             'premium_required': True,
             'available': False,
+            'usage': usage,
         })
     return jsonify({
         'ok': chat_configured(),
         'configured': chat_configured(),
         'feature_enabled': True,
         'available': True,
+        'usage': usage,
     })
 
 
@@ -3065,6 +3652,13 @@ def api_chat():
             'error': 'OPENAI_API_KEY is not set. Add it to .env and restart the app.'
         }), 501
 
+    # Reserved before the model call so parallel requests can't slip past the
+    # limit; refunded below if we fail for a reason that isn't the caller's.
+    quota_key = _chat_quota_key()
+    allowed, usage = _chat_reserve_quota(quota_key)
+    if not allowed:
+        return _chat_limit_response(usage)
+
     plan_meals, foods = _chat_context_for_toddler(toddler)
     system_prompt = build_system_prompt(
         toddler_name=toddler.name,
@@ -3130,17 +3724,26 @@ def api_chat():
             assistant_msg = choice.get('message') or {}
 
         reply = assistant_msg.get('content') or 'Got it.'
+        combined = reply + ' ' + ' '.join(
+            (m.get('content') or '') for m in messages if m.get('role') == 'user'
+        )
         return jsonify({
+            'reply': reply,
             'message': {'role': 'assistant', 'content': reply},
+            'sources': sources_for_text(combined),
             'tool_result': tool_results[0]['result'] if len(tool_results) == 1 else None,
             'tool_results': tool_results,
+            'usage': usage,
         })
     except ChatConfigError as exc:
+        _chat_refund_quota(quota_key)
         status = 501 if exc.code == 'NO_API_KEY' else 400
         return jsonify({'error': str(exc)}), status
     except ChatRequestError as exc:
+        _chat_refund_quota(quota_key)
         return jsonify({'error': str(exc)}), exc.status
     except Exception as exc:
+        _chat_refund_quota(quota_key)
         return jsonify({'error': f'Chat failed: {exc}'}), 502
 
 

@@ -36,6 +36,9 @@ export type Food = {
   iron_mg?: number;
   calcium_mg?: number;
   allergens?: string[];
+  serving_size_6_12?: number;
+  serving_size_12_24?: number;
+  serving_size_24_36?: number;
 };
 
 export type MealLog = {
@@ -63,21 +66,23 @@ export type DashboardData = {
     date: string;
     meals: Record<string, any>;
   } | null;
-  nutrition: {
-    nutrients?: Record<
-      string,
-      {
-        name?: string;
-        icon?: string;
-        consumed?: number;
-        target?: number;
-        percent?: number;
-        status?: string;
-        unit?: string;
-      }
-    >;
-    overall_percent?: number;
-  };
+  nutrition: Record<
+    string,
+    {
+      actual?: number;
+      rda?: number;
+      percentage?: number;
+      status?: string;
+      consumed?: number;
+      target?: number;
+      percent?: number;
+      name?: string;
+      icon?: string;
+      unit?: string;
+      include_examples?: string[];
+      include_tip?: string | null;
+    }
+  >;
   alerts: Array<{
     alert_type?: string;
     nutrient?: string;
@@ -103,5 +108,14 @@ export type Recipe = {
   cheese?: string;
   steps?: string;
   cover_url?: string | null;
+  cover_image_path?: string | null;
   video_url?: string | null;
+  hidden_veggies?: string | null;
+  suitable_from_months?: number | null;
+  calories?: number | null;
+  protein_g?: number | null;
+  iron_mg?: number | null;
+  calcium_mg?: number | null;
+  fat_g?: number | null;
+  carbs_g?: number | null;
 };

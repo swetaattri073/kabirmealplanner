@@ -5,6 +5,13 @@ import { api } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { Card, EmptyState, LoadingBlock, Screen } from '../src/components/ui';
+import {
+  CACHE_TTL,
+  getCached,
+  getStale,
+  screenCacheKey,
+  setCached,
+} from '../src/screenCache';
 import { colors } from '../src/theme';
 
 export default function PreferencesScreen() {
@@ -13,26 +20,39 @@ export default function PreferencesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!activeToddler) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const d = await api.preferences(activeToddler.ref);
-      setData(d);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [activeToddler]);
+  const load = useCallback(
+    async (force = false) => {
+      if (!activeToddler) {
+        setLoading(false);
+        return;
+      }
+      const key = screenCacheKey('preferences', activeToddler.ref);
+      const stale = getStale<any>(key);
+      if (stale) {
+        setData(stale);
+        setLoading(false);
+      }
+      if (!force && getCached<any>(key, CACHE_TTL.preferences)) {
+        setRefreshing(false);
+        return;
+      }
+      try {
+        const d = await api.preferences(activeToddler.ref);
+        setCached(key, d);
+        setData(d);
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [activeToddler],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
+      load(false);
     }, [load]),
   );
 
@@ -64,7 +84,7 @@ export default function PreferencesScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                load(true);
               }}
             />
           }

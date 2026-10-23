@@ -7,10 +7,17 @@ food database (using toddler_friendly_version + preparation_tips).
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from food_database import INDIAN_FOODS
+
+# Recipes without an explicit age tag are treated as toddler-only (12+ months).
+DEFAULT_TODDLER_RECIPE_AGE = 12
+# Under this age, only curated weaning recipes — not auto-generated food-db cards.
+WEANING_CURATED_ONLY_MAX_AGE = 8
 
 CURATED_RECIPES = [
     {
@@ -20,6 +27,7 @@ CURATED_RECIPES = [
         "why": "Pasta is already an easy nutrition carrier for many toddlers.",
         "cheese": "Use a cheese cube or skip it — paneer is the main protein here.",
         "steps": "Blend paneer + milk + tiny boiled pumpkin/carrot + butter. Mix with pasta. Keep sauce light in color.",
+        "cover_image_url": "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400&h=300&fit=crop",
     },
     {
         "name": "Cheese Corn Paratha",
@@ -28,6 +36,7 @@ CURATED_RECIPES = [
         "why": "Similar to paneer paratha — mild and familiar.",
         "cheese": "Use a cheese slice or grated mozzarella. Avoid too much processed cheese daily.",
         "steps": "Mash boiled corn + potato + cheese. Stuff lightly in paratha. Serve with curd.",
+        "cover_image_url": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=300&fit=crop",
     },
     {
         "name": "Curd Rice Balls",
@@ -36,6 +45,7 @@ CURATED_RECIPES = [
         "why": "Uses common safe foods: white rice, curd, ghee, in a finger-food format.",
         "cheese": "No cheese needed.",
         "steps": "Mix cold rice + curd + ghee. Make small balls. Keep them plain; avoid mixing in colored dal/sabji.",
+        "cover_image_url": "https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=400&h=300&fit=crop",
     },
     {
         "name": "Mini Pizza Toast",
@@ -44,6 +54,7 @@ CURATED_RECIPES = [
         "why": "Fun format that can hide a little veggie sauce.",
         "cheese": "Use mozzarella or a grated cheese cube. Keep the layer thin.",
         "steps": "Bread + very light hidden pumpkin/carrot sauce + cheese. Toast and cut into fingers.",
+        "cover_image_url": "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&h=300&fit=crop",
     },
     {
         "name": "Paneer Dosa",
@@ -52,6 +63,7 @@ CURATED_RECIPES = [
         "why": "Close to the idli/dosa family many toddlers already accept.",
         "cheese": "Optional cheese spread — paneer mash is enough.",
         "steps": "Make a plain dosa. Add paneer mash + ghee. Fold and cut into strips.",
+        "cover_image_url": "https://images.unsplash.com/photo-1630383249896-424e482df921?w=400&h=300&fit=crop",
     },
     {
         "name": "Ragi Banana Pancake",
@@ -60,6 +72,7 @@ CURATED_RECIPES = [
         "why": "Similar to a regular pancake, but adds iron.",
         "cheese": "No cheese needed.",
         "steps": "Mix banana + ragi flour + milk/egg + nut powder. Cook small pancakes in ghee.",
+        "cover_image_url": "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop",
     },
     {
         "name": "Cheese Toast Fingers",
@@ -68,6 +81,7 @@ CURATED_RECIPES = [
         "why": "Good snack when a dry, predictable texture is wanted.",
         "cheese": "Use a cheese slice for easiest melting, or grated cheese cube.",
         "steps": "Toast bread with a thin cheese layer. Cut into long fingers. Offer cucumber on the side.",
+        "cover_image_url": "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=400&h=300&fit=crop",
     },
     {
         "name": "Stuffed Idli",
@@ -76,6 +90,7 @@ CURATED_RECIPES = [
         "why": "Uses an accepted idli format with hidden protein.",
         "cheese": "Optional tiny grated cheese cube — paneer stuffing works better nutritionally.",
         "steps": "Add idli batter, then a tiny paneer mash, then batter again. Steam as usual.",
+        "cover_image_url": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=400&h=300&fit=crop",
     },
     {
         "name": "Soft Chicken Strips",
@@ -84,6 +99,7 @@ CURATED_RECIPES = [
         "why": "Mild animal protein that fits non-veg preferences.",
         "cheese": "No cheese needed.",
         "steps": "Pressure-cook or steam boneless chicken until soft. Shred into thin strips. Serve with rice or soft roti and a mild gravy.",
+        "cover_image_url": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=400&h=300&fit=crop",
     },
     {
         "name": "Mild Fish Mash",
@@ -92,16 +108,34 @@ CURATED_RECIPES = [
         "why": "Soft fish is a good iron and protein option when bones are carefully removed.",
         "cheese": "No cheese needed.",
         "steps": "Steam boneless fish fillet. Flake carefully and check for bones. Mash with a little ghee or curd. Serve with soft rice.",
+        "cover_image_url": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=400&h=300&fit=crop",
     },
     {
         "name": "Soft Boiled Egg",
-        "food_names": ["Egg (Boiled)", "Egg Bhurji", "Omelette", "Egg Curry"],
+        "food_names": ["Egg (Boiled)"],
         "category": "protein",
         "why": "Simple protein for eggetarian and non-veg plans.",
         "cheese": "No cheese needed.",
         "steps": "Boil egg until yolk is firm. Mash with a drop of ghee. For bhurji/omelette, keep spices very mild and cook through.",
+        "cover_image_url": "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400&h=300&fit=crop",
     },
 ]
+
+
+def _load_extra_curated_recipes() -> List[Dict[str, Any]]:
+    """Load import-ready curated recipes from scripts/content/new_recipes.json."""
+    path = Path(__file__).resolve().parent / "scripts" / "content" / "new_recipes.json"
+    if not path.exists():
+        return []
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+EXTRA_CURATED_RECIPES = _load_extra_curated_recipes()
 
 
 def _slugify(name: str) -> str:
@@ -146,6 +180,74 @@ def youtube_embed_url(url: Optional[str]) -> Optional[str]:
     return None
 
 
+FOOD_COVER_IMAGES: Dict[str, str] = {
+    "Rice (Cooked)": "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?w=400&h=300&fit=crop",
+    "Roti/Chapati": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=300&fit=crop",
+    "Idli": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=400&h=300&fit=crop",
+    "Dosa (Plain)": "https://images.unsplash.com/photo-1630383249896-424e482df921?w=400&h=300&fit=crop",
+    "Upma": "https://images.unsplash.com/photo-1567337710282-00832b415979?w=400&h=300&fit=crop",
+    "Poha": "https://images.unsplash.com/photo-1645177628172-a94c1f96e6db?w=400&h=300&fit=crop",
+    "Khichdi": "https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=400&h=300&fit=crop",
+    "Oats Porridge": "https://images.unsplash.com/photo-1517673400267-0251440c45dc?w=400&h=300&fit=crop",
+    "Moong Dal": "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop",
+    "Sambar": "https://images.unsplash.com/photo-1630383249896-424e482df921?w=400&h=300&fit=crop",
+    "Rajma (Kidney Beans)": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400&h=300&fit=crop",
+    "Chole/Chickpeas": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400&h=300&fit=crop",
+    "Potato (Boiled/Mashed)": "https://images.unsplash.com/photo-1518977676601-b53f82ber33?w=400&h=300&fit=crop",
+    "Sweet Potato": "https://images.unsplash.com/photo-1596097635092-6d8498d94bac?w=400&h=300&fit=crop",
+    "Carrot": "https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=400&h=300&fit=crop",
+    "Spinach/Palak": "https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=400&h=300&fit=crop",
+    "Pumpkin": "https://images.unsplash.com/photo-1509622905150-fa66d3906e09?w=400&h=300&fit=crop",
+    "Banana": "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=300&fit=crop",
+    "Apple": "https://images.unsplash.com/photo-1584306820500-2d37e1e23e57?w=400&h=300&fit=crop",
+    "Mango": "https://images.unsplash.com/photo-1553279768-865429fa0078?w=400&h=300&fit=crop",
+    "Papaya": "https://images.unsplash.com/photo-1517282009859-f000ec3b26fe?w=400&h=300&fit=crop",
+    "Milk (Whole)": "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=400&h=300&fit=crop",
+    "Curd/Yogurt": "https://images.unsplash.com/photo-1488477181946-6428a0291777?w=400&h=300&fit=crop",
+    "Paneer": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400&h=300&fit=crop",
+    "Ghee": "https://images.unsplash.com/photo-1600398089688-e9aaf5e37c99?w=400&h=300&fit=crop",
+    "Egg (Boiled)": "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400&h=300&fit=crop",
+    "Dal Rice": "https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=400&h=300&fit=crop",
+    "Vegetable Pulao": "https://images.unsplash.com/photo-1596097635092-6d8498d94bac?w=400&h=300&fit=crop",
+    "Palak Paneer": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400&h=300&fit=crop",
+    "Aloo Paratha": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=300&fit=crop",
+    "Curd Rice": "https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=400&h=300&fit=crop",
+    "Uttapam": "https://images.unsplash.com/photo-1630383249896-424e482df921?w=400&h=300&fit=crop",
+    "Besan Chilla": "https://images.unsplash.com/photo-1567337710282-00832b415979?w=400&h=300&fit=crop",
+    "Suji Halwa": "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop",
+    "Banana Pancakes": "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop",
+    "Idli with Sambar": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=400&h=300&fit=crop",
+    "Moong Dal Cheela": "https://images.unsplash.com/photo-1567337710282-00832b415979?w=400&h=300&fit=crop",
+    "Ragi Dosa": "https://images.unsplash.com/photo-1630383249896-424e482df921?w=400&h=300&fit=crop",
+    "Mixed Vegetable Sabzi": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400&h=300&fit=crop",
+    "Egg Bhurji": "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400&h=300&fit=crop",
+    "Pongal": "https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=400&h=300&fit=crop",
+    "Coconut Rice": "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?w=400&h=300&fit=crop",
+    "Tomato Rice": "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?w=400&h=300&fit=crop",
+    "Rava Upma with Vegetables": "https://images.unsplash.com/photo-1567337710282-00832b415979?w=400&h=300&fit=crop",
+    "Vegetable Soup": "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400&h=300&fit=crop",
+    "Fruit Chaat": "https://images.unsplash.com/photo-1490474418585-ba9bad8fd0ea?w=400&h=300&fit=crop",
+    "Dry Fruits Mix (soaked)": "https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=400&h=300&fit=crop",
+    "Makhana": "https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=400&h=300&fit=crop",
+    "Carrot Halwa": "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop",
+    "Rice Kheer": "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop",
+    "Paneer Bhurji": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400&h=300&fit=crop",
+    "Ragi Mudde": "https://images.unsplash.com/photo-1567337710282-00832b415979?w=400&h=300&fit=crop",
+    "Peas Pulao": "https://images.unsplash.com/photo-1596097635092-6d8498d94bac?w=400&h=300&fit=crop",
+    "Til Ladoo": "https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=400&h=300&fit=crop",
+    "Foxtail Millet Upma": "https://images.unsplash.com/photo-1567337710282-00832b415979?w=400&h=300&fit=crop",
+    "Daliya/Broken Wheat Porridge": "https://images.unsplash.com/photo-1517673400267-0251440c45dc?w=400&h=300&fit=crop",
+    "Paratha (Plain)": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=300&fit=crop",
+    "Dosa with Coconut Chutney": "https://images.unsplash.com/photo-1630383249896-424e482df921?w=400&h=300&fit=crop",
+    "French Toast": "https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=400&h=300&fit=crop",
+    "Vegetable Sandwich": "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=400&h=300&fit=crop",
+    "Omelette": "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=400&h=300&fit=crop",
+    "Egg Curry": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=400&h=300&fit=crop",
+    "Chicken (Boneless)": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=400&h=300&fit=crop",
+    "Fish (Rohu/Pomfret)": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=400&h=300&fit=crop",
+}
+
+
 def _food_to_recipe(food: Dict[str, Any]) -> Dict[str, Any]:
     name = food.get("name") or "Food"
     why = food.get("toddler_friendly_version") or f"Age-appropriate {food.get('category', 'meal')} option for toddlers."
@@ -163,7 +265,7 @@ def _food_to_recipe(food: Dict[str, Any]) -> Dict[str, Any]:
         "source": "food_db",
         "allergens": food.get("allergens") or [],
         "suitable_from_months": food.get("suitable_from_months"),
-        "cover_image_path": None,
+        "cover_image_path": FOOD_COVER_IMAGES.get(name),
         "video_url": None,
         "video_platform": None,
         "video_embed_url": None,
@@ -182,9 +284,9 @@ def _curated_to_recipe(item: Dict[str, Any]) -> Dict[str, Any]:
         "cheese": item.get("cheese") or "",
         "steps": item.get("steps") or "",
         "source": "curated",
-        "allergens": [],
-        "suitable_from_months": None,
-        "cover_image_path": None,
+        "allergens": item.get("allergens") or [],
+        "suitable_from_months": item.get("suitable_from_months", DEFAULT_TODDLER_RECIPE_AGE),
+        "cover_image_path": item.get("cover_image_url") or None,
         "video_url": None,
         "video_platform": None,
         "video_embed_url": None,
@@ -240,7 +342,7 @@ def _build_all_recipes() -> List[Dict[str, Any]]:
     recipes: List[Dict[str, Any]] = []
     seen = set()
 
-    for item in CURATED_RECIPES:
+    for item in CURATED_RECIPES + EXTRA_CURATED_RECIPES:
         recipe = _curated_to_recipe(item)
         if recipe["slug"] not in seen:
             recipes.append(recipe)
@@ -266,8 +368,28 @@ _ALL_RECIPES = _build_all_recipes()
 _BY_SLUG = {r["slug"]: r for r in _ALL_RECIPES}
 
 
-def list_recipes(category: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
+def _recipe_suitable_for_age(recipe: Dict[str, Any], age_months: int) -> bool:
+    """Whether a recipe may be shown for a given child age."""
+    tagged = recipe.get("suitable_from_months")
+    if age_months < 12:
+        # Starting solids: require an explicit age tag — untagged toddler recipes stay hidden.
+        if tagged is None or tagged > age_months:
+            return False
+        if age_months < WEANING_CURATED_ONLY_MAX_AGE and recipe.get("source") != "curated":
+            return False
+        return True
+    # Toddlers 12+ months: untagged recipes are assumed suitable unless tagged higher.
+    return tagged is None or tagged <= age_months
+
+
+def list_recipes(
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    age_months: Optional[int] = None,
+) -> List[Dict[str, Any]]:
     recipes = _merged_recipes(published_only=True)
+    if age_months is not None:
+        recipes = [r for r in recipes if _recipe_suitable_for_age(r, age_months)]
     if category:
         recipes = [r for r in recipes if (r.get("category") or "") == category]
     if q:
@@ -289,6 +411,25 @@ def get_recipe(slug: str) -> Optional[Dict[str, Any]]:
     return _enrich_video_fields(_BY_SLUG[key]) if key in _BY_SLUG else None
 
 
+def _recipe_name_match_score(recipe: Dict[str, Any], name: str, target_slug: str) -> int:
+    """Score how well a recipe matches a food name (higher = better)."""
+    rname = recipe["name"].lower()
+    if rname == name:
+        return 1000
+    if recipe.get("slug") == target_slug:
+        return 900
+    aliases = [n.lower() for n in (recipe.get("food_names") or [])]
+    if name not in aliases:
+        return 0
+    # Exact alias hit — prefer dedicated food-db cards over umbrella curated aliases.
+    if rname == name:
+        return 800
+    if recipe.get("source") == "food_db":
+        return 700
+    # Curated catch-all cards (many aliases) should lose to specific recipes.
+    return max(100, 400 - (len(aliases) - 1) * 25)
+
+
 def find_recipe_for_food_name(food_name: Optional[str]) -> Optional[Dict[str, Any]]:
     if not food_name:
         return None
@@ -297,19 +438,24 @@ def find_recipe_for_food_name(food_name: Optional[str]) -> Optional[Dict[str, An
         return None
 
     recipes = _merged_recipes(published_only=True)
+    target_slug = _slugify(name)
 
+    scored: List[tuple[int, str, Dict[str, Any]]] = []
     for recipe in recipes:
-        for n in recipe.get("food_names") or []:
-            if n.lower() == name:
-                return recipe
+        score = _recipe_name_match_score(recipe, name, target_slug)
+        if score > 0:
+            scored.append((score, recipe["name"].lower(), recipe))
 
-    for recipe in recipes:
-        if recipe["name"].lower() == name:
-            return recipe
+    if scored:
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return scored[0][2]
 
+    # Loose substring fallback — only when the shorter token is long enough to be meaningful.
     for recipe in recipes:
         for n in recipe.get("food_names") or [recipe["name"]]:
             nl = n.lower()
+            if len(nl) < 5 or len(name) < 5:
+                continue
             if name in nl or nl in name:
                 return recipe
 

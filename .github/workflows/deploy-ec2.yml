@@ -1,0 +1,84 @@
+name: Deploy LittleBowl to EC2
+
+# Manual (and optional push-to-main) deploy over SSH.
+# Secrets required in GitHub repo Settings → Secrets and variables → Actions:
+#   DEPLOY_HOST          public IP or DNS of the EC2/Lightsail box
+#   DEPLOY_SSH_KEY       full private key PEM contents (or use DEPLOY_SSH_KEY_B64)
+# Optional secrets:
+#   DEPLOY_USER          default ec2-user
+#   DEPLOY_SSH_KEY_B64   base64 of the PEM (alternative to DEPLOY_SSH_KEY)
+#   DOMAIN               default littlebowl.in
+#   ACME_EMAIL
+#   OPENAI_API_KEY / ADMIN_EMAILS / ADMIN_PASSWORD / SECRET_KEY
+#     (only used on first boot when meal-data/.env does not exist)
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Git branch or tag to deploy
+        required: true
+        default: main
+      fresh_env:
+        description: Recreate meal-data/.env (keeps DB)
+        type: boolean
+        default: false
+  # Uncomment to auto-deploy backend changes on main:
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'toddler-meal-planner/**'
+  #     - '!toddler-meal-planner/mobile/**'
+  #     - '!toddler-meal-planner/android-app/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          if [ -n "${DEPLOY_SSH_KEY_B64:-}" ]; then
+            printf '%s' "$DEPLOY_SSH_KEY_B64" | base64 --decode > ~/.ssh/deploy.pem
+          elif [ -n "${DEPLOY_SSH_KEY:-}" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy.pem
+          else
+            echo "Missing secret DEPLOY_SSH_KEY or DEPLOY_SSH_KEY_B64" >&2
+            exit 1
+          fi
+          chmod 600 ~/.ssh/deploy.pem
+
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: /home/runner/.ssh/deploy.pem
+          GIT_REF: ${{ github.event.inputs.git_ref || 'main' }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          FEATURE_CHAT_ENABLED: ${{ secrets.FEATURE_CHAT_ENABLED }}
+          REMOTE_DEPLOY_ARGS: ${{ github.event.inputs.fresh_env == 'true' && '--fresh-env' || '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_HOST:-}" ]; then
+            echo "Missing secret DEPLOY_HOST" >&2
+            exit 1
+          fi
+          export DEPLOY_USER="${DEPLOY_USER:-ec2-user}"
+          export DOMAIN="${DOMAIN:-littlebowl.in}"
+          export ACME_EMAIL="${ACME_EMAIL:-swetaattri@gmail.com}"
+          chmod +x toddler-meal-planner/scripts/deploy/remote-deploy.sh
+          chmod +x toddler-meal-planner/scripts/deploy/deploy.sh
+          toddler-meal-planner/scripts/deploy/remote-deploy.sh

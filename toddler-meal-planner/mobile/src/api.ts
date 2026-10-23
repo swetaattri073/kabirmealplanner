@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { getDeviceId } from './device';
 import { getGuestId, getToken, setGuestId, setToken } from './storage';
 
 const DEFAULT_BASE = 'https://littlebowl.in';
@@ -17,6 +18,34 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+const REQUEST_TIMEOUT_MS = 25_000;
+
+/** Turn fetch / Android network failures into a short, actionable message. */
+export function formatNetworkError(err: unknown, baseUrl = apiBaseUrl()): string {
+  const host = (() => {
+    try {
+      return new URL(baseUrl).host;
+    } catch {
+      return baseUrl;
+    }
+  })();
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  if (
+    err instanceof TypeError ||
+    lower.includes('network request failed') ||
+    lower.includes('connectexception') ||
+    lower.includes('failed to connect') ||
+    lower.includes('econnrefused') ||
+    lower.includes('enetunreach') ||
+    lower.includes('timeout') ||
+    lower.includes('aborted')
+  ) {
+    return `Cannot reach ${host}. The server may be offline or your phone has no internet. Try again on Wi‑Fi or mobile data, or check that ${host} is running.`;
+  }
+  return msg || 'Something went wrong. Please try again.';
 }
 
 type RequestOpts = {
@@ -41,16 +70,28 @@ export async function apiRequest<T = any>(path: string, opts: RequestOpts = {}):
     const guest = await getGuestId();
     if (guest) headers['X-Guest-Id'] = guest;
   }
+  const deviceId = await getDeviceId();
+  if (deviceId) headers['X-Device-Id'] = deviceId;
 
-  const res = await fetch(`${apiBaseUrl()}${path}`, {
-    method: opts.method || (opts.body || opts.formData ? 'POST' : 'GET'),
-    headers,
-    body: opts.formData
-      ? opts.formData
-      : opts.body != null
-        ? JSON.stringify(opts.body)
-        : undefined,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl()}${path}`, {
+      method: opts.method || (opts.body || opts.formData ? 'POST' : 'GET'),
+      headers,
+      body: opts.formData
+        ? opts.formData
+        : opts.body != null
+          ? JSON.stringify(opts.body)
+          : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    throw new ApiError(formatNetworkError(err), 0);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const text = await res.text();
   let data: any = null;
@@ -146,16 +187,47 @@ export const api = {
       body,
     }),
 
-  recipes: (q?: string, category?: string) => {
+  recipes: (opts?: { q?: string; category?: string; age_months?: number }) => {
     const p = new URLSearchParams();
-    if (q) p.set('q', q);
-    if (category) p.set('category', category);
+    if (opts?.q) p.set('q', opts.q);
+    if (opts?.category) p.set('category', opts.category);
+    if (opts?.age_months != null) p.set('age_months', String(opts.age_months));
     const qs = p.toString();
     return apiRequest(`/api/recipes${qs ? `?${qs}` : ''}`);
   },
   recipe: (slug: string) => apiRequest(`/api/recipes/${encodeURIComponent(slug)}`),
 
+  weaning: (ref: string) => apiRequest(`/api/weaning/${encodeURIComponent(ref)}`),
+  tryWeaningFood: (ref: string, body: Record<string, unknown>) =>
+    apiRequest(`/api/weaning/${encodeURIComponent(ref)}/try-food`, { method: 'POST', body }),
+
+  miniPlans: (ageMonths?: number) => {
+    const q = ageMonths != null ? `?age_months=${ageMonths}` : '';
+    return apiRequest(`/api/meal-plan/mini${q}`);
+  },
+  applyMiniPlan: (templateKey: string, ref: string) =>
+    apiRequest(
+      `/api/meal-plan/mini/${encodeURIComponent(templateKey)}/${encodeURIComponent(ref)}`,
+      { method: 'POST' },
+    ),
+
+  growth: (ref: string) => apiRequest(`/api/growth/${encodeURIComponent(ref)}`),
+  addGrowthRecord: (ref: string, body: Record<string, unknown>) =>
+    apiRequest(`/api/growth/${encodeURIComponent(ref)}`, { method: 'POST', body }),
+
+  savedRecipes: () => apiRequest('/api/recipes/saved'),
+  saveRecipe: (slug: string) =>
+    apiRequest(`/api/recipes/${encodeURIComponent(slug)}/save`, { method: 'POST' }),
+  unsaveRecipe: (slug: string) =>
+    apiRequest(`/api/recipes/${encodeURIComponent(slug)}/save`, { method: 'DELETE' }),
+
   chat: (body: Record<string, unknown>) =>
     apiRequest('/api/chat', { method: 'POST', body }),
+  chatHealth: () => apiRequest('/api/chat/health'),
+  chatSummarize: (body: Record<string, unknown>) =>
+    apiRequest('/api/chat/summarize', { method: 'POST', body }),
   dailyTip: (ref: string) => apiRequest(`/api/daily-tip/${encodeURIComponent(ref)}`),
+  flavorExplore: (ref: string) =>
+    apiRequest(`/api/explore-flavors/${encodeURIComponent(ref)}`),
+  nutritionBoosters: () => apiRequest('/api/nutrition-boosters'),
 };

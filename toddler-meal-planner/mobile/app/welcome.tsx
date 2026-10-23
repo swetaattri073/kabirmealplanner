@@ -34,7 +34,7 @@ type Slide = {
   key: string;
   kind: 'hero' | 'post';
   colors: [string, string, ...string[]];
-  locations: number[];
+  locations: [number, number, ...number[]];
   start: { x: number; y: number };
   end: { x: number; y: number };
   kicker?: string;
@@ -70,6 +70,19 @@ const SLIDES: Slide[] = [
     title: '“Not this again!”',
     body: 'Plate pushed away before the first bite. You’ve already cooked three things and it’s still breakfast.',
     solution: 'LittleBowl learns what they accept and suggests meals that stick.',
+  },
+  {
+    key: 'solids',
+    kind: 'post',
+    colors: ['#c2410c', '#ea580c', '#fbbf24'],
+    locations: [0, 0.5, 1],
+    start: { x: 0.2, y: 0 },
+    end: { x: 0.8, y: 1 },
+    kicker: '🥄  Starting solids',
+    emoji: '🥄',
+    title: 'Starting solids at 6 months',
+    body: 'First tastes, textures, and allergen guidance — one new food at a time, Indian home foods first.',
+    solution: 'A step-by-step weaning guide built into your plan.',
   },
   {
     key: 'plan',

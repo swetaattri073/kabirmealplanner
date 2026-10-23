@@ -1,0 +1,50 @@
+LittleBowl — Google Play Store Upload
+======================================
+Generated: 2026-09-05
+
+UPLOAD FILE
+-----------
+File:     C:\lb\toddler-meal-planner\mobile\release\littlebowl-2.0.0-3.aab
+Size:     ~71 MB (74,753,727 bytes)
+Package:  com.littlebowl.app
+Version:  2.0.0 (versionCode 4)
+Target SDK: 36 (required by Google Play from 2026)
+Build:    Production (opens directly into LittleBowl — not the dev-client screen)
+Backend:  https://littlebowl.in
+
+GOOGLE PLAY CONSOLE STEPS
+-------------------------
+1. Open https://play.google.com/console → LittleBowl (com.littlebowl.app)
+2. Release → Testing → Internal testing (recommended first) OR Production
+3. Create new release → Upload → select littlebowl-2.0.0-3.aab
+4. Add release notes, e.g.:
+   Native LittleBowl app — meal planning, weaning guide, nutrition tracking,
+   recipes, and AI chat. Connects to littlebowl.in.
+5. Start rollout (internal) or Send for review (production)
+6. Complete any pending Data safety, Content rating, or Store listing items if prompted
+
+BEFORE YOU UPLOAD — CHECKLIST
+-----------------------------
+- Upload keystore: credentials\littlebowl-upload-key.jks (same key as existing listing)
+- If Play rejects "version code already used": bump versionCode in app.json and rebuild
+- Permissions to declare in Data safety: camera, photos, notifications
+
+REBUILD FOR FUTURE RELEASES
+-----------------------------
+From C:\lb\toddler-meal-planner\mobile:
+
+  1. Bump versionCode in app.json (required every upload)
+  2. npm run build:play-store:clean
+
+Output: release\littlebowl-<version>-<versionCode>.aab
+
+PRODUCTION BUILD NOTES
+----------------------
+- app.config.js strips expo-dev-client when PLAY_STORE_BUILD=1
+- build-play-store.ps1 sets that flag during prebuild automatically
+- Alternate cloud build: npm run build:play-store:eas
+
+OPTIONAL NEXT STEPS
+-------------------
+- Internal testing track: add tester emails before production
+- Store screenshots: Home (6 mo profile), Plan, Weaning guide, Log meal

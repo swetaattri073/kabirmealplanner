@@ -154,8 +154,11 @@ class Toddler(db.Model):
     allergies = db.Column(JSON, default=list)  # List of allergen strings
     dietary_preference = db.Column(db.String(50), default='vegetarian')  # vegetarian, non-vegetarian, eggetarian
     meal_schedule = db.Column(JSON, nullable=True)  # Custom schedule if provided
-    # Parent cooking / serving habits, e.g. {"always_hidden_veggies": true}
+    # Parent cooking / serving habits, e.g.
+    # {"always_hidden_veggies": true, "goes_to_school": false}
     # Missing always_hidden_veggies is treated as True (on by default).
+    # When goes_to_school is True, mid_morning_snack is replaced by school_lunch
+    # (packed lunchbox options that hold 2–3 hours and are not too messy).
     feeding_preferences = db.Column(JSON, default=dict)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -166,6 +169,59 @@ class Toddler(db.Model):
     preferences = db.relationship('FoodPreference', backref='toddler', lazy='dynamic', cascade='all, delete-orphan')
     weekly_plans = db.relationship('WeeklyPlan', backref='toddler', lazy='dynamic', cascade='all, delete-orphan')
     
+    def computed_age_months(self):
+        """Whole months lived, from birth_date.
+
+        Falls back to the stored value for profiles created before we captured
+        a birth date.
+        """
+        if not self.birth_date:
+            return self.age_months
+        today = date.today()
+        months = (today.year - self.birth_date.year) * 12 + (today.month - self.birth_date.month)
+        if today.day < self.birth_date.day:
+            months -= 1
+        return max(0, months)
+
+    def sync_age(self):
+        """Bring the cached age_months in line with birth_date.
+
+        age_months stays a real column because RDA lookups, serving sizes and
+        food gating all read it, and some of those run in SQL. Deriving the
+        value on read rather than incrementing it on a schedule means the age is
+        right even if the app goes unopened for months, and it cannot drift or
+        double-count.
+
+        Returns the previous age when it changed, otherwise None.
+        """
+        if not self.birth_date:
+            return None
+        fresh = self.computed_age_months()
+        if fresh == self.age_months:
+            return None
+        previous = self.age_months
+        self.age_months = fresh
+        return previous
+
+    def ensure_birth_date(self):
+        """Approximate a birth date for profiles saved before we stored one.
+
+        Anchored on when the profile was created, which is when the parent told
+        us the age. Accurate to within a month, which is all the meal logic needs.
+        """
+        if self.birth_date:
+            return False
+        anchor = (self.created_at.date() if self.created_at else date.today())
+        months = int(self.age_months or 0)
+        year = anchor.year - (months // 12)
+        month = anchor.month - (months % 12)
+        if month <= 0:
+            month += 12
+            year -= 1
+        day = min(anchor.day, 28)
+        self.birth_date = date(year, month, day)
+        return True
+
     def get_age_group(self):
         """Returns age group for RDA calculations"""
         if self.age_months < 12:
@@ -294,28 +350,57 @@ class Toddler(db.Model):
         return unique_priorities
     
     def get_recommended_schedule(self):
-        """Returns recommended meal schedule based on age"""
+        """Returns recommended meal schedule based on age (+ school lunchbox)."""
         if self.meal_schedule:
-            return self.meal_schedule
-        
-        if self.age_months < 12:
-            return {
-                'meals': ['breakfast', 'lunch', 'dinner'],
-                'snacks': ['mid_morning_snack'],
-                'milk_feeds': 3  # Breast/formula feeds
-            }
-        elif self.age_months < 24:
-            return {
-                'meals': ['breakfast', 'lunch', 'dinner'],
-                'snacks': ['mid_morning_snack', 'evening_snack'],
-                'milk_feeds': 2
+            schedule = {
+                'meals': list((self.meal_schedule or {}).get('meals') or []),
+                'snacks': list((self.meal_schedule or {}).get('snacks') or []),
+                'milk_feeds': (self.meal_schedule or {}).get('milk_feeds', 0),
             }
         else:
-            return {
-                'meals': ['breakfast', 'lunch', 'dinner'],
-                'snacks': ['mid_morning_snack', 'evening_snack'],
-                'milk_feeds': 1
-            }
+            # Weaning ramps up gradually. Giving a 6-month-old the same four slots
+            # as an 11-month-old overstates how much solid food they need and makes
+            # a normal day look like a failed one on the dashboard.
+            if self.age_months < 8:
+                schedule = {
+                    'meals': ['breakfast', 'lunch'],
+                    'snacks': [],
+                    'milk_feeds': 5,  # Milk is still the main source of nutrition
+                }
+            elif self.age_months < 10:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': [],
+                    'milk_feeds': 4,
+                }
+            elif self.age_months < 12:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': ['mid_morning_snack'],
+                    'milk_feeds': 3,  # Breast/formula feeds
+                }
+            elif self.age_months < 24:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': ['mid_morning_snack', 'evening_snack'],
+                    'milk_feeds': 2,
+                }
+            else:
+                schedule = {
+                    'meals': ['breakfast', 'lunch', 'dinner'],
+                    'snacks': ['mid_morning_snack', 'evening_snack'],
+                    'milk_feeds': 1,
+                }
+
+        # School / daycare: pack a lunchbox meal instead of the home mid-morning snack.
+        if self.goes_to_school():
+            snacks = list(schedule.get('snacks') or [])
+            snacks = ['school_lunch' if s == 'mid_morning_snack' else s for s in snacks]
+            if 'school_lunch' not in snacks and self.age_months >= 12:
+                snacks = ['school_lunch'] + snacks
+            schedule = dict(schedule)
+            schedule['snacks'] = snacks
+        return schedule
 
     def get_feeding_preferences(self):
         """Parent cooking/serving habits used by meal planning and tips."""
@@ -327,7 +412,12 @@ class Toddler(db.Model):
             always_hidden = bool(prefs.get('always_hidden_veggies'))
         return {
             'always_hidden_veggies': always_hidden,
+            'goes_to_school': bool(prefs.get('goes_to_school', False)),
         }
+
+    def goes_to_school(self):
+        """True when the toddler/child attends school or daycare (packed tiffin)."""
+        return bool(self.get_feeding_preferences().get('goes_to_school'))
 
     def always_hides_veggies(self):
         """True when the parent prefers to sneak vegetables into most meals (default on)."""
@@ -502,6 +592,39 @@ class Food(db.Model):
         }
 
 
+class SchoolLunchboxOption(db.Model):
+    """Packed school/daycare lunch options (hold 2–3 hours, low mess).
+
+    Separate catalog from everyday snacks. When a toddler has
+    feeding_preferences.goes_to_school, the mid-morning slot uses these
+    foods instead of a home mid_morning_snack.
+    """
+    __tablename__ = 'school_lunchbox_options'
+
+    id = db.Column(db.Integer, primary_key=True)
+    food_id = db.Column(db.Integer, db.ForeignKey('foods.id'), nullable=False, unique=True, index=True)
+    holds_hours = db.Column(db.Integer, default=3)
+    messy_level = db.Column(db.Integer, default=0)  # 0=clean finger food, 1=ok insulated, 2=avoid
+    packing_notes = db.Column(db.String(500), nullable=True)
+    suitable_from_months = db.Column(db.Integer, default=12)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    food = db.relationship('Food', backref=db.backref('school_lunchbox_option', uselist=False))
+
+    def to_dict(self):
+        food_dict = self.food.to_dict() if self.food else {}
+        return {
+            'id': self.id,
+            'food_id': self.food_id,
+            'food': food_dict,
+            'name': food_dict.get('name'),
+            'holds_hours': self.holds_hours,
+            'messy_level': self.messy_level,
+            'packing_notes': self.packing_notes,
+            'suitable_from_months': self.suitable_from_months,
+        }
+
+
 class MealLog(db.Model):
     """Daily meal log for tracking what toddler ate"""
     __tablename__ = 'meal_logs'
@@ -511,7 +634,7 @@ class MealLog(db.Model):
     food_id = db.Column(db.Integer, db.ForeignKey('foods.id'), nullable=True)
     
     date = db.Column(db.Date, nullable=False, default=date.today)
-    meal_type = db.Column(db.String(50), nullable=False)  # breakfast, lunch, dinner, mid_morning_snack, evening_snack
+    meal_type = db.Column(db.String(50), nullable=False)  # breakfast, lunch, dinner, mid_morning_snack, school_lunch, evening_snack
     
     # If custom food not in database
     custom_food_name = db.Column(db.String(200), nullable=True)
@@ -830,6 +953,51 @@ class AuditLog(db.Model):
         }
 
 
+class GrowthRecord(db.Model):
+    """Historical weight and height measurements for growth charts."""
+    __tablename__ = 'growth_records'
+
+    id = db.Column(db.Integer, primary_key=True)
+    toddler_id = db.Column(db.Integer, db.ForeignKey('toddlers.id'), nullable=False, index=True)
+    recorded_at = db.Column(db.Date, nullable=False, default=date.today)
+    weight_kg = db.Column(db.Float, nullable=True)
+    height_cm = db.Column(db.Float, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    toddler = db.relationship('Toddler', backref=db.backref('growth_records', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'toddler_id': self.toddler_id,
+            'recorded_at': self.recorded_at.isoformat() if self.recorded_at else None,
+            'weight_kg': self.weight_kg,
+            'height_cm': self.height_cm,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SavedRecipe(db.Model):
+    """User-saved recipe bookmarks."""
+    __tablename__ = 'saved_recipes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    recipe_slug = db.Column(db.String(200), nullable=False, index=True)
+    saved_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'recipe_slug', name='uq_saved_recipe_user_slug'),)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'recipe_slug': self.recipe_slug,
+            'saved_at': self.saved_at.isoformat() if self.saved_at else None,
+        }
+
+
 class AnalyticsEvent(db.Model):
     """First-party page views, session heartbeats, and named product actions."""
     __tablename__ = 'analytics_events'
@@ -949,4 +1117,41 @@ class NutritionAlert(db.Model):
             'recommendation': self.recommendation,
             'recommended_foods': self.recommended_foods,
             'is_resolved': self.is_resolved
+        }
+
+
+class ChatUsage(db.Model):
+    """Daily chat allowance.
+
+    Guests are counted per device, because guest ids live in app storage and a
+    reinstall wiped them, handing out a fresh allowance every time. IMEI is
+    unavailable to third-party apps from Android 10 onward, so the client sends
+    Android's SSAID or an iOS Keychain-backed id instead. Signed-in users are
+    counted per account so the allowance follows them across devices.
+    """
+    __tablename__ = 'chat_usage'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Either 'user:<id>' or 'dev:<device id>' / 'guest:<session id>'.
+    quota_key = db.Column(db.String(191), nullable=False, index=True)
+    usage_date = db.Column(db.Date, nullable=False, default=date.today, index=True)
+    count = db.Column(db.Integer, nullable=False, default=0)
+
+    # Last device and account seen against this row. Not used for metering —
+    # kept so repeat abuse can be traced back to a handset.
+    device_id = db.Column(db.String(191), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('quota_key', 'usage_date', name='uq_chat_usage_key_date'),
+    )
+
+    def to_dict(self):
+        return {
+            'date': self.usage_date.isoformat() if self.usage_date else None,
+            'count': self.count or 0,
         }

@@ -13,6 +13,7 @@
   const DEFAULT_TIMES = {
     breakfast: '08:00',
     mid_morning_snack: '10:30',
+    school_lunch: '11:00',
     lunch: '12:30',
     evening_snack: '16:00',
     dinner: '19:00',
@@ -21,6 +22,7 @@
   const MEAL_LABELS = {
     breakfast: 'Breakfast',
     mid_morning_snack: 'Mid-morning snack',
+    school_lunch: 'School lunchbox',
     lunch: 'Lunch',
     evening_snack: 'Evening snack',
     dinner: 'Dinner',
@@ -30,6 +32,7 @@
   const MEAL_ORDER = [
     'breakfast',
     'mid_morning_snack',
+    'school_lunch',
     'lunch',
     'evening_snack',
     'dinner',
