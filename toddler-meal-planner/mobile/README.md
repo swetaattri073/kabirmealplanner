@@ -20,7 +20,7 @@ reference only. Prefer this `mobile/` project for store builds.
 
 Admin (`/admin`) is web-only and unchanged.
 
-## Prerequisites
+## Expo Go vs development build
 
 - Node.js 18+
 - Expo CLI (`npx expo`)
@@ -28,15 +28,26 @@ Admin (`/admin`) is web-only and unchanged.
 - **iOS:** macOS + Xcode (for device/App Store builds)
 
 ```bash
-cd toddler-meal-planner/mobile
-npm install
-npx expo start
+# Emulator running in Android Studio, OR phone with USB debugging
+npx expo run:android
 ```
 
-Optional local API:
+That generates `android/`, compiles, and installs **LittleBowl** (not Expo Go).
+
+Store / cloud builds: `eas build -p android` (see below).
+
+### Meal reminder icons (Android)
+
+Collapsed tray icons and the large brand mark are **native build** settings
+(`expo-notifications` icon + `plugins/withAndroidNotificationLargeIcon`).
+JS-only reloads will **not** update them.
+
+After changing notification assets or that plugin, rebuild:
 
 ```bash
-EXPO_PUBLIC_API_BASE_URL=http://localhost:5000 npx expo start
+npx expo prebuild --platform android --clean
+npx expo run:android
+# or on Windows: npm run build:play-store
 ```
 
 ## Expo Go vs development build

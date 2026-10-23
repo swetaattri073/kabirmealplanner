@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Alert, AppState, Linking, Platform } from 'react-native';
 import { DEFAULT_REMINDER_TIMES, MEAL_LABELS } from './theme';
+import { pickReminderCopy } from './reminderCopy';
 import {
   getNotifyPrefs,
   setNotifyPrefs,

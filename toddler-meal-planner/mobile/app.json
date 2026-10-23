@@ -73,10 +73,11 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/notification-icon.png",
           "color": "#6b8f3c"
         }
       ],
+      "./plugins/withAndroidNotificationLargeIcon",
       [
         "expo-image-picker",
         {
